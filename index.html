@@ -93,6 +93,7 @@
     let waveBuilt = 0;                // hazards spawned since this wave started
     let inIntermission = false;       // BETWEEN_WAVES_S pause after a cleared wave
     let intermissionEndsAt = 0;       // sim time at which the next wave starts
+    let gameState = "start";          // "start" | "playing" | "gameover": gates sim, input and screen
     // Random source lives in a mutable `var` so unit tests (and console
     // experiments) can install a deterministic sequence; the game itself
     // only ever CALLS it, never reassigns it.
@@ -393,6 +394,19 @@
       }
     }
 
+    // One hull impact: burst, exactly 1 hp, invulnerability window —
+    // or the game-over hand-off on the final blow.
+    function hitShip(burstX, burstY) {
+      burst(burstX, burstY);
+      hp -= 1;
+      if (hp <= 0) {
+        shipDead = true;
+        gameState = "gameover"; // final blow: hand the screen to the overlay
+      } else {
+        invulnUntil = gameTime + INVULN_MS / 1000;
+      }
+    }
+
     function checkShipHits() {
       if (shipDead) return;
       if (gameTime < invulnUntil) return; // immune: ignore every hazard
@@ -402,20 +416,14 @@
         if (!a.active) continue;
         if (Math.hypot(a.x - ship.x, a.y - ship.y) > a.r + SHIP_RADIUS) continue;
         a.active = false; // the impact shatters the rock
-        burst((ship.x + a.x) / 2, (ship.y + a.y) / 2); // mid-point of the overlap
-        hp -= 1;
-        if (hp <= 0) shipDead = true;
-        else invulnUntil = gameTime + INVULN_MS / 1000;
+        hitShip((ship.x + a.x) / 2, (ship.y + a.y) / 2); // mid-point of the overlap
         return; // one impact per frame, even if several rocks overlap
       }
       for (const d of drones.slots) {
         if (!d.active) continue;
         if (Math.hypot(d.x - ship.x, d.y - ship.y) > DRONE_RADIUS + SHIP_RADIUS) continue;
         d.active = false; // the impact destroys the drone
-        burst((ship.x + d.x) / 2, (ship.y + d.y) / 2); // mid-point of the overlap
-        hp -= 1;
-        if (hp <= 0) shipDead = true;
-        else invulnUntil = gameTime + INVULN_MS / 1000;
+        hitShip((ship.x + d.x) / 2, (ship.y + d.y) / 2); // mid-point of the overlap
         return;
       }
     }
