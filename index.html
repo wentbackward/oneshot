@@ -52,6 +52,14 @@
     const ASTEROID_MIN_GAP = 40;     // px, extra spacing between live asteroids
     const ASTEROID_VERTS = 8;        // points per irregular polygon outline
     const ASTEROID_POOL_SIZE = 48;   // pre-allocated asteroid slots, recycled (never reallocated)
+    var DRONE_TARGET = 3;            // desired number of live drones in the field; 0 disables them
+    var SCORE_PER_DRONE = 25;        // HUD score credited per laser kill
+    const DRONE_RADIUS = 10;         // px, drone hull size
+    var DRONE_SPEED = 120;           // px/s, constant forward speed
+    const DRONE_TURN_SPEED = 2.4;    // rad/s, max heading change while tracking the ship
+    const DRONE_SPAWN_EVERY = 0.35;  // s between respawn attempts while below target
+    const DRONE_MAX_SPAWNS = 4;      // spawn attempts per frame (bounds the rejection loop)
+    const DRONE_POOL_SIZE = 24;      // pre-allocated drone slots, recycled (never reallocated)
     var PLAYER_MAX_HP = 3;           // starting hull points (shown as "HP n" in the HUD)
     var INVULN_MS = 1500;            // ms of invulnerability after taking a hit
     const PARTICLES_PER_BURST = 16;  // particles per impact burst (ticket requires >= 10)
@@ -117,6 +125,13 @@
         entry: -1,
         shape: [], // radial offsets in [0.75, 1], reused for every outline
       });
+    }
+
+    // Pre-allocated drone pool: every drone mutates an existing slot in
+    // place, so spawning never allocates.
+    const drones = { slots: [] };
+    for (let i = 0; i < DRONE_POOL_SIZE; i++) {
+      drones.slots.push({ active: false, x: 0, y: 0, heading: 0 });
     }
 
     function resize() {
@@ -305,9 +320,10 @@
       return Math.hypot(px - (ax + abx * t), py - (ay + aby * t));
     }
 
-    function checkAsteroidHits() {
+    function checkLaserKills() {
       const slots = laserPool.slots;
       const rocks = asteroids.slots;
+      const chasers = drones.slots;
       for (let li = 0; li < slots.length; li++) {
         const s = slots[li];
         if (!s.active) continue;
@@ -319,6 +335,15 @@
           if (segPointDistance(px, py, s.x, s.y, a.x, a.y) <= a.r) {
             a.active = false; // destroyed: removed from the field
             score += SCORE_PER_ASTEROID;
+          }
+        }
+        for (let di = 0; di < chasers.length; di++) {
+          const d = chasers[di];
+          if (!d.active) continue;
+          if (segPointDistance(px, py, s.x, s.y, d.x, d.y) <= DRONE_RADIUS) {
+            d.active = false; // destroyed: removed from the field
+            score += SCORE_PER_DRONE;
+            burst(d.x, d.y); // shared impact burst, same pool as hull hits
           }
         }
       }
@@ -363,6 +388,8 @@
     function checkShipHits() {
       if (shipDead) return;
       if (gameTime < invulnUntil) return; // immune: ignore every hazard
+      // Rocks first, then drones; one damage event per frame, even if
+      // several hazards overlap. Each impact destroys its hazard.
       for (const a of asteroids.slots) {
         if (!a.active) continue;
         if (Math.hypot(a.x - ship.x, a.y - ship.y) > a.r + SHIP_RADIUS) continue;
@@ -372,6 +399,87 @@
         if (hp <= 0) shipDead = true;
         else invulnUntil = gameTime + INVULN_MS / 1000;
         return; // one impact per frame, even if several rocks overlap
+      }
+      for (const d of drones.slots) {
+        if (!d.active) continue;
+        if (Math.hypot(d.x - ship.x, d.y - ship.y) > DRONE_RADIUS + SHIP_RADIUS) continue;
+        d.active = false; // the impact destroys the drone
+        burst((ship.x + d.x) / 2, (ship.y + d.y) / 2); // mid-point of the overlap
+        hp -= 1;
+        if (hp <= 0) shipDead = true;
+        else invulnUntil = gameTime + INVULN_MS / 1000;
+        return;
+      }
+    }
+
+    // ================================================================
+    // DRONES — pooled chasers that spawn at the edges and turn their
+    // heading toward the ship each frame at a bounded turn rate
+    // ================================================================
+    // Pick one candidate just outside a random edge, born facing the
+    // ship. Rejected outright if it would start closer than
+    // SPAWN_SAFE_RADIUS to the ship.
+    function spawnDrone() {
+      const w = canvas.width;
+      const h = canvas.height;
+      const slot = drones.slots.find((d) => !d.active);
+      if (!slot) return false; // pool exhausted — skip the spawn, never allocate
+      const r = DRONE_RADIUS;
+
+      for (let attempt = 0; attempt < DRONE_MAX_SPAWNS; attempt++) {
+        const u = random(); // which edge: ¼ of the roll per side (0 top, 1 bottom, 2 left, 3 right)
+        const edge = u < 0.25 ? 0 : u < 0.5 ? 1 : u < 0.75 ? 2 : 3;
+        let x;
+        let y;
+        if (edge === 0) {       // top
+          x = random() * w;
+          y = -(r + 1);
+        } else if (edge === 1) { // bottom
+          x = random() * w;
+          y = h + r + 1;
+        } else if (edge === 2) { // left
+          x = -(r + 1);
+          y = random() * h;
+        } else {                 // right
+          x = w + r + 1;
+          y = random() * h;
+        }
+
+        const ds = Math.hypot(x - ship.x, y - ship.y);
+        if (ds < SPAWN_SAFE_RADIUS) continue; // retry from a fresh candidate
+
+        slot.active = true;
+        slot.x = x;
+        slot.y = y;
+        slot.heading = Math.atan2(ship.y - y, ship.x - x); // born aiming at the ship
+        return true;
+      }
+      return false; // field too crowded near the ship to be safe — try again later
+    }
+
+    let lastDroneSpawnAt = Number.NEGATIVE_INFINITY; // sim time of the last spawn attempt
+
+    function spawnDrones() {
+      if (gameTime - lastDroneSpawnAt < DRONE_SPAWN_EVERY) return;
+      lastDroneSpawnAt = gameTime;
+      let count = 0;
+      for (const d of drones.slots) if (d.active) count++;
+      let budget = DRONE_MAX_SPAWNS;
+      while (count < DRONE_TARGET && budget-- > 0) {
+        if (spawnDrone()) count++;
+        else break;
+      }
+    }
+
+    function updateDrones(dt) {
+      const limit = DRONE_TURN_SPEED * dt; // bounded turn: steer, never teleport
+      for (const d of drones.slots) {
+        if (!d.active) continue;
+        const desired = Math.atan2(ship.y - d.y, ship.x - d.x);
+        const err = Math.atan2(Math.sin(desired - d.heading), Math.cos(desired - d.heading));
+        d.heading += Math.max(-limit, Math.min(limit, err));
+        d.x += Math.cos(d.heading) * DRONE_SPEED * dt;
+        d.y += Math.sin(d.heading) * DRONE_SPEED * dt;
       }
     }
 
@@ -424,11 +532,15 @@
       }
 
       updateLasers(dt);
-      checkAsteroidHits();
+      checkLaserKills();
 
       // Drift the rocks, then top the field back up to ASTEROID_TARGET.
       updateAsteroids(dt);
       spawnAsteroids();
+
+      // Steer the chasers, then top their field back up to DRONE_TARGET.
+      updateDrones(dt);
+      spawnDrones();
     }
 
     // ================================================================
@@ -500,6 +612,26 @@
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
+      }
+
+      // Drones: small red arrowheads, rotated in place, no assets.
+      ctx.fillStyle = "#2a1016";
+      ctx.strokeStyle = "#f87171";
+      ctx.lineWidth = 2;
+      for (const d of drones.slots) {
+        if (!d.active) continue;
+        ctx.save();
+        ctx.translate(d.x, d.y);
+        ctx.rotate(d.heading);
+        ctx.beginPath();
+        ctx.moveTo(DRONE_RADIUS, 0);
+        ctx.lineTo(-DRONE_RADIUS * 0.7, DRONE_RADIUS * 0.7);
+        ctx.lineTo(-DRONE_RADIUS * 0.4, 0);
+        ctx.lineTo(-DRONE_RADIUS * 0.7, -DRONE_RADIUS * 0.7);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
       }
 
       // HUD: live score and hull, top-left.

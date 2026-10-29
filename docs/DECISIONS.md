@@ -156,3 +156,63 @@
   ticket. Alternative: freeze the whole sim (rejected — the ticket scopes
   the final screen styling to the later ticket; a drifting field behind
   GAME OVER is standard arcade behaviour and costs zero).
+
+## 2026-10-29 — Ticket #6: chasing drones that lasers can destroy
+
+- **Tuning defaults (spec-silent):** `DRONE_TARGET = 3`, `DRONE_RADIUS = 10 px`,
+  `DRONE_SPEED = 120 px/s`, `DRONE_TURN_SPEED = 2.4 rad/s`, spawn cadence 0.35 s
+  from a 24-slot pool. Three chasers alongside six rocks keeps the field busy
+  without doubling threat density; the speed sits at the asteroid median so a
+  drone is evadable but cannot be outrun indefinitely; 2.4 rad/s (~14°/frame
+  at 60 fps) turns a full 180° in ~1.3 s — a slow-enough turn to dodge,
+  fast enough to make the ticket's "distance decreases each second" criterion
+  hold against a parked ship. `DRONE_SPEED` is a `var` like `LASER_SPEED` so
+  console tunes (and the hermetic unit tests) can retune it. Alternatives:
+  faster/accelerating pursuit (rejected — punishing and makes the bounded
+  turn harder to verify) or per-frame steering with lookahead (rejected —
+  more math, no ticket requirement).
+- **Pursuit = pure proportional turn toward the ship, no acceleration and no
+  screen wrap.** The heading rotates at most `DRONE_TURN_SPEED * dt` toward
+  `atan2(ship - drone)` each frame (the bounded-turn criterion), and the
+  drone advances straight at constant speed. Drones never wrap: wrapping a
+  chaser would teleport it through the ship's defences, and a pursuing body
+  does not need edge recycling — off-field excursions (possible only after
+  the ship dies, since a live ship always re-attracts them) are tolerable.
+  After the ship dies, drones keep chasing the frozen last ship position:
+  zero extra branching, the world keeps moving behind GAME OVER exactly like
+  the drifting rocks. Alternative: deactivate drones on death (extra state
+  machine, no visible benefit).
+- **Spawning reuses the asteroid pattern:** fixed radius, random edge just
+  outside the field, rejected within `SPAWN_SAFE_RADIUS` of the ship (the
+  existing constant, not a new one — drones are just another hazard class),
+  born facing the ship, capped at `DRONE_TARGET` with a per-frame attempt
+  budget. No minimum-gap check between drones: unlike rocks they converge on
+  one point anyway, so spacing would only fight the behaviour. Alternative:
+  spawn at a random distance off-screen (rejected — the ticket says "from
+  edges", and the edge fixture makes the spawn point testable).
+- **Hull impact destroys the drone**, mirroring the rock-shatter rule from
+  ticket #5 (one impact, one hazard consumed, one hp, burst at the overlap
+  mid-point, INVULN_MS window). Leaving the drone to re-touch next frame
+  would make the window the only protection and would contradict the "same
+  hit pipeline as asteroid collisions" wording. The scan checks rocks first,
+  then drones, and still takes at most one damage event per frame, so a
+  rock + drone pair overlapping in one frame costs exactly 1 hp.
+  Alternative: drone survives hull contact (rejected — asymmetric with the
+  rock rule and harsher for no reason).
+- **A laser kill credits `SCORE_PER_DRONE` (default 25) AND fires the shared
+  particle burst; an asteroid laser kill still does not burst.** The ticket
+  explicitly asks for the shared burst on drone kills, but the established
+  asteroid behaviour predates it and this ticket does not ask to change it,
+  so the two kill types stay intentionally asymmetric until tuning says
+  otherwise. Same sweep-segment test as rocks (no tunnelling), one pass over
+  both hazard pools per beam — the old `checkAsteroidHits` became
+  `checkLaserKills`. Alternative: burst both kill types (out of scope, would
+  rewrite #4's verified behaviour).
+- **Existing suites that assume a rock-only world now set
+  `DRONE_TARGET = 0` in setup** (three ship-damage tests, three asteroids
+  score tests). Their assertions are absolute (exact score, no drain over
+  3 s, no `translate` calls after death) and would be flaked out or broken
+  by default-spawning chasers; disabling auto-spawns there is the same
+  hermeticity trick they already used for `ASTEROID_TARGET`. The drone
+  suite itself keeps the default field where it must (spawn/cap test) and
+  otherwise isolates via `quietField`.

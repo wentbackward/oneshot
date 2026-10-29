@@ -299,6 +299,7 @@ check("a laser crossing an asteroid destroys it and adds exactly SCORE_PER_ASTER
   const g = boot(960, 600); // ship (480,300) facing up
   placeAst(g, 480, 300 - 40); // r=20 -> band 20..60 px above the ship; frame-1 beam sweep (23..34.7) crosses it
   g.q("ASTEROID_TARGET = 0"); // keep the field from refilling while we watch the kill
+  g.q("DRONE_TARGET = 0");
   g.key("Space", true);
   g.tick(); // frame 1: beam spans 23..34.7 px above the ship
   assertClose(g.q("score"), 10, 0, "first crossing scores exactly the default 10");
@@ -312,6 +313,7 @@ check("each kill adds exactly SCORE_PER_ASTEROID and kills accumulate", () => {
   placeAst(g, 480, 300 - 40); // band 20..60 px -> crossed by the frame-1 sweep (23..34.7)
   placeAst(g, 480, 300 - 90); // band 70..110 px -> crossed by the frame-5 sweep (69.7..81.3)
   g.q("ASTEROID_TARGET = 0"); // no respawns, so only our two fixtures exist
+  g.q("DRONE_TARGET = 0");
   g.key("Space", true);
   g.tick();
   assertClose(g.q("score"), 10, 0, "one kill scores exactly 10");
@@ -327,6 +329,7 @@ check("setting SCORE_PER_ASTEROID to 50 makes each kill worth exactly 50", () =>
   const g = boot(960, 600);
   g.q("SCORE_PER_ASTEROID = 50");
   g.q("ASTEROID_TARGET = 0");
+  g.q("DRONE_TARGET = 0");
   placeAst(g, 480, 300 - 40);
   g.key("Space", true);
   g.tick();
