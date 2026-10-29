@@ -69,6 +69,37 @@
   pathological field (ship parked on an edge) costs nothing. Alternative:
   spawn anywhere with the safe-disc check only (weaker — rocks could pop in
   view), or reject-and-give-up silently (field starves while the player camps).
+- **Jitter span is exactly ±60°, matching the inline comment** — `(random() -
+  0.5) * (2π/3)`. Review round 1 caught the original `(4π/3)` span (±120°);
+  the code is now what the docs always claimed. Alternative: widen the docs to
+  ±120° (rejected — near-corner spawns would often point away from the field).
+- **Wrap-around is suspended per-rock until its centre crosses the spawn edge
+  into the field (`entry` field on the pool slot).** The spawn offset
+  (`±(r+1)`) is deliberately smaller than a full radius, so the classic
+  “fully off → wrap” rule teleported every fresh rock to the opposite edge on
+  the next frame. Suppression lifts once the centre is inside; from then on
+  normal torus wrap applies (an exiting rock’s velocity already points into
+  the field at its new edge, so no double-wrap). Alternative: raise the wrap
+  trigger to a band wider than the max per-frame step (reviewer’s suggestion;
+  rejected on its own — a rock that exits and continues outward re-crosses the
+  band immediately and re-wraps every frame, and an outward-drifting spawner
+  orbits forever).
+- **Guaranteed inward entry: the outward component of the spawn velocity is
+  mirrored if the jitter aimed the rock back out along the spawn edge.** With
+  ±60° jitter near a screen corner the raw heading can point away from the
+  field; such a rock would then never settle (entry suppression would suspend
+  its wrap indefinitely) and silently eat a pool slot. Flipping the normal
+  component keeps speed, angle variety and one branch per edge. Alternative:
+  reject-and-retry those headings (extra RNG draws per spawn) or clamp the
+  jitter cone per edge (less natural distribution).
+- **Collision and wrap use the circumscribed radius `r`, although the polygon
+  vertices are `0.75r–1.0r`.** A beam hitting within `r` of the centre kills
+  the rock even in the concave gaps between spikes — up to ~25% overshoot at
+  the corners. Kept as a deliberate simplification: one scalar per rock is
+  cheap in the hot loop, reads generously (“you hit it”), and the mismatch is
+  smaller than the laser’s own length. Alternative: point-in-polygon or
+  per-vertex segment tests (more code, tighter feel — revisit if gameplay
+  tuning complains).
 - **Random source is a mutable `var random = Math.random`** that the game only
   ever calls. Lets the vm unit tests install deterministic sequences (and makes
   the spawn logic reproducible) without changing gameplay. Alternative:
