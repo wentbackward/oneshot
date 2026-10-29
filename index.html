@@ -52,6 +52,13 @@
     const ASTEROID_MIN_GAP = 40;     // px, extra spacing between live asteroids
     const ASTEROID_VERTS = 8;        // points per irregular polygon outline
     const ASTEROID_POOL_SIZE = 48;   // pre-allocated asteroid slots, recycled (never reallocated)
+    var PLAYER_MAX_HP = 3;           // starting hull points (shown as "HP n" in the HUD)
+    var INVULN_MS = 1500;            // ms of invulnerability after taking a hit
+    const PARTICLES_PER_BURST = 16;  // particles per impact burst (ticket requires >= 10)
+    const PARTICLE_LIFE_S = 0.7;     // s a particle lives before recycling
+    const PARTICLE_SPEED_MIN = 60;   // px/s, slowest burst fragment
+    const PARTICLE_SPEED_MAX = 260;  // px/s, fastest burst fragment
+    const PARTICLE_POOL_SIZE = 128;  // pre-allocated particle slots, recycled (never reallocated)
 
     // ================================================================
     // STATE
@@ -68,6 +75,9 @@
     const keys = new Set();
     let gameTime = 0; // seconds of accumulated simulation time
     let score = 0;    // HUD score, one SCORE_PER_ASTEROID per laser kill
+    let hp = PLAYER_MAX_HP;          // current hull; one impact costs exactly 1
+    let shipDead = false;            // hp reached 0: ship removed, all input ignored
+    let invulnUntil = Number.NEGATIVE_INFINITY; // sim time until which a hit costs nothing
     // Random source lives in a mutable `var` so unit tests (and console
     // experiments) can install a deterministic sequence; the game itself
     // only ever CALLS it, never reassigns it.
@@ -86,6 +96,13 @@
     // bottom, 2 left, 3 right); -1 once its centre is inside the field.
     // Wrap-around is suspended on that axis until then, so the fully
     // off-screen spawn offset can never trigger an instant teleport.
+    // Pre-allocated particle pool: impact bursts mutate existing slots
+    // in place, so rapid-fire combat never creates new objects.
+    const particlePool = { slots: [] };
+    for (let i = 0; i < PARTICLE_POOL_SIZE; i++) {
+      particlePool.slots.push({ active: false, x: 0, y: 0, vx: 0, vy: 0, age: 0 });
+    }
+
     const asteroids = { slots: [] };
     for (let i = 0; i < ASTEROID_POOL_SIZE; i++) {
       asteroids.slots.push({
@@ -308,45 +325,103 @@
     }
 
     // ================================================================
+    // SHIP DAMAGE — hull overlaps cost 1 hp, shatter the rock, burst
+    // particles; the ship is immune for INVULN_MS after every hit
+    // ================================================================
+    function burst(x, y) {
+      let spawned = 0;
+      for (const p of particlePool.slots) {
+        if (spawned >= PARTICLES_PER_BURST) break;
+        if (p.active) continue;
+        const ang = random() * Math.PI * 2;
+        const speed = PARTICLE_SPEED_MIN + (PARTICLE_SPEED_MAX - PARTICLE_SPEED_MIN) * random();
+        p.active = true;
+        p.x = x;
+        p.y = y;
+        p.vx = Math.cos(ang) * speed;
+        p.vy = Math.sin(ang) * speed;
+        p.age = 0;
+        spawned++;
+      }
+      // Pool exhausted: skip missing fragments, never allocate.
+    }
+
+    function updateParticles(dt) {
+      for (const p of particlePool.slots) {
+        if (!p.active) continue;
+        p.age += dt;
+        if (p.age >= PARTICLE_LIFE_S) {
+          p.active = false; // recycled
+          continue;
+        }
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+      }
+    }
+
+    function checkShipHits() {
+      if (shipDead) return;
+      if (gameTime < invulnUntil) return; // immune: ignore every hazard
+      for (const a of asteroids.slots) {
+        if (!a.active) continue;
+        if (Math.hypot(a.x - ship.x, a.y - ship.y) > a.r + SHIP_RADIUS) continue;
+        a.active = false; // the impact shatters the rock
+        burst((ship.x + a.x) / 2, (ship.y + a.y) / 2); // mid-point of the overlap
+        hp -= 1;
+        if (hp <= 0) shipDead = true;
+        else invulnUntil = gameTime + INVULN_MS / 1000;
+        return; // one impact per frame, even if several rocks overlap
+      }
+    }
+
+    // ================================================================
     // UPDATE — physics with delta-time integration
     // ================================================================
     function update(dt) {
-      // Rotate: left or right (A/D or arrow keys).
-      const turn =
-        (keys.has("ArrowRight") || keys.has("KeyD") ? 1 : 0) -
-        (keys.has("ArrowLeft") || keys.has("KeyA") ? 1 : 0);
-      ship.heading += turn * TURN_SPEED * dt;
+      // Advance the impact fragments regardless of ship state.
+      updateParticles(dt);
 
-      // Thrust: up or W accelerates along the current heading.
-      if (keys.has("ArrowUp") || keys.has("KeyW")) {
-        ship.vx += Math.cos(ship.heading) * THRUST * dt;
-        ship.vy += Math.sin(ship.heading) * THRUST * dt;
+      // A dead ship is inert: no physics, no firing, no further damage.
+      if (!shipDead) {
+        // Rotate: left or right (A/D or arrow keys).
+        const turn =
+          (keys.has("ArrowRight") || keys.has("KeyD") ? 1 : 0) -
+          (keys.has("ArrowLeft") || keys.has("KeyA") ? 1 : 0);
+        ship.heading += turn * TURN_SPEED * dt;
+
+        // Thrust: up or W accelerates along the current heading.
+        if (keys.has("ArrowUp") || keys.has("KeyW")) {
+          ship.vx += Math.cos(ship.heading) * THRUST * dt;
+          ship.vy += Math.sin(ship.heading) * THRUST * dt;
+        }
+
+        // Friction: decay velocity, framerate-independently; snap to rest.
+        const retention = Math.pow(FRICTION, dt * BASE_FPS);
+        ship.vx *= retention;
+        ship.vy *= retention;
+        if (ship.vx * ship.vx + ship.vy * ship.vy < STOP_SPEED * STOP_SPEED) {
+          ship.vx = 0;
+          ship.vy = 0;
+        }
+
+        // Integrate position.
+        ship.x += ship.vx * dt;
+        ship.y += ship.vy * dt;
+
+        // Screen wrap: exiting any edge re-enters at the opposite edge
+        // this same frame.
+        const w = canvas.width;
+        const h = canvas.height;
+        if (ship.x < -SHIP_RADIUS) ship.x += w + 2 * SHIP_RADIUS;
+        else if (ship.x > w + SHIP_RADIUS) ship.x -= w + 2 * SHIP_RADIUS;
+        if (ship.y < -SHIP_RADIUS) ship.y += h + 2 * SHIP_RADIUS;
+        else if (ship.y > h + SHIP_RADIUS) ship.y -= h + 2 * SHIP_RADIUS;
+
+        // Fire, then test the hull against the field.
+        tryFire();
+        checkShipHits();
       }
 
-      // Friction: decay velocity, framerate-independently; snap to rest.
-      const retention = Math.pow(FRICTION, dt * BASE_FPS);
-      ship.vx *= retention;
-      ship.vy *= retention;
-      if (ship.vx * ship.vx + ship.vy * ship.vy < STOP_SPEED * STOP_SPEED) {
-        ship.vx = 0;
-        ship.vy = 0;
-      }
-
-      // Integrate position.
-      ship.x += ship.vx * dt;
-      ship.y += ship.vy * dt;
-
-      // Screen wrap: exiting any edge re-enters at the opposite edge
-      // this same frame.
-      const w = canvas.width;
-      const h = canvas.height;
-      if (ship.x < -SHIP_RADIUS) ship.x += w + 2 * SHIP_RADIUS;
-      else if (ship.x > w + SHIP_RADIUS) ship.x -= w + 2 * SHIP_RADIUS;
-      if (ship.y < -SHIP_RADIUS) ship.y += h + 2 * SHIP_RADIUS;
-      else if (ship.y > h + SHIP_RADIUS) ship.y -= h + 2 * SHIP_RADIUS;
-
-      // Fire, advance the beam, let it hunt rocks.
-      tryFire();
       updateLasers(dt);
       checkAsteroidHits();
 
@@ -362,21 +437,27 @@
       ctx.fillStyle = "#05070f";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      ctx.save();
-      ctx.translate(ship.x, ship.y);
-      ctx.rotate(ship.heading);
-      ctx.beginPath();
-      ctx.moveTo(SHIP_RADIUS, 0);
-      ctx.lineTo(-SHIP_RADIUS * 0.7, SHIP_RADIUS * 0.6);
-      ctx.lineTo(-SHIP_RADIUS * 0.4, 0);
-      ctx.lineTo(-SHIP_RADIUS * 0.7, -SHIP_RADIUS * 0.6);
-      ctx.closePath();
-      ctx.fillStyle = "#101826";
-      ctx.fill();
-      ctx.strokeStyle = "#5eead4";
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      ctx.restore();
+      // Ship: hidden once destroyed; blinks while invulnerable.
+      if (!shipDead) {
+        ctx.save();
+        if (gameTime < invulnUntil && Math.floor(gameTime * 12) % 2 === 0) {
+          ctx.globalAlpha = 0.3;
+        }
+        ctx.translate(ship.x, ship.y);
+        ctx.rotate(ship.heading);
+        ctx.beginPath();
+        ctx.moveTo(SHIP_RADIUS, 0);
+        ctx.lineTo(-SHIP_RADIUS * 0.7, SHIP_RADIUS * 0.6);
+        ctx.lineTo(-SHIP_RADIUS * 0.4, 0);
+        ctx.lineTo(-SHIP_RADIUS * 0.7, -SHIP_RADIUS * 0.6);
+        ctx.closePath();
+        ctx.fillStyle = "#101826";
+        ctx.fill();
+        ctx.strokeStyle = "#5eead4";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.restore(); // also restores globalAlpha
+      }
 
       // Lasers: one batched path so a full pool costs a single stroke.
       ctx.strokeStyle = "#5eead4";
@@ -390,6 +471,15 @@
         ctx.lineTo(s.x + s.dx * half, s.y + s.dy * half);
       }
       ctx.stroke();
+
+      // Particles: 4 px amber fragments fading over their short life.
+      ctx.fillStyle = "#fbbf24";
+      for (const p of particlePool.slots) {
+        if (!p.active) continue;
+        ctx.globalAlpha = 1 - p.age / PARTICLE_LIFE_S;
+        ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+      }
+      ctx.globalAlpha = 1;
 
       // Asteroids: irregular polygons, rotated in place, no assets.
       ctx.fillStyle = "#2a2f3a";
@@ -411,11 +501,21 @@
         ctx.stroke();
       }
 
-      // HUD: live score, top-left.
+      // HUD: live score and hull, top-left.
       ctx.fillStyle = "#e2e8f0";
       ctx.font = "16px monospace";
       ctx.textAlign = "left";
       ctx.fillText(`SCORE ${score}`, 16, 28);
+      ctx.fillText(`HP ${Math.max(hp, 0)}`, 16, 52);
+
+      // Game over: static centred text (screen styling lands in the
+      // state-machine ticket).
+      if (shipDead) {
+        ctx.font = "48px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2);
+        ctx.textAlign = "left";
+      }
     }
 
     // ================================================================
