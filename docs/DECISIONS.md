@@ -116,3 +116,43 @@
   live display and is verifiable via the ctx stub. Alternative: a DOM element
   overlay (rejected — extra markup/state the single-canvas design avoids until
   a later ticket introduces lives/waves, which will extend this HUD).
+
+## 2026-10-29 — Ticket #5: damage ship on collision with particle bursts
+
+- **A rock that hits the hull is destroyed (shattered), matching the laser
+  kill rule.** The ticket's browser check parks the ship inside an asteroid
+  for 3 s expecting no repeated drain; if the rock survived, it would legally
+  re-hit the instant the 1500 ms window lapses, and "flying through a second
+  hazard" reads as a distinct rock. One impact, one rock, one hp — also keeps
+  the burst a single source. Alternative: rock survives and only
+  invulnerability prevents the repeat (rejected — the 3 s park would then cost
+  2 hp, contradicting the verification, and leaves the ship parked on a
+  hazard).
+- **One damage event per frame even when several rocks overlap:** the hit
+  scan returns after the first contact. The criterion says "decrements HP by
+  exactly 1" per overlap; charging per rock in a dense cluster would punish
+  spawn crowding, not skill. Alternative: charge once per rock (rejected —
+  harsher and still unspecified).
+- **Invulnerability is an absolute sim-time threshold (`invulnUntil = gameTime
+  + INVULN_MS/1000`)** checked at the top of the hit scan; while immune the
+  hazard is left intact and simply ignored, so a rock met mid-window still
+  hits once the window elapses (documented and tested). The ship blinks
+  (6 Hz dimming via `globalAlpha`) to make the window visible in play. The
+  ship explodes at the overlap mid-point; hp clamps at 0 and `shipDead`
+  latches. Alternative: a countdown variable (equivalent; threshold form
+  needs no per-frame mutation and compares in one op).
+- **Burst = 16 particles from a 128-slot pool (`particlePool`), 0.7 s life,
+  60–260 px/s, amber 4 px squares fading linearly.** 16 ≥ the required 10;
+  the pool size covers ~8 simultaneous bursts with headroom, and `burst()`
+  silently caps at pool capacity instead of allocating (mirrors the
+  laser/asteroid pool discipline). Particles update even after death so the
+  final explosion finishes on the GAME OVER screen. Alternative: 10 exactly
+  (too sparse) or 32+ (allocation-churn risk on dense fights).
+- **Death removes only the ship, not the world:** ship physics, firing,
+  hull checks and the ship's sprite are skipped; lasers, asteroids, HUD and
+  the static centred "GAME OVER" text keep running. Input handlers stay
+  registered but act on nothing, satisfying "all input is ignored" without
+  adding a restart path — screens/restart belong to the state-machine
+  ticket. Alternative: freeze the whole sim (rejected — the ticket scopes
+  the final screen styling to the later ticket; a drifting field behind
+  GAME OVER is standard arcade behaviour and costs zero).

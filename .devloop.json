@@ -13,6 +13,8 @@
     "grep -q 'LASER_COOLDOWN_MS' index.html",
     "grep -q 'ASTEROID_TARGET' index.html",
     "grep -q 'SCORE_PER_ASTEROID' index.html",
+    "grep -q 'PLAYER_MAX_HP' index.html",
+    "grep -q 'INVULN_MS' index.html",
     "[ \"$(grep -cE '(src|href)=' index.html)\" -eq 0 ]"
   ],
   "heavy": { "slots": 2 },
