@@ -368,3 +368,54 @@
   drives the state machine, and it captures each `fillText` together
   with the font/fill in force so the monospace + single-accent
   criterion is asserted per glyph across all three screens.
+
+## 2026-10-30 — Ticket #9: procedural Web Audio sound effects
+
+- **Four named SFX recipes on one master bus:** shoot is a short
+  (`SFX_SHOOT_S` = 0.07 s) square-wave blip whose pitch falls from
+  `SFX_SHOOT_FROM_HZ` (920) to `SFX_SHOOT_TO_HZ` (420); asteroid kill,
+  drone kill and player hit share one low-passed white-noise burst
+  generator (`playNoiseBurst`) and are distinguished purely by preset
+  constants — 500 Hz / 0.25 s (deep rock thud), 900 Hz / 0.18 s
+  (sharp zap), 300 Hz / 0.45 s (long heavy hit) — each with its own
+  level. Spec-silent values were picked so the four sounds sit in
+  distinct pitch/texture bands and are audibly separate. Alternatives:
+  per-effect bespoke generators (more code for the same two primitives —
+  oscillator vs. filtered noise), or pitch-only differentiation (the
+  ticket calls for noise-burst impacts, so texture must differ too).
+- **The AudioContext is created, and only created, from the first
+  keydown (`initAudio()` at the top of the keydown handler); a later
+  keydown resumes it if the browser has suspended it.** Any key counts,
+  so the start-screen Enter gesture warms the audio for the first shot.
+  Before the first gesture — and in engines without `AudioContext` —
+  every generator is a silent no-op (a `typeof` guard, which is what the
+  five other vm suites rely on to keep running unchanged). Alternatives:
+  create-on-first-shot (dead air on the opening blip; the criterion
+  says "first keydown") or create-on-load (violates the autoplay-policy
+  criterion outright).
+- **The white-noise buffer is baked once** (`SFX_NOISE_S` = 0.5 s,
+  ≥ the longest decay) and replayed by every burst; per-burst nodes
+  (source, filter, envelope gain) are scheduled and dropped, which is
+  the standard Web Audio pattern and happens at event rate, never in the
+  60 fps hot path. Alternatives: per-burst random fill (allocates on
+  every kill) or a single persistent source (can't overlap fast kills).
+- **`MASTER_GAIN` (mutable `var`, 0.2) is applied both at context init
+  and re-read on every SFX schedule**, so a console reassignment —
+  including `MASTER_GAIN = 0` — takes effect from the next sound and 0
+  provably silences everything: every recipe's envelope terminates at
+  the single GainNode wired to `destination`. Envelopes peak at the
+  per-recipe level into that one bus, so there is exactly one place to
+  adjust overall loudness. Alternatives: a per-node cached level that
+  ignores console retunes (breaks the criterion's test path) or N
+  buses (no ticket benefit).
+- **Only the standard `AudioContext` global is used (no
+  `webkitAudioContext` fallback).** Every current browser ships the
+  unprefixed constructor; the fallback alias adds a branch the
+  `typeof` guard already keeps safe. Existing suites untouched — they
+  simply never see an `AudioContext` global, the same silent-degradation
+  path this ticket's own "no Web Audio" test locks in.
+- **The drone-kill fixture parks its chaser (`DRONE_SPEED = 0`)** so a
+  beam fired straight up cannot miss a drone that would otherwise steer
+  off the line mid-flight; same hermetic-knob precedent as
+  `suppressSpawns` in the other suites. New gate grep: `MASTER_GAIN`
+  (rides the console-retunable-knob convention).
