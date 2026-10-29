@@ -246,6 +246,7 @@ check("hazard flown through during the INVULN_MS window does not decrement HP", 
   const g = boot();
   g.clearField();
   g.q("ASTEROID_TARGET = 0");
+  g.q("DRONE_TARGET = 0");
   placeAst(g, HIT_X, HIT_Y);
   g.tick(); // hit #1 at t ~= 16.7 ms; invulnerable until t ~= 1516.7 ms
   assertClose(g.hp(), 2, 0, "first impact drops hp to 2");
@@ -259,7 +260,8 @@ check("hazard flown through during the INVULN_MS window does not decrement HP", 
 check("parking inside a single asteroid for 3 s costs exactly 1 hp (ticket's browser check)", () => {
   const g = boot();
   g.clearField();
-  g.q("ASTEROID_TARGET = 0"); // the parked rock is the only hazard
+  g.q("ASTEROID_TARGET = 0"); // the parked rock is the only hazard (auto-spawns off)
+  g.q("DRONE_TARGET = 0");
   placeAst(g, HIT_X, HIT_Y);
   g.tick();
   assertClose(g.hp(), 2, 0, "single impact at the 3 s mark boundary");
@@ -303,6 +305,7 @@ check("at HP 0 the ship is removed from the scene and a static GAME OVER text is
   const g = boot();
   g.clearField();
   g.q("ASTEROID_TARGET = 0");
+  g.q("DRONE_TARGET = 0");
   drainHp(g, 3);
   g.ctxCalls.length = 0;
   g.ctxTexts.length = 0;
