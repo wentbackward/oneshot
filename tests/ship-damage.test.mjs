@@ -128,6 +128,12 @@ function placeAst(g, x, y, r = 20) {
 const HIT_X = 480;
 const HIT_Y = 275;
 
+// Suppress all auto-spawning: zero-sized wave rosters spawn nothing,
+// and an endless empty wave never completes (no wave cycling).
+function suppressSpawns(g) {
+  g.q("ASTEROID_BASE = 0; ASTEROID_GROWTH = 0; DRONE_BASE = 0; DRONE_GROWTH = 0");
+}
+
 // ================================================================
 // Criterion 1: ship starts at PLAYER_MAX_HP (default 3), shown in the
 // HUD; HUD and counter update on every change
@@ -143,7 +149,7 @@ check("PLAYER_MAX_HP defaults to 3, INVULN_MS defaults to 1500, and hp starts at
 check("HUD draws the HP counter, and it updates from 3 to 2 on a collision", () => {
   const g = boot();
   g.clearField();
-  g.q("ASTEROID_TARGET = 0");
+  suppressSpawns(g);
   g.tick();
   assert(g.ctxTexts.some((t) => t === "HP 3"), `fresh boot must draw "HP 3" in the HUD, got ${JSON.stringify(g.ctxTexts)}`);
   placeAst(g, HIT_X, HIT_Y);
@@ -160,7 +166,7 @@ check("HUD draws the HP counter, and it updates from 3 to 2 on a collision", () 
 check("overlapping an asteroid decrements HP by exactly 1", () => {
   const g = boot();
   g.clearField();
-  g.q("ASTEROID_TARGET = 0");
+  suppressSpawns(g);
   g.tick(); // settle to hp 3
   assertClose(g.hp(), 3, 0, "precondition: full health");
   placeAst(g, HIT_X, HIT_Y);
@@ -173,7 +179,7 @@ check("overlapping an asteroid decrements HP by exactly 1", () => {
 check("two hazards overlapping in one frame cost exactly 1 hp", () => {
   const g = boot();
   g.clearField();
-  g.q("ASTEROID_TARGET = 0");
+  suppressSpawns(g);
   g.q("INVULN_MS = 200");
   g.tick();
   placeAst(g, HIT_X, HIT_Y);
@@ -189,7 +195,7 @@ check("two hazards overlapping in one frame cost exactly 1 hp", () => {
 check("hull impact spawns at least 10 particles at the impact point", () => {
   const g = boot();
   g.clearField();
-  g.q("ASTEROID_TARGET = 0");
+  suppressSpawns(g);
   g.tick();
   placeAst(g, HIT_X, HIT_Y);
   g.ctxCalls.length = 0;
@@ -212,7 +218,7 @@ check("hull impact spawns at least 10 particles at the impact point", () => {
 check("particles come from a fixed-size pooled array that never reallocates", () => {
   const g = boot();
   g.clearField();
-  g.q("ASTEROID_TARGET = 0");
+  suppressSpawns(g);
   g.q("INVULN_MS = 200");
   const poolSize = g.q("particlePool.slots.length");
   assert(Number.isInteger(poolSize) && poolSize >= 10, "a pre-allocated particle pool must exist");
@@ -229,7 +235,7 @@ check("particles come from a fixed-size pooled array that never reallocates", ()
 check("an exhausted particle pool absorbs a burst without allocating or crashing", () => {
   const g = boot();
   g.clearField();
-  g.q("ASTEROID_TARGET = 0");
+  suppressSpawns(g);
   const poolSize = g.q("particlePool.slots.length");
   g.q(`particlePool.slots.forEach((p) => { p.active = true; p.x = 0; p.y = 0; p.vx = 0; p.vy = 0; p.age = 0.5; })`);
   placeAst(g, HIT_X, HIT_Y);
@@ -245,8 +251,7 @@ check("an exhausted particle pool absorbs a burst without allocating or crashing
 check("hazard flown through during the INVULN_MS window does not decrement HP", () => {
   const g = boot();
   g.clearField();
-  g.q("ASTEROID_TARGET = 0");
-  g.q("DRONE_TARGET = 0");
+  suppressSpawns(g);
   placeAst(g, HIT_X, HIT_Y);
   g.tick(); // hit #1 at t ~= 16.7 ms; invulnerable until t ~= 1516.7 ms
   assertClose(g.hp(), 2, 0, "first impact drops hp to 2");
@@ -260,8 +265,7 @@ check("hazard flown through during the INVULN_MS window does not decrement HP", 
 check("parking inside a single asteroid for 3 s costs exactly 1 hp (ticket's browser check)", () => {
   const g = boot();
   g.clearField();
-  g.q("ASTEROID_TARGET = 0"); // the parked rock is the only hazard (auto-spawns off)
-  g.q("DRONE_TARGET = 0");
+  suppressSpawns(g); // the parked rock is the only hazard (auto-spawns off)
   placeAst(g, HIT_X, HIT_Y);
   g.tick();
   assertClose(g.hp(), 2, 0, "single impact at the 3 s mark boundary");
@@ -286,7 +290,7 @@ function drainHp(g, steps) {
 check("when HP reaches 0 all input is ignored and hp stays at 0", () => {
   const g = boot();
   g.clearField();
-  g.q("ASTEROID_TARGET = 0");
+  suppressSpawns(g);
   drainHp(g, 3);
   assertClose(g.hp(), 0, 0, "three impacts must reach hp 0");
   assert(g.q("shipDead") === true, "ship must be marked dead at hp 0");
@@ -304,8 +308,7 @@ check("when HP reaches 0 all input is ignored and hp stays at 0", () => {
 check("at HP 0 the ship is removed from the scene and a static GAME OVER text is drawn", () => {
   const g = boot();
   g.clearField();
-  g.q("ASTEROID_TARGET = 0");
-  g.q("DRONE_TARGET = 0");
+  suppressSpawns(g);
   drainHp(g, 3);
   g.ctxCalls.length = 0;
   g.ctxTexts.length = 0;

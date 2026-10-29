@@ -143,27 +143,31 @@ function placeAst(g, x, y, r = 20) {
 
 // Suppress all auto-spawning and start from an empty field.
 function quietField(g) {
-  g.q("ASTEROID_TARGET = 0; DRONE_TARGET = 0");
+  g.q("ASTEROID_BASE = 0; ASTEROID_GROWTH = 0; DRONE_BASE = 0; DRONE_GROWTH = 0");
   g.clearField();
   g.tick(); // bootstrap frame (dt = 0): nothing spawns or moves
 }
 
 // ================================================================
-// Criterion 1: DRONE_TARGET caps the field; drones spawn at the
-// edges; setting DRONE_TARGET to 0 disables spawning entirely
+// Criterion 1: the drone roster caps the field; drones spawn at
+// the edges; zeroing the drone roster disables spawning entirely
 // ================================================================
-check("DRONE_TARGET and SCORE_PER_DRONE are named constants; SCORE_PER_DRONE defaults to 25", () => {
+check("DRONE_BASE, DRONE_GROWTH and SCORE_PER_DRONE are named constants; SCORE_PER_DRONE defaults to 25", () => {
   const g = boot();
-  assert(typeof g.q("DRONE_TARGET") === "number", "DRONE_TARGET must be a named numeric constant");
-  assert(typeof g.q("SCORE_PER_DRONE") === "number", "SCORE_PER_DRONE must be a named numeric constant");
+  for (const name of ["DRONE_BASE", "DRONE_GROWTH", "SCORE_PER_DRONE"]) {
+    assert(typeof g.q(name) === "number", `${name} must be a named numeric constant`);
+  }
+  assertClose(g.q("DRONE_BASE"), 0, 0, "default DRONE_BASE must be 0 (no drones in wave 1)");
+  assertClose(g.q("DRONE_GROWTH"), 1, 0, "default DRONE_GROWTH must be 1");
   assertClose(g.q("SCORE_PER_DRONE"), 25, 0, "default SCORE_PER_DRONE must be 25");
   assert(g.q("drones.slots.length") >= 1, "a pre-allocated drone pool must exist");
 });
 
-check("drones spawn at the screen edges and the field never exceeds DRONE_TARGET", () => {
+check("drones spawn at the screen edges and the field never exceeds the drone roster", () => {
   const g = boot(960, 600);
-  g.q("DRONE_TARGET = 3");
-  g.tick(); // bootstrap frame: spawner tops the field up immediately
+  // Rock-free world with a flat roster of three drones on every wave.
+  g.q("ASTEROID_BASE = 0; ASTEROID_GROWTH = 0; DRONE_BASE = 3; DRONE_GROWTH = 0");
+  g.tick(); // bootstrap frame: spawner builds the wave roster immediately
   const firstWave = g.droneCount();
   assert(firstWave >= 1, `spawner must produce drones on the first eligible frame, got ${firstWave}`);
   // On the dt=0 bootstrap frame freshly spawned drones are still at
@@ -180,16 +184,16 @@ check("drones spawn at the screen edges and the field never exceeds DRONE_TARGET
     g.tick(); // 10 s of play (includes the ship being whittled down)
     maxSeen = Math.max(maxSeen, g.droneCount());
   }
-  assert(maxSeen <= 3, `the field must never exceed DRONE_TARGET (saw ${maxSeen})`);
-  assertClose(g.droneCount(), 3, 0, "the spawner must keep topping the field back up to DRONE_TARGET");
+  assert(maxSeen === 3, `the field must build up to the drone roster (saw ${maxSeen})`);
+  assert(g.droneCount() <= 3, `the field must never exceed the drone roster`);
 });
 
-check("setting DRONE_TARGET to 0 disables drone spawning entirely", () => {
+check("zeroing the drone roster disables drone spawning entirely", () => {
   const g = boot();
-  g.q("DRONE_TARGET = 0");
+  g.q("DRONE_BASE = 0; DRONE_GROWTH = 0");
   for (let i = 0; i < 300; i++) {
     g.tick(); // 5 s of play
-    if (g.droneCount() > 0) throw new Error(`DRONE_TARGET = 0 must never spawn drones, saw ${g.droneCount()}`);
+    if (g.droneCount() > 0) throw new Error(`a zeroed drone roster must never spawn drones, saw ${g.droneCount()}`);
   }
 });
 

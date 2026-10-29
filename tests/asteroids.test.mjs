@@ -134,45 +134,50 @@ function placeAst(g, x, y, r = 20) {
 }
 
 // ================================================================
-// Criterion 1 (constants): ASTEROID_TARGET / SCORE_PER_ASTEROID are
-// named, mutable tuning constants with the required defaults
+// Criterion 1 (constants): ASTEROID_BASE / ASTEROID_GROWTH / 
+// SCORE_PER_ASTEROID are named, mutable tuning constants with the
+// required defaults
 // ================================================================
-check("ASTEROID_TARGET defaults to a positive integer and SCORE_PER_ASTEROID defaults to exactly 10", () => {
+check("ASTEROID_BASE and ASTEROID_GROWTH default to 6 / +2, and SCORE_PER_ASTEROID defaults to exactly 10", () => {
   const g = boot();
   assertClose(g.q("SCORE_PER_ASTEROID"), 10, 0, "default SCORE_PER_ASTEROID must be 10");
-  assert(Number.isInteger(g.q("ASTEROID_TARGET")) && g.q("ASTEROID_TARGET") > 0,
-    "ASTEROID_TARGET must be a positive integer by default");
+  assertClose(g.q("ASTEROID_BASE"), 6, 0, "default ASTEROID_BASE must be 6 (wave 1 roster)");
+  assertClose(g.q("ASTEROID_GROWTH"), 2, 0, "default ASTEROID_GROWTH must be 2");
+  assert(Number.isInteger(g.q("ASTEROID_BASE")) && g.q("ASTEROID_BASE") > 0,
+    "ASTEROID_BASE must be a positive integer by default");
 });
 
 // ================================================================
-// Criterion 1 (target=0): setting ASTEROID_TARGET to 0 stops all
+// Criterion 1 (roster=0): zeroing the wave rosters stops all
 // spawning permanently
 // ================================================================
-check("setting ASTEROID_TARGET to 0 stops all spawning", () => {
+check("zeroing the wave rosters stops all asteroid spawning", () => {
   const g = boot();
-  g.q("ASTEROID_TARGET = 0");
+  g.q("ASTEROID_BASE = 0; ASTEROID_GROWTH = 0");
   for (let i = 0; i < 2400; i++) g.tick(); // 40 s with no player input
-  assert(g.count() === 0, `no asteroid may ever spawn at ASTEROID_TARGET=0, got ${g.count()}`);
+  assert(g.count() === 0, `no asteroid may ever spawn from zero-sized rosters, got ${g.count()}`);
 });
 
 // ================================================================
-// Criterion 1 (population): active count converges on ASTEROID_TARGET
-// and follows console reassignments
+// Criterion 1 (population): active count builds up to the wave
+// roster and follows console reassignments
 // ================================================================
-check("active asteroid count converges on ASTEROID_TARGET and follows reassignments", () => {
+check("active asteroid count builds up to the wave roster and follows reassignments", () => {
   const g = boot(400, 300);
   g.clearField();
   // Deterministic seed chosen so a field of 2 fills within one spawn burst:
   g.q(`random = ${mulberry32Source(4)}`);
-  g.q("ASTEROID_TARGET = 2");
+  // Wave-shaped world: flat roster, no drones.
+  g.q("ASTEROID_GROWTH = 0; DRONE_BASE = 0; DRONE_GROWTH = 0");
+  g.q("ASTEROID_BASE = 2");
   for (let i = 0; i < 60 && g.count() < 2; i++) g.tick();
-  assertClose(g.count(), 2, 0, "field must fill up to ASTEROID_TARGET");
+  assertClose(g.count(), 2, 0, "field must build up to the wave roster");
   for (let i = 0; i < 1800; i++) g.tick(); // 30 s
-  assert(g.count() <= 2, `population must never exceed the target, got ${g.count()}`);
-  // Raise the target: new spawns resume until the count climbs back to it.
-  g.q("ASTEROID_TARGET = 4");
+  assert(g.count() <= 2, `population must never exceed the roster, got ${g.count()}`);
+  // Raise the roster: the build resumes until the count climbs back to it.
+  g.q("ASTEROID_BASE = 4");
   for (let i = 0; i < 120 && g.count() < 4; i++) g.tick();
-  assertClose(g.count(), 4, 0, `raising ASTEROID_TARGET must repopulate the field, got ${g.count()}`);
+  assertClose(g.count(), 4, 0, `raising the roster must rebuild the field, got ${g.count()}`);
 });
 
 // ================================================================
@@ -181,13 +186,12 @@ check("active asteroid count converges on ASTEROID_TARGET and follows reassignme
 // ================================================================
 check("every naturally spawned asteroid starts at least SPAWN_SAFE_RADIUS (200) px from the ship", () => {
   const g = boot(480, 360); // ship (240,180); corners ~300 px away -> room to live
-  g.q("ASTEROID_TARGET = 4");
   // Pool slots are recycled in place, so we cannot memoise on slot identity
   // alone: detect each inactive->active transition every frame instead,
-  // which catches respawns as well as first activations.
+  // which catches new-wave rosters as well as first activations.
   let prevActive = new Set();
   let spawns = 0;
-  for (let i = 0; i < 4800; i++) { // 80 s of drift, wraps and respawns
+  for (let i = 0; i < 4800; i++) { // 80 s of drift, wraps and new-wave rosters
     g.tick();
     const act = g.activeAsteroids();
     const nowActive = new Set(act);
@@ -298,8 +302,7 @@ check("score starts at 0", () => {
 check("a laser crossing an asteroid destroys it and adds exactly SCORE_PER_ASTEROID", () => {
   const g = boot(960, 600); // ship (480,300) facing up
   placeAst(g, 480, 300 - 40); // r=20 -> band 20..60 px above the ship; frame-1 beam sweep (23..34.7) crosses it
-  g.q("ASTEROID_TARGET = 0"); // keep the field from refilling while we watch the kill
-  g.q("DRONE_TARGET = 0");
+  g.q("ASTEROID_BASE = 0; ASTEROID_GROWTH = 0; DRONE_BASE = 0; DRONE_GROWTH = 0"); // zero rosters: only our fixtures exist
   g.key("Space", true);
   g.tick(); // frame 1: beam spans 23..34.7 px above the ship
   assertClose(g.q("score"), 10, 0, "first crossing scores exactly the default 10");
@@ -312,8 +315,7 @@ check("each kill adds exactly SCORE_PER_ASTEROID and kills accumulate", () => {
   const g = boot(960, 600);
   placeAst(g, 480, 300 - 40); // band 20..60 px -> crossed by the frame-1 sweep (23..34.7)
   placeAst(g, 480, 300 - 90); // band 70..110 px -> crossed by the frame-5 sweep (69.7..81.3)
-  g.q("ASTEROID_TARGET = 0"); // no respawns, so only our two fixtures exist
-  g.q("DRONE_TARGET = 0");
+  g.q("ASTEROID_BASE = 0; ASTEROID_GROWTH = 0; DRONE_BASE = 0; DRONE_GROWTH = 0"); // zero rosters: only our fixtures exist
   g.key("Space", true);
   g.tick();
   assertClose(g.q("score"), 10, 0, "one kill scores exactly 10");
@@ -328,8 +330,7 @@ check("each kill adds exactly SCORE_PER_ASTEROID and kills accumulate", () => {
 check("setting SCORE_PER_ASTEROID to 50 makes each kill worth exactly 50", () => {
   const g = boot(960, 600);
   g.q("SCORE_PER_ASTEROID = 50");
-  g.q("ASTEROID_TARGET = 0");
-  g.q("DRONE_TARGET = 0");
+  g.q("ASTEROID_BASE = 0; ASTEROID_GROWTH = 0; DRONE_BASE = 0; DRONE_GROWTH = 0"); // zero rosters: only our fixtures exist
   placeAst(g, 480, 300 - 40);
   g.key("Space", true);
   g.tick();
