@@ -20,6 +20,7 @@
     "grep -q 'DRONE_GROWTH' index.html",
     "grep -q 'BETWEEN_WAVES_S' index.html",
     "grep -q 'SCORE_PER_DRONE' index.html",
+    "grep -qi 'monospace' index.html",
     "[ \"$(grep -cE '(src|href)=' index.html)\" -eq 0 ]"
   ],
   "heavy": { "slots": 2 },
