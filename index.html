@@ -77,6 +77,28 @@
     const PARTICLE_SPEED_MIN = 60;   // px/s, slowest burst fragment
     const PARTICLE_SPEED_MAX = 260;  // px/s, fastest burst fragment
     const PARTICLE_POOL_SIZE = 128;  // pre-allocated particle slots, recycled (never reallocated)
+    // Audio — procedural Web Audio SFX (no external files). Every sound
+    // routes through a single master GainNode levelled by MASTER_GAIN;
+    // setting it to 0 silences all SFX. Tuning knobs are "var" like the
+    // rest of the console-retunable constants.
+    var MASTER_GAIN = 0.2;           // master bus level (0..1); 0 silences every SFX
+    const SFX_NOISE_S = 0.5;         // s, length of the pre-baked white-noise buffer
+    // Shoot: one short square-wave blip, pitch dropping from FROM to TO.
+    const SFX_SHOOT_FROM_HZ = 920;   // blip opening pitch
+    const SFX_SHOOT_TO_HZ = 420;     // blip ending pitch
+    const SFX_SHOOT_LEVEL = 0.5;     // blip amplitude into the master bus
+    const SFX_SHOOT_S = 0.07;        // s, blip length
+    // Impact sounds: all three are low-passed white-noise bursts that
+    // differ only in their preset constants (cutoff, amplitude, decay).
+    const SFX_ASTEROID_KILL_HZ = 500;   // lowpass cutoff — deep rock thud
+    const SFX_ASTEROID_KILL_LEVEL = 1.0; // burst amplitude into the master bus
+    const SFX_ASTEROID_KILL_S = 0.25;   // s, thud decay
+    const SFX_DRONE_KILL_HZ = 900;      // sharper zap
+    const SFX_DRONE_KILL_LEVEL = 0.8;
+    const SFX_DRONE_KILL_S = 0.18;
+    const SFX_PLAYER_HIT_HZ = 300;      // long, heavy hull hit
+    const SFX_PLAYER_HIT_LEVEL = 1.0;
+    const SFX_PLAYER_HIT_S = 0.45;
 
     // ================================================================
     // STATE
@@ -164,6 +186,7 @@
     const KEY_CODES = ["ArrowUp", "KeyW", "ArrowLeft", "KeyA", "ArrowRight", "KeyD", "Space"];
 
     window.addEventListener("keydown", (e) => {
+      initAudio(); // first gesture: create/resume the AudioContext (no-op before then, silent without Web Audio)
       // Screen transitions are edge-triggered and state-gated: Enter
       // starts from the start screen; Enter or R restarts from game
       // over. Neither acts in any other state (a play-run is never
@@ -229,6 +252,7 @@
       slot.dx = dx;
       slot.dy = dy;
       lastFireAt = gameTime;
+      playShoot();
     }
 
     function updateLasers(dt) {
@@ -389,6 +413,7 @@
           if (segPointDistance(px, py, s.x, s.y, a.x, a.y) <= a.r) {
             a.active = false; // destroyed: removed from the field
             score += SCORE_PER_ASTEROID;
+            playAsteroidKill();
           }
         }
         for (let di = 0; di < chasers.length; di++) {
@@ -398,6 +423,7 @@
             d.active = false; // destroyed: removed from the field
             score += SCORE_PER_DRONE;
             burst(d.x, d.y); // shared impact burst, same pool as hull hits
+            playDroneKill();
           }
         }
       }
@@ -443,6 +469,7 @@
     // or the game-over hand-off on the final blow.
     function hitShip(burstX, burstY) {
       burst(burstX, burstY);
+      playPlayerHit();
       hp -= 1;
       if (hp <= 0) {
         shipDead = true;
@@ -543,6 +570,85 @@
         d.x += Math.cos(d.heading) * DRONE_SPEED * dt;
         d.y += Math.sin(d.heading) * DRONE_SPEED * dt;
       }
+    }
+
+    // ================================================================
+    // AUDIO — procedural SFX via Web Audio. The AudioContext is created
+    // (and resumed) only on the first user gesture, never on page load;
+    // before then — and in engines without Web Audio — every generator
+    // is a silent no-op. Each SFX is scheduled through a per-event
+    // envelope gain into the single master GainNode, whose level tracks
+    // MASTER_GAIN live so a console reassignment applies to the next
+    // sound (and 0 silences everything).
+    // ================================================================
+    let audioCtx = null;   // null until the first gesture (or no Web Audio)
+    let masterGain = null; // the one node every SFX routes through
+    let noiseBuffer = null; // pre-baked white noise, created once, replayed per burst
+
+    function initAudio() {
+      if (audioCtx) {
+        if (audioCtx.state === "suspended") audioCtx.resume();
+        return;
+      }
+      if (typeof AudioContext === "undefined") return; // silent, no error
+      audioCtx = new AudioContext();
+      if (audioCtx.state === "suspended") audioCtx.resume();
+      masterGain = audioCtx.createGain();
+      masterGain.gain.value = MASTER_GAIN;
+      masterGain.connect(audioCtx.destination);
+      const frames = Math.max(1, Math.ceil(audioCtx.sampleRate * SFX_NOISE_S));
+      noiseBuffer = audioCtx.createBuffer(1, frames, audioCtx.sampleRate);
+      const data = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    }
+
+    // The shoot: one short square-wave blip with a falling pitch.
+    function playShoot() {
+      if (!audioCtx) return;
+      const t = audioCtx.currentTime;
+      masterGain.gain.value = MASTER_GAIN; // live console retunes apply
+      const osc = audioCtx.createOscillator();
+      osc.type = "square";
+      osc.frequency.setValueAtTime(SFX_SHOOT_FROM_HZ, t);
+      osc.frequency.exponentialRampToValueAtTime(SFX_SHOOT_TO_HZ, t + SFX_SHOOT_S);
+      const env = audioCtx.createGain();
+      env.gain.setValueAtTime(SFX_SHOOT_LEVEL, t);
+      env.gain.exponentialRampToValueAtTime(0.001, t + SFX_SHOOT_S);
+      osc.connect(env);
+      env.connect(masterGain);
+      osc.start(t);
+      osc.stop(t + SFX_SHOOT_S);
+    }
+
+    // White-noise burst through a low-pass filter. Asteroid kill, drone
+    // kill and the player hit all share this shape and differ only in
+    // their preset constants (cutoff, amplitude, decay length).
+    function playNoiseBurst(cutoffHz, level, durS) {
+      if (!audioCtx) return;
+      const t = audioCtx.currentTime;
+      masterGain.gain.value = MASTER_GAIN; // live console retunes apply
+      const src = audioCtx.createBufferSource();
+      src.buffer = noiseBuffer;
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.frequency.value = cutoffHz;
+      const env = audioCtx.createGain();
+      env.gain.setValueAtTime(level, t);
+      env.gain.exponentialRampToValueAtTime(0.001, t + durS);
+      src.connect(filter);
+      filter.connect(env);
+      env.connect(masterGain);
+      src.start(t);
+      src.stop(t + durS);
+    }
+    function playAsteroidKill() {
+      playNoiseBurst(SFX_ASTEROID_KILL_HZ, SFX_ASTEROID_KILL_LEVEL, SFX_ASTEROID_KILL_S);
+    }
+    function playDroneKill() {
+      playNoiseBurst(SFX_DRONE_KILL_HZ, SFX_DRONE_KILL_LEVEL, SFX_DRONE_KILL_S);
+    }
+    function playPlayerHit() {
+      playNoiseBurst(SFX_PLAYER_HIT_HZ, SFX_PLAYER_HIT_LEVEL, SFX_PLAYER_HIT_S);
     }
 
     // ================================================================
