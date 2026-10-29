@@ -81,6 +81,9 @@ function boot(width = 960, height = 600) {
   };
   const context = vm.createContext(sandbox);
   vm.runInContext(gameSource, context);
+  // Ticket #8: dismiss the start screen so this suite drives the
+  // running simulation (Enter starts play).
+  for (const cb of listeners["keydown"] ?? []) cb({ code: "Enter", preventDefault() {} });
 
   let nowMs = 0;
   const FRAME_MS = 1000 / 60;
