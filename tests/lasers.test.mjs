@@ -189,32 +189,40 @@ check("lasers deactivate once off-screen and are recycled from the pre-allocated
   const slotIds = g.q("[...laserPool.slots]"); // same object references as the game's slots
   g.key("Space", true);
   let sawActive = false;
-  let sawInactiveAfterActive = false; // the SAME slot index toggles active->inactive->active
   let maxActive = 0;
+  let s0WasActive = false;
+  let s0Recycled = false; // slot 0 toggled active -> inactive -> active
+  const seenSlots = new Set();
   for (let i = 0; i < 180; i++) {
     g.tick(); // 3 s of sustained fire aimed at the top edge
     const n = g.activeCount();
     sawActive = sawActive || n > 0;
     maxActive = Math.max(maxActive, n);
+    for (const s of g.activeSlots()) seenSlots.add(s);
     const s0 = g.q("laserPool.slots[0].active");
-    sawInactiveAfterActive = sawInactiveAfterActive || !s0;
+    s0WasActive = s0WasActive || s0;
+    s0Recycled = s0Recycled || (s0WasActive && !s0);
   }
   assert(sawActive, "lasers actually fired during the sustained burst");
   assert(maxActive <= size0, `active lasers never exceed the pool (${maxActive} > ${size0})`);
+  assert(
+    seenSlots.size > 0 && [...seenSlots].every((s) => slotIds.includes(s)),
+    "every fired laser occupies a pre-existing slot object (recycled, never newly allocated)"
+  );
+  assert(s0Recycled, "the same pre-allocated slot object is reused across shots");
   assertClose(g.q("laserPool.slots.length"), size0, 0, "pool size never grows while firing");
-  const [live] = g.activeSlots();
-  assert(slotIds.includes(live), "a fired laser occupies a pre-existing slot object (recycled, not newly allocated)");
 });
 
 check("pool exhaustion never allocates: firing waits for a free slot", () => {
   const g = boot(200, 200);
   g.q("LASER_SPEED = 0"); // pathological console tune: lasers never leave, pool saturates
-  g.size0 = g.q("laserPool.slots.length");
+  g.q("LASER_COOLDOWN_MS = 50"); // fast cadence so 4 s comfortably overfills the 32-slot pool
+  const size0 = g.q("laserPool.slots.length");
   g.key("Space", true);
-  for (let i = 0; i < 240; i++) g.tick(); // 4 s >> pool capacity at 150 ms cadence
+  for (let i = 0; i < 240; i++) g.tick(); // 4 s >> pool capacity at 50 ms cadence
   const n = g.activeCount();
   assertClose(n, g.q("LASER_POOL_SIZE"), 0, "saturated pool holds exactly LASER_POOL_SIZE lasers, no overflow objects");
-  assertClose(g.q("laserPool.slots.length"), g.size0, 0, "exhausted pool does not grow or crash");
+  assertClose(g.q("laserPool.slots.length"), size0, 0, "exhausted pool does not grow or crash");
 });
 
 // ---------- summary ----------
