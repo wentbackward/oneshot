@@ -48,7 +48,7 @@
     const ASTEROID_MAX_R = 20;    // px, largest asteroid radius
     const ASTEROID_SPEED_MIN = 40;   // px/s, slowest drift
     const ASTEROID_SPEED_MAX = 160;  // px/s, fastest drift
-    const ASTEROID_SPAWN_EVERY = 0.25; // s between respawn attempts while below target
+    const ASTEROID_SPAWN_EVERY = 0.25; // s between respawn attempts while below this wave's roster
     const ASTEROID_MAX_SPAWNS = 8;   // spawn attempts per frame (bounds the rejection loop)
     const ASTEROID_MIN_GAP = 40;     // px, extra spacing between live asteroids
     const ASTEROID_VERTS = 8;        // points per irregular polygon outline
@@ -60,7 +60,7 @@
     const DRONE_RADIUS = 10;         // px, drone hull size
     var DRONE_SPEED = 120;           // px/s, constant forward speed
     const DRONE_TURN_SPEED = 2.4;    // rad/s, max heading change while tracking the ship
-    const DRONE_SPAWN_EVERY = 0.35;  // s between respawn attempts while below target
+    const DRONE_SPAWN_EVERY = 0.35;  // s between respawn attempts while below this wave's roster
     const DRONE_MAX_SPAWNS = 4;      // spawn attempts per frame (bounds the rejection loop)
     const DRONE_POOL_SIZE = 24;      // pre-allocated drone slots, recycled (never reallocated)
     var PLAYER_MAX_HP = 3;           // starting hull points (shown as "HP n" in the HUD)
@@ -285,7 +285,7 @@
       lastSpawnAt = gameTime;
       let count = 0;
       for (const a of asteroids.slots) if (a.active) count++;
-      const cap = waveAsteroidCount(wave); // this wave's asteroid roster
+      const cap = waveAsteroidCap(wave); // this wave's asteroid roster, clamped to the pool
       let budget = ASTEROID_MAX_SPAWNS;
       while (count < cap && budget-- > 0) {
         if (spawnAsteroid()) { count++; waveBuilt++; }
@@ -472,7 +472,7 @@
       lastDroneSpawnAt = gameTime;
       let count = 0;
       for (const d of drones.slots) if (d.active) count++;
-      const cap = waveDroneCount(wave); // this wave's drone roster
+      const cap = waveDroneCap(wave); // this wave's drone roster, clamped to the pool
       let budget = DRONE_MAX_SPAWNS;
       while (count < cap && budget-- > 0) {
         if (spawnDrone()) { count++; waveBuilt++; }
@@ -494,7 +494,9 @@
 
     // ================================================================
     // WAVES — wave N fields a fixed roster of hazards, sized by the
-    // *_BASE / *_GROWTH tuning knobs. The roster is built through the
+    // *_BASE / *_GROWTH tuning knobs and clamped to the pre-allocated
+    // pool capacities (a roster without slots could never be built,
+    // so its wave could never end). The roster is built through the
     // normal spawners at wave start; a hazard destroyed mid-wave is
     // never replaced. Clearing every hazard starts a BETWEEN_WAVES_S
     // pause, after which the wave number steps up by exactly one.
@@ -505,8 +507,17 @@
     function waveDroneCount(n) {
       return DRONE_BASE + DRONE_GROWTH * (n - 1);
     }
+    // Effective rosters: the formulas above, floored by the fixed pool
+    // sizes. Beyond the pools there is nowhere to spawn, and a wave
+    // that can never reach its roster can never be cleared.
+    function waveAsteroidCap(n) {
+      return Math.min(waveAsteroidCount(n), ASTEROID_POOL_SIZE);
+    }
+    function waveDroneCap(n) {
+      return Math.min(waveDroneCount(n), DRONE_POOL_SIZE);
+    }
     function waveTotal(n) {
-      return waveAsteroidCount(n) + waveDroneCount(n);
+      return waveAsteroidCap(n) + waveDroneCap(n);
     }
 
     function hazardCount() {

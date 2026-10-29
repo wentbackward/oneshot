@@ -236,7 +236,9 @@
   replaced mid-wave — that is what makes "destroying every hazard ends the
   wave" reachable at all (a continuous top-up to a constant could be
   outrun, at best, and a mid-wave respawn would resurrect the player's own
-  kills). Alternative: keep top-up running and declare the wave cleared
+  kills); this holds while the wave's clamped roster fits its pools —
+  with no free pool slot, no replaced hazard could spawn at all.
+  Alternative: keep top-up running and declare the wave cleared
   when the count hits zero (rejected — with live respawns the field never
   reliably empties, and a burst of quick kills would end the wave before
   its roster even materialised).
@@ -279,3 +281,29 @@
   roster (rejected — dead/parallel knob) or rewriting the wave machine as
   a module with injected config (rejected — no module system; the single
   file must stay directly openable).
+
+## 2026-10-30 — Ticket #7 review round 1: pool-capacity clamps and a deterministic wave suite
+
+- **Per-wave rosters are clamped to pool capacity: `waveTotal(n) =
+  waveAsteroidCap(n) + waveDroneCap(n)` where the caps are
+  `Math.min(waveAsteroidCount(n), ASTEROID_POOL_SIZE)` /
+  `Math.min(waveDroneCount(n), DRONE_POOL_SIZE)`, applied at the two
+  spawner caps and the completion check.** The raw formulas stay exposed
+  as `waveAsteroidCount`/`waveDroneCount` (still unit-tested, still the
+  source of truth for "what wave N calls for"); the caps are the
+  *effective* rosters. Without them the ticket's own defaults deadlock
+  at wave 23 (50 wanted > 48 slots): the wave never completes and
+  cleared hazards respawn from the unreachable remainder. Alternative:
+  grow the pools dynamically (rejected — allocates, breaks the pooled,
+  no-churn rule) or leave it as a known limitation (rejected — a
+  soft-lock on the default settings is a correctness bug, not a tuning
+  quirk).
+- **The wave behavioural suite is seeded, not corner-parked, for
+  determinism:** `boot()` pins the game's `random` hook to a fixed
+  `mulberry32` sequence (same self-contained-source factory as
+  `tests/asteroids.test.mjs`), and `keepLast` additionally zeroes the
+  survivors' drift. The corner-park assumption was false — a lone
+  survivor can drift into the parked ship and shatter, flaking the
+  "survivor is the only hazard" invariant. Seeding makes every
+  roster-count wait reproducible, not just that one. Alternative: pin
+  positions only (fragile — other waits still roll the RNG).

@@ -382,7 +382,13 @@ check("an over-full drone roster clamps to the 24-slot drone pool without deadlo
   const g = boot();
   parkShip(g);
   g.q("ASTEROID_BASE = 0; ASTEROID_GROWTH = 0; DRONE_BASE = 25; DRONE_GROWTH = 0");
-  waitUntil(g, () => g.droneCount() === 24, 1200, "the drone field to saturate the 24-slot pool");
+  // Chasers that reach the parked ship die and (per the never-replace
+  // rule) are not re-spawned once the clamped roster of 24 spawns has
+  // all happened — so the invariant is "roster fully spawned", not
+  // "24 alive at once" (the pool caps the latter by construction).
+  waitUntil(g, () => g.q("waveBuilt >= waveTotal(1)"), 1200, "the clamped 24-drone roster to finish spawning");
+  assert(g.droneCount() <= 24, `the drone field may never exceed the 24-slot pool, got ${g.droneCount()}`);
+  assert(g.droneCount() >= 1, "at least one chaser must be alive once the roster has spawned");
   g.clearField();
   for (let i = 0; i < 300 && g.wave() !== 2; i++) {
     g.tick();
