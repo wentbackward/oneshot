@@ -329,6 +329,8 @@
     // particles; the ship is immune for INVULN_MS after every hit
     // ================================================================
     function burst(x, y) {
+      // Fill up to PARTICLES_PER_BURST inactive slots; if the pool is
+      // exhausted the burst is capped, never allocated.
       let spawned = 0;
       for (const p of particlePool.slots) {
         if (spawned >= PARTICLES_PER_BURST) break;
@@ -343,7 +345,6 @@
         p.age = 0;
         spawned++;
       }
-      // Pool exhausted: skip missing fragments, never allocate.
     }
 
     function updateParticles(dt) {
