@@ -6,7 +6,11 @@
     "test -s index.html",
     "head -c 15 index.html | tr -d '\\0' | grep -qi '<!doctype html>'",
     "grep -q 'requestAnimationFrame' index.html",
-    "grep -qE 'class=\"game\"|id=\"game\"|<canvas' index.html"
+    "grep -qE 'class=\"game\"|id=\"game\"|<canvas' index.html",
+    "grep -q 'THRUST' index.html",
+    "grep -q 'FRICTION' index.html",
+    "grep -q 'TURN_SPEED' index.html",
+    "[ \"$(grep -cE '(src|href)=' index.html)\" -eq 0 ]"
   ],
   "heavy": { "slots": 2 },
   "stop_gate": { "require_clean_tree": true, "max_blocks": 5 },

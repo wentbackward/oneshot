@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Asteroid Horizon</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #05070f;
+    }
+    #game {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <script>
+    "use strict";
+
+    // ================================================================
+    // CONFIG — named tuning constants (tweak gameplay here)
+    // ================================================================
+    // "var" on purpose: these are the runtime tuning knobs — reassigning
+    // them from the DevTools console must work (accepted behavior).
+    var THRUST = 420;          // px/s^2 applied along the ship's heading
+    var FRICTION = 0.90;       // per-frame velocity retention at 60 fps (framerate-independent)
+    var TURN_SPEED = 3.6;      // rad/s of rotation while turning
+    const BASE_FPS = 60;         // reference rate that FRICTION is defined against
+    const STOP_SPEED = 1;        // px/s — below this the ship snaps to stillness
+    const MAX_FRAME_SECONDS = 1 / 30; // clamp long frames (tab switches) to avoid teleporting
+    const SHIP_RADIUS = 14;      // px, hull size and wrap margin
+
+    // ================================================================
+    // STATE
+    // ================================================================
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+    const ship = {
+      x: 0,
+      y: 0,
+      heading: -Math.PI / 2, // pointing up
+      vx: 0,
+      vy: 0,
+    };
+    const keys = new Set();
+
+    function resize() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    resize();
+    window.addEventListener("resize", resize);
+    ship.x = canvas.width / 2;
+    ship.y = canvas.height / 2;
+
+    // ================================================================
+    // INPUT — arrow keys and WASD both handled
+    // ================================================================
+    const KEY_CODES = ["ArrowUp", "KeyW", "ArrowLeft", "KeyA", "ArrowRight", "KeyD"];
+
+    window.addEventListener("keydown", (e) => {
+      if (!KEY_CODES.includes(e.code)) return;
+      e.preventDefault();
+      keys.add(e.code);
+    });
+    window.addEventListener("keyup", (e) => {
+      keys.delete(e.code);
+    });
+
+    // ================================================================
+    // UPDATE — physics with delta-time integration
+    // ================================================================
+    function update(dt) {
+      // Rotate: left or right (A/D or arrow keys).
+      const turn =
+        (keys.has("ArrowRight") || keys.has("KeyD") ? 1 : 0) -
+        (keys.has("ArrowLeft") || keys.has("KeyA") ? 1 : 0);
+      ship.heading += turn * TURN_SPEED * dt;
+
+      // Thrust: up or W accelerates along the current heading.
+      if (keys.has("ArrowUp") || keys.has("KeyW")) {
+        ship.vx += Math.cos(ship.heading) * THRUST * dt;
+        ship.vy += Math.sin(ship.heading) * THRUST * dt;
+      }
+
+      // Friction: decay velocity, framerate-independently; snap to rest.
+      const retention = Math.pow(FRICTION, dt * BASE_FPS);
+      ship.vx *= retention;
+      ship.vy *= retention;
+      if (ship.vx * ship.vx + ship.vy * ship.vy < STOP_SPEED * STOP_SPEED) {
+        ship.vx = 0;
+        ship.vy = 0;
+      }
+
+      // Integrate position.
+      ship.x += ship.vx * dt;
+      ship.y += ship.vy * dt;
+
+      // Screen wrap: exiting any edge re-enters at the opposite edge
+      // this same frame.
+      const w = canvas.width;
+      const h = canvas.height;
+      if (ship.x < -SHIP_RADIUS) ship.x += w + 2 * SHIP_RADIUS;
+      else if (ship.x > w + SHIP_RADIUS) ship.x -= w + 2 * SHIP_RADIUS;
+      if (ship.y < -SHIP_RADIUS) ship.y += h + 2 * SHIP_RADIUS;
+      else if (ship.y > h + SHIP_RADIUS) ship.y -= h + 2 * SHIP_RADIUS;
+    }
+
+    // ================================================================
+    // RENDER
+    // ================================================================
+    function render() {
+      ctx.fillStyle = "#05070f";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.save();
+      ctx.translate(ship.x, ship.y);
+      ctx.rotate(ship.heading);
+      ctx.beginPath();
+      ctx.moveTo(SHIP_RADIUS, 0);
+      ctx.lineTo(-SHIP_RADIUS * 0.7, SHIP_RADIUS * 0.6);
+      ctx.lineTo(-SHIP_RADIUS * 0.4, 0);
+      ctx.lineTo(-SHIP_RADIUS * 0.7, -SHIP_RADIUS * 0.6);
+      ctx.closePath();
+      ctx.fillStyle = "#101826";
+      ctx.fill();
+      ctx.strokeStyle = "#5eead4";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // ================================================================
+    // LOOP — requestAnimationFrame, ~60 fps
+    // ================================================================
+    let lastTime = 0;
+    function frame(time) {
+      const dt = lastTime ? Math.min((time - lastTime) / 1000, MAX_FRAME_SECONDS) : 0;
+      lastTime = time;
+      update(dt);
+      render();
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  </script>
+</body>
+</html>
