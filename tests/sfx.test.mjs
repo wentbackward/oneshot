@@ -461,6 +461,7 @@ check("a drone laser kill plays a low-passed white-noise burst with the drone pr
   const g = boot();
   g.press("Enter");
   suppressSpawns(g);
+  g.q("DRONE_SPEED = 0"); // park the chaser: it must not drift off the beam line
   g.placeDrone(480, 40); // parked straight ahead
   g.press("Space");
   g.tick(2);
