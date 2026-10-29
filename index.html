@@ -65,6 +65,13 @@
     const DRONE_POOL_SIZE = 24;      // pre-allocated drone slots, recycled (never reallocated)
     var PLAYER_MAX_HP = 3;           // starting hull points (shown as "HP n" in the HUD)
     var INVULN_MS = 1500;            // ms of invulnerability after taking a hit
+    // UI — retro styling: one monospace face and one accent colour for
+    // every HUD/overlay glyph (all UI is canvas-drawn through these).
+    const UI_FONT = "monospace";     // retro face for all HUD/overlay text
+    const UI_ACCENT = "#5eead4";     // single accent: HUD/overlay text, ship, lasers
+    const UI_TITLE_PX = 48;          // px, screen titles (game name, GAME OVER)
+    const UI_LINE_PX = 20;           // px, primary screen lines (prompts, final score)
+    const UI_HUD_PX = 16;            // px, HUD rows and secondary screen lines
     const PARTICLES_PER_BURST = 16;  // particles per impact burst (ticket requires >= 10)
     const PARTICLE_LIFE_S = 0.7;     // s a particle lives before recycling
     const PARTICLE_SPEED_MIN = 60;   // px/s, slowest burst fragment
@@ -157,6 +164,13 @@
     const KEY_CODES = ["ArrowUp", "KeyW", "ArrowLeft", "KeyA", "ArrowRight", "KeyD", "Space"];
 
     window.addEventListener("keydown", (e) => {
+      // Screen transitions are edge-triggered and state-gated: Enter
+      // starts from the start screen; Enter or R restarts from game
+      // over. Neither acts in any other state (a play-run is never
+      // reset by stray presses).
+      if (e.code === "Enter" && gameState === "start") { startGame(); return; }
+      if ((e.code === "Enter" || e.code === "KeyR") && gameState === "gameover") { startGame(); return; }
+      if (gameState !== "playing") return; // menu screens: nothing else acts
       if (!KEY_CODES.includes(e.code)) return;
       e.preventDefault();
       keys.add(e.code);
@@ -164,6 +178,37 @@
     window.addEventListener("keyup", (e) => {
       keys.delete(e.code);
     });
+
+    // ================================================================
+    // SCREENS — start screen -> play -> game over. startGame() is the
+    // one reset path, used by both the first start and the restart:
+    // it wipes every pool and puts the ship, hull, score and wave
+    // back to their fresh-run values, so a restarted game has zero
+    // live entities by construction.
+    // ================================================================
+    function startGame() {
+      for (const s of laserPool.slots) s.active = false;
+      for (const a of asteroids.slots) a.active = false;
+      for (const d of drones.slots) d.active = false;
+      for (const p of particlePool.slots) p.active = false;
+      ship.x = canvas.width / 2;
+      ship.y = canvas.height / 2;
+      ship.heading = -Math.PI / 2; // pointing up
+      ship.vx = 0;
+      ship.vy = 0;
+      hp = PLAYER_MAX_HP;
+      shipDead = false;
+      invulnUntil = Number.NEGATIVE_INFINITY;
+      score = 0;
+      wave = 1;
+      waveBuilt = 0;
+      inIntermission = false;
+      intermissionEndsAt = 0;
+      lastFireAt = Number.NEGATIVE_INFINITY;
+      lastSpawnAt = Number.NEGATIVE_INFINITY;
+      lastDroneSpawnAt = Number.NEGATIVE_INFINITY;
+      gameState = "playing";
+    }
 
     // ================================================================
     // FIRING — Space releases one laser from the nose, cooldown-gated
@@ -561,8 +606,14 @@
     // UPDATE — physics with delta-time integration
     // ================================================================
     function update(dt) {
-      // Advance the impact fragments regardless of ship state.
+      // Impact fragments tick to completion regardless of screen so
+      // the death burst still plays out behind the game-over overlay.
       updateParticles(dt);
+
+      // Only the playing screen advances the simulation: the start
+      // screen is a static, empty field, and game over freezes the
+      // world behind the overlay (startGame wipes it on restart).
+      if (gameState !== "playing") return;
 
       // A dead ship is inert: no physics, no firing, no further damage.
       if (!shipDead) {
@@ -619,9 +670,47 @@
     // ================================================================
     // RENDER
     // ================================================================
+    // All HUD/overlay text shares the retro pair: UI_FONT (monospace)
+    // in the single UI_ACCENT colour, centred for screens and left-
+    // aligned for the HUD column.
+    function drawStartScreen() {
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+      ctx.textAlign = "center";
+      ctx.fillStyle = UI_ACCENT;
+      ctx.font = `${UI_TITLE_PX}px ${UI_FONT}`;
+      ctx.fillText("ASTEROID HORIZON", cx, cy - 90);
+      ctx.font = `${UI_LINE_PX}px ${UI_FONT}`;
+      ctx.fillText("PRESS ENTER TO START", cx, cy);
+      ctx.font = `${UI_HUD_PX}px ${UI_FONT}`;
+      ctx.fillText("ARROWS / WASD  MOVE", cx, cy + 64);
+      ctx.fillText("SPACE  FIRE", cx, cy + 92);
+      ctx.textAlign = "left";
+    }
+
+    function drawGameOverScreen() {
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+      ctx.textAlign = "center";
+      ctx.fillStyle = UI_ACCENT;
+      ctx.font = `${UI_TITLE_PX}px ${UI_FONT}`;
+      ctx.fillText("GAME OVER", cx, cy - 40);
+      ctx.font = `${UI_LINE_PX}px ${UI_FONT}`;
+      ctx.fillText(`FINAL SCORE ${score}`, cx, cy + 10); // same `score` the HUD showed
+      ctx.font = `${UI_HUD_PX}px ${UI_FONT}`;
+      ctx.fillText("PRESS ENTER OR R TO RESTART", cx, cy + 52);
+      ctx.textAlign = "left";
+    }
+
     function render() {
       ctx.fillStyle = "#05070f";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Start screen: title, prompt and control list — nothing else.
+      if (gameState === "start") {
+        drawStartScreen();
+        return;
+      }
 
       // Ship: hidden once destroyed; blinks while invulnerable.
       if (!shipDead) {
@@ -639,14 +728,14 @@
         ctx.closePath();
         ctx.fillStyle = "#101826";
         ctx.fill();
-        ctx.strokeStyle = "#5eead4";
+        ctx.strokeStyle = UI_ACCENT;
         ctx.lineWidth = 2;
         ctx.stroke();
         ctx.restore(); // also restores globalAlpha
       }
 
       // Lasers: one batched path so a full pool costs a single stroke.
-      ctx.strokeStyle = "#5eead4";
+      ctx.strokeStyle = UI_ACCENT;
       ctx.lineWidth = 2;
       ctx.beginPath();
       const half = LASER_LENGTH / 2;
@@ -708,20 +797,16 @@
       }
 
       // HUD: live score, hull and wave number, top-left.
-      ctx.fillStyle = "#e2e8f0";
-      ctx.font = "16px monospace";
+      ctx.fillStyle = UI_ACCENT;
+      ctx.font = `${UI_HUD_PX}px ${UI_FONT}`;
       ctx.textAlign = "left";
       ctx.fillText(`SCORE ${score}`, 16, 28);
       ctx.fillText(`HP ${Math.max(hp, 0)}`, 16, 52);
       ctx.fillText(`WAVE ${wave}`, 16, 76);
 
-      // Game over: static centred text (screen styling lands in the
-      // state-machine ticket).
-      if (shipDead) {
-        ctx.font = "48px monospace";
-        ctx.textAlign = "center";
-        ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2);
-        ctx.textAlign = "left";
+      // Game over: static centred overlay on the frozen world.
+      if (gameState === "gameover") {
+        drawGameOverScreen();
       }
     }
 
