@@ -307,3 +307,64 @@
   "survivor is the only hazard" invariant. Seeding makes every
   roster-count wait reproducible, not just that one. Alternative: pin
   positions only (fragile — other waits still roll the RNG).
+
+## 2026-10-29 — Ticket #8: start screen, game over, and restart
+
+- **A single `gameState` ("start" | "playing" | "gameover") gates the
+  simulation, the movement/fire key buffer, and which screen renders.**
+  `update()` runs `updateParticles` unconditionally, then returns early
+  in any non-playing state, so the start screen is a static empty field
+  and the game-over world is frozen. Alternative: per-system
+  start/dead/overlay flags (rejected — three states across ~six
+  systems; one variable plus two gates is the whole feature).
+- **The world freezes at game over (hazards no longer drift behind the
+  overlay), superseding ticket #5's "world keeps moving" detail.**
+  `startGame` wipes every pool, so the frozen field serves nothing;
+  skipping the hazard/wave updates behind the overlay is also cheaper
+  and removes the oddity of waves quietly advancing on a corpse screen.
+  The death burst still plays out, because particles tick in every
+  state (the #5 behaviour the tests lock in). Alternatives: keep the
+  world drifting (cost + confusion for no player-visible gain) or
+  freeze particles too (rejected — the final explosion would hang
+  mid-air on the overlay).
+- **`startGame()` is the one reset path, shared by first start and
+  restart:** it deactivates every laser/asteroid/drone/particle slot,
+  centres the ship at rest pointing up, and restores hull, score, wave,
+  `waveBuilt`, intermission and all the cooldown/spawn timestamps.
+  Zero live entities after restart is therefore true by construction,
+  not by accident. The death hand-off moved into the extracted
+  `hitShip()` (shared by the rock and drone branches): final blow sets
+  `shipDead` and `gameState = "gameover"` in exactly one place.
+  Alternative: a per-screen reset function pair (rejected — two paths
+  that would drift apart).
+- **Screens stay canvas-drawn, continuing the ticket #4/#7 precedent
+  over DOM overlays**: all overlay glyphs go through the same
+  ctx-stub-verifiable `fillText` path as the HUD, no new DOM/state.
+  The retro criterion is carried by two named constants —
+  `UI_FONT = "monospace"` and a single `UI_ACCENT` ("#5eead4", the
+  existing ship/laser teal) plus the three screen font sizes — used by
+  the HUD, the ship and laser strokes, and every overlay line. The HUD
+  text recolours from #e2e8f0 to the accent so ONE colour does the
+  entire UI (entity colours — amber particles, slate rocks, red
+  drones — are not UI and are untouched). The `<style>` block keeps
+  its functional job (dark full-bleed backdrop); the ticket's concrete
+  check is `grep -qi monospace`, which now also rides in the
+  `.devloop.json` gate. Alternative: DOM overlay divs styled in
+  `<style>` (rejected — splits the render path, breaks the ctx-stub
+  test convention, adds state to keep in sync).
+- **Transitions are edge-triggered and state-gated in the keydown
+  handler: Enter from start, Enter or R from game over, nothing
+  elsewhere; movement/fire keys are only buffered while playing.**
+  R and Enter mid-run are no-ops (never reset a live run), R on the
+  start screen does nothing (Enter-only start), and after death the
+  key buffer stays closed, satisfying #5's "all input ignored" without
+  any extra bookkeeping. Alternative: polling held keys each frame
+  (rejected — a held Enter would re-trigger the transition, and key-up
+  races appear).
+- **Existing suites adapted per the #7 precedent:** the five
+  behavioural boots now dispatch an Enter keydown right after boot so
+  they drive the running simulation; `tests/screens.test.mjs` is the
+  exception — its boot deliberately parks on the start screen and
+  drives the state machine, and it captures each `fillText` together
+  with the font/fill in force so the monospace + single-accent
+  criterion is asserted per glyph across all three screens.
