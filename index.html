@@ -27,9 +27,11 @@
     // ================================================================
     // CONFIG — named tuning constants (tweak gameplay here)
     // ================================================================
-    const THRUST = 420;          // px/s^2 applied along the ship's heading
-    const FRICTION = 0.90;       // per-frame velocity retention at 60 fps (framerate-independent)
-    const TURN_SPEED = 3.6;      // rad/s of rotation while turning
+    // "var" on purpose: these are the runtime tuning knobs — reassigning
+    // them from the DevTools console must work (accepted behavior).
+    var THRUST = 420;          // px/s^2 applied along the ship's heading
+    var FRICTION = 0.90;       // per-frame velocity retention at 60 fps (framerate-independent)
+    var TURN_SPEED = 3.6;      // rad/s of rotation while turning
     const BASE_FPS = 60;         // reference rate that FRICTION is defined against
     const STOP_SPEED = 1;        // px/s — below this the ship snaps to stillness
     const MAX_FRAME_SECONDS = 1 / 30; // clamp long frames (tab switches) to avoid teleporting
