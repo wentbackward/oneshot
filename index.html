@@ -82,6 +82,10 @@
 
     // Pre-allocated asteroid pool: every rock mutates an existing slot in
     // place (including its polygon outline), so spawning never allocates.
+    // `entry` is the edge this rock is still drifting in from (0 top, 1
+    // bottom, 2 left, 3 right); -1 once its centre is inside the field.
+    // Wrap-around is suspended on that axis until then, so the fully
+    // off-screen spawn offset can never trigger an instant teleport.
     const asteroids = { slots: [] };
     for (let i = 0; i < ASTEROID_POOL_SIZE; i++) {
       asteroids.slots.push({
@@ -93,6 +97,7 @@
         vy: 0,
         rot: 0,
         spin: 0,
+        entry: -1,
         shape: [], // radial offsets in [0.75, 1], reused for every outline
       });
     }
@@ -161,8 +166,9 @@
     // ================================================================
     // Pick one candidate at a random point just outside a random
     // edge, drifting back into the field (aimed at the centre with a
-    // ±60° jitter). Rejected outright if it would start closer than
-    // SPAWN_SAFE_RADIUS to the ship, or sit on top of a live rock.
+    // ±60° jitter, re-aimed if the jitter points it back out). Rejected
+    // outright if it would start closer than SPAWN_SAFE_RADIUS to the
+    // ship, or sit on top of a live rock.
     function spawnAsteroid() {
       const w = canvas.width;
       const h = canvas.height;
@@ -170,20 +176,21 @@
       if (!slot) return false; // pool exhausted — skip the spawn, never allocate
 
       for (let attempt = 0; attempt < ASTEROID_MAX_SPAWNS; attempt++) {
-        const u = random(); // which edge: ¼ of the roll per side
+        const u = random(); // which edge: ¼ of the roll per side (0 top, 1 bottom, 2 left, 3 right)
+        const edge = u < 0.25 ? 0 : u < 0.5 ? 1 : u < 0.75 ? 2 : 3;
         const r = ASTEROID_MIN_R + (ASTEROID_MAX_R - ASTEROID_MIN_R) * random();
         let x;
         let y;
-        if (u < 0.25) {       // top
+        if (edge === 0) {       // top
           x = random() * w;
           y = -(r + 1);
-        } else if (u < 0.5) { // bottom
+        } else if (edge === 1) { // bottom
           x = random() * w;
           y = h + r + 1;
-        } else if (u < 0.75) { // left
+        } else if (edge === 2) { // left
           x = -(r + 1);
           y = random() * h;
-        } else {               // right
+        } else {                 // right
           x = w + r + 1;
           y = random() * h;
         }
@@ -207,15 +214,24 @@
 
         // Drift toward the centre with a ±60° jitter, at a random pace.
         const toCentre = Math.atan2(h / 2 - y, w / 2 - x);
-        const heading = toCentre + (random() - 0.5) * ((4 * Math.PI) / 3);
+        const heading = toCentre + (random() - 0.5) * ((2 * Math.PI) / 3);
         const speed = ASTEROID_SPEED_MIN + (ASTEROID_SPEED_MAX - ASTEROID_SPEED_MIN) * random();
+        slot.vx = Math.cos(heading) * speed;
+        slot.vy = Math.sin(heading) * speed;
+        // Near a corner the jitter can point the rock back out of the
+        // field along the spawn edge; mirror the outward component so
+        // every rock is guaranteed to drift in (entry suppression below
+        // relies on this).
+        if (edge === 0 && slot.vy <= 0) slot.vy = -slot.vy;
+        else if (edge === 1 && slot.vy >= 0) slot.vy = -slot.vy;
+        else if (edge === 2 && slot.vx <= 0) slot.vx = -slot.vx;
+        else if (edge === 3 && slot.vx >= 0) slot.vx = -slot.vx;
 
         slot.active = true;
         slot.x = x;
         slot.y = y;
         slot.r = r;
-        slot.vx = Math.cos(heading) * speed;
-        slot.vy = Math.sin(heading) * speed;
+        slot.entry = edge;
         slot.rot = random() * Math.PI * 2;
         slot.spin = (random() - 0.5) * 0.8; // slow, varied tumble (rad/s)
         return true;
@@ -245,11 +261,19 @@
         a.x += a.vx * dt;
         a.y += a.vy * dt;
         a.rot += a.spin * dt;
+        // A rock still drifting in from its spawn edge keeps that
+        // axis's wrap suspended until its centre crosses the edge
+        // (its inward velocity is guaranteed at spawn, so this
+        // always happens). Normal wrap resumes once it is inside.
+        if (a.entry === 0 && a.y > 0) a.entry = -1;
+        else if (a.entry === 1 && a.y < h) a.entry = -1;
+        else if (a.entry === 2 && a.x > 0) a.entry = -1;
+        else if (a.entry === 3 && a.x < w) a.entry = -1;
         // Screen wrap: fully off one edge, re-enter the opposite one.
-        if (a.x < -a.r) a.x += w + 2 * a.r;
-        else if (a.x > w + a.r) a.x -= w + 2 * a.r;
-        if (a.y < -a.r) a.y += h + 2 * a.r;
-        else if (a.y > h + a.r) a.y -= h + 2 * a.r;
+        if (a.entry !== 2 && a.entry !== 3 && a.x < -a.r) a.x += w + 2 * a.r;
+        else if (a.entry !== 2 && a.entry !== 3 && a.x > w + a.r) a.x -= w + 2 * a.r;
+        if (a.entry !== 0 && a.entry !== 1 && a.y < -a.r) a.y += h + 2 * a.r;
+        else if (a.entry !== 0 && a.entry !== 1 && a.y > h + a.r) a.y -= h + 2 * a.r;
       }
     }
 
