@@ -10,7 +10,9 @@
 //
 // The behavioural tests park the ship in a corner so drifting rocks
 // (which are aimed at the field centre) cannot destroy wave hazards
-// behind the player's back and skew the counted rosters.
+// behind the player's back and skew the counted rosters, and pin the
+// game's `random` hook to a fixed mulberry32 sequence so every run
+// (including every roster-count wait) is bit-for-bit deterministic.
 //
 // Run: node tests/waves.test.mjs
 // ================================================================
@@ -48,10 +50,27 @@ function assertClose(actual, expected, tol, msg) {
   }
 }
 
+// Deterministic-RNG factory: emits SELF-CONTAINED source (no closures), so
+// the generated function keeps working when evaluated inside the vm
+// sandbox. Same precedent as tests/asteroids.test.mjs — every spawn roll
+// in this suite is a fixed sequence, so every roster-count wait is
+// deterministic and a drifted survivor can never shatter the asserted
+// invariants.
+function mulberry32Source(seed) {
+  return `(() => { let a = ${(seed >>> 0) | 0};
+    return () => { a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; })()`;
+}
+
 // Boot a fresh copy of the game with a canvas of the given size.
 // The ctx stub records both method names and fillText payloads so
 // tests can assert on the HUD wave number.
+// The game's `random` hook is pinned to a fixed mulberry32 sequence:
+// identical rosters, drifts and collisions in every run.
 function boot(width = 960, height = 600) {
+  const seed = process.env.WAVES_TEST_SEED ? Number(process.env.WAVES_TEST_SEED) : 7;
   let rafCallback = null;
   const listeners = {};
   const ctxCalls = [];
@@ -86,6 +105,7 @@ function boot(width = 960, height = 600) {
   };
   const context = vm.createContext(sandbox);
   vm.runInContext(gameSource, context);
+  vm.runInContext(`random = ${mulberry32Source(seed)};`, context);
 
   let nowMs = 0;
   const FRAME_MS = 1000 / 60;
@@ -112,12 +132,15 @@ function boot(width = 960, height = 600) {
       "asteroids.slots.forEach((a) => (a.active = false)); " +
         "drones.slots.forEach((d) => (d.active = false))"
     ),
-    // Destroy all but the last `keep` live hazards.
+    // Destroy all but the last `keep` live hazards, then park the
+    // survivors: zeroing their drift guarantees they can never wander
+    // into the parked ship and die for the test's sake.
     keepLast: (keep) => q(`(() => {
       const ast = asteroids.slots.filter((a) => a.active);
       const dro = drones.slots.filter((d) => d.active);
       const all = ast.concat(dro);
       all.slice(${keep}).forEach((h) => (h.active = false));
+      all.slice(0, ${keep}).forEach((h) => { h.vx = 0; h.vy = 0; });
     })()`),
   };
 }
@@ -312,6 +335,62 @@ check("a zero-sized wave spawns nothing and never advances (no infinite wave cyc
     assert(g.hazardCount() === 0, `no hazard may spawn from zero-sized rosters (frame ${i + 1})`);
   }
   assertClose(g.wave(), 1, 0, "an endless empty wave must keep the wave number at 1");
+});
+
+// ================================================================
+// Edge (pool capacity): the per-wave roster is clamped to the
+// pre-allocated pool size — a wave whose formula roster exceeds the
+// pool must still build, clear, and advance instead of deadlocking
+// (and cleared hazards must not respawn from an unreachable roster)
+// ================================================================
+check("waveTotal clamps each roster at its pool capacity (never exceeds the pooled slots)", () => {
+  const g = boot();
+  // Defaults: wave 23 wants 6 + 22*2 = 50 asteroids (pool 48) and
+  // 22 drones (pool 24) -> effective roster 48 + 22 = 70, not 72.
+  assertClose(g.q("waveTotal(23)"), 48 + 22, 0,
+    "wave 23's roster must clamp to 48 asteroids + 22 drones = 70");
+  // Console tune that blows through both pools at once: wave 1 wants
+  // 50 asteroids and 25 drones -> clamped to the 48 + 24 pools.
+  g.q("ASTEROID_BASE = 50; DRONE_BASE = 25");
+  assertClose(g.q("waveTotal(1)"), 48 + 24, 0,
+    "an over-full wave 1 must clamp to the 48 + 24 pool capacities");
+  assert(g.q("waveTotal(100)") <= 48 + 24,
+    "no wave may demand more hazards than exist as pooled slots");
+});
+
+check("an over-full asteroid roster clamps to the pool: the wave still completes and losses are not replaced",
+() => {
+  const g = boot();
+  parkShip(g);
+  g.q("ASTEROID_BASE = 50"); // wave 1 wants 50 rocks, only 48 slots exist
+  waitUntil(g, () => g.asteroidCount() === 48, 1200, "the field to saturate the 48-slot asteroid pool");
+  g.clearField(); // destroy every hazard of the clamped roster
+  let advancedAt = -1;
+  for (let i = 0; i < 300; i++) {
+    g.tick();
+    assert(g.hazardCount() === 0, `the field must stay empty while the clamped wave pauses (frame ${i + 1})`);
+    if (g.wave() === 2) { advancedAt = i + 1; break; }
+  }
+  assert(advancedAt !== -1,
+    "a roster larger than the pool must not deadlock the wave: clear + pause must reach wave 2");
+  assertClose(g.wave(), 2, 0, "the clamped wave must advance by exactly one");
+  waitUntil(g, () => g.asteroidCount() >= 1, 1200, "wave 2 to begin rebuilding after the pause");
+});
+
+check("an over-full drone roster clamps to the 24-slot drone pool without deadlocking",
+() => {
+  const g = boot();
+  parkShip(g);
+  g.q("ASTEROID_BASE = 0; ASTEROID_GROWTH = 0; DRONE_BASE = 25; DRONE_GROWTH = 0");
+  waitUntil(g, () => g.droneCount() === 24, 1200, "the drone field to saturate the 24-slot pool");
+  g.clearField();
+  for (let i = 0; i < 300 && g.wave() !== 2; i++) {
+    g.tick();
+    assert(g.hazardCount() === 0, `the field must stay empty while the clamped wave pauses (frame ${i + 1})`);
+  }
+  assertClose(g.wave(), 2, 0,
+    "a drone roster larger than the pool must not deadlock the wave");
+  waitUntil(g, () => g.droneCount() >= 1, 1200, "wave 2 to rebuild its drone roster after the pause");
 });
 
 // ---------- summary ----------
