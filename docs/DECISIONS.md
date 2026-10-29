@@ -50,3 +50,69 @@
 - **Cooldown measured on accumulated simulation time** (`gameTime`), not the wall
   clock: survives tab-switch frame clamps and makes fire-rate deterministic under
   the node/vm unit tests.
+
+## 2026-10-29 — Ticket #4: asteroids with laser kills and score
+
+- **Pre-allocated 48-slot asteroid pool, mutated in place (incl. the polygon
+  outline array).** Mirrors the laser-pool precedent from ticket #3: spawning
+  and respawning never allocate, keeping the hot path GC-free. Alternative:
+  grow/shrink an array (rejected — allocation churn, the PRD's 60 fps rule).
+- **`ASTEROID_TARGET` / `SCORE_PER_ASTEROID` are mutable `var`s; structural
+  sizes (`SPAWN_SAFE_RADIUS`, `ASTEROID_POOL_SIZE`, radii, speeds) are `const`.**
+  The criteria reassign the target and per-kill value from the "console";
+  everything else is gameplay structure. 48 slots give 8× headroom over the
+  default target of 6 so console retunes can't saturate the pool quickly.
+- **Spawns just outside a random edge, aimed at the field centre with a ±60°
+  jitter.** Rejected candidates: start closer than `SPAWN_SAFE_RADIUS` (200) to
+  the ship, or within `r + other.r + 40` of a live rock. Up to 8 retries per
+  attempt slot, one attempt slot per `ASTEROID_SPAWN_EVERY` (0.25 s), so a
+  pathological field (ship parked on an edge) costs nothing. Alternative:
+  spawn anywhere with the safe-disc check only (weaker — rocks could pop in
+  view), or reject-and-give-up silently (field starves while the player camps).
+- **Jitter span is exactly ±60°, matching the inline comment** — `(random() -
+  0.5) * (2π/3)`. Review round 1 caught the original `(4π/3)` span (±120°);
+  the code is now what the docs always claimed. Alternative: widen the docs to
+  ±120° (rejected — near-corner spawns would often point away from the field).
+- **Wrap-around is suspended per-rock until its centre crosses the spawn edge
+  into the field (`entry` field on the pool slot).** The spawn offset
+  (`±(r+1)`) is deliberately smaller than a full radius, so the classic
+  “fully off → wrap” rule teleported every fresh rock to the opposite edge on
+  the next frame. Suppression lifts once the centre is inside; from then on
+  normal torus wrap applies (an exiting rock’s velocity already points into
+  the field at its new edge, so no double-wrap). Alternative: raise the wrap
+  trigger to a band wider than the max per-frame step (reviewer’s suggestion;
+  rejected on its own — a rock that exits and continues outward re-crosses the
+  band immediately and re-wraps every frame, and an outward-drifting spawner
+  orbits forever).
+- **Guaranteed inward entry: the outward component of the spawn velocity is
+  mirrored if the jitter aimed the rock back out along the spawn edge.** With
+  ±60° jitter near a screen corner the raw heading can point away from the
+  field; such a rock would then never settle (entry suppression would suspend
+  its wrap indefinitely) and silently eat a pool slot. Flipping the normal
+  component keeps speed, angle variety and one branch per edge. Alternative:
+  reject-and-retry those headings (extra RNG draws per spawn) or clamp the
+  jitter cone per edge (less natural distribution).
+- **Collision and wrap use the circumscribed radius `r`, although the polygon
+  vertices are `0.75r–1.0r`.** A beam hitting within `r` of the centre kills
+  the rock even in the concave gaps between spikes — up to ~25% overshoot at
+  the corners. Kept as a deliberate simplification: one scalar per rock is
+  cheap in the hot loop, reads generously (“you hit it”), and the mismatch is
+  smaller than the laser’s own length. Alternative: point-in-polygon or
+  per-vertex segment tests (more code, tighter feel — revisit if gameplay
+  tuning complains).
+- **Random source is a mutable `var random = Math.random`** that the game only
+  ever calls. Lets the vm unit tests install deterministic sequences (and makes
+  the spawn logic reproducible) without changing gameplay. Alternative:
+  injectable constructor args (rejected — no module system; single file must
+  stay directly openable in a browser).
+- **Laser hits use a sweeping segment test (previous position reconstructed
+  from the stored frame dt vs. the rock centre).** A 700 px/s beam moves
+  11.7 px/frame; point-vs-point would tunnel through thin rocks on clamped
+  frames. Cost: one distance-per-active-laser-per-rock check — trivial at the
+  pool sizes. Alternative: substep the beam (rejected — more code for a
+  problem the segment test already covers).
+- **Score is a plain `let score = 0` rendered as canvas text top-left
+  ("SCORE n").** The PRD wants a live score; the HUD text is the cheapest
+  live display and is verifiable via the ctx stub. Alternative: a DOM element
+  overlay (rejected — extra markup/state the single-canvas design avoids until
+  a later ticket introduces lives/waves, which will extend this HUD).
