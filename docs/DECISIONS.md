@@ -216,3 +216,94 @@
   hermeticity trick they already used for `ASTEROID_TARGET`. The drone
   suite itself keeps the default field where it must (spawn/cap test) and
   otherwise isolates via `quietField`.
+
+## 2026-10-29 — Ticket #7: numbered waves with rising difficulty
+
+- **Waves replace the steady-state targets: `ASTEROID_TARGET` and
+  `DRONE_TARGET` are deleted, superseded by the per-wave rosters
+  `ASTEROID_BASE + ASTEROID_GROWTH * (N-1)` (6 / +2) and
+  `DRONE_BASE + DRONE_GROWTH * (N-1)` (0 / +1)**, exposed as the named
+  functions `waveAsteroidCount`/`waveDroneCount` so the formula itself is
+  unit-testable. Keeping the old knobs as dead or parallel paths would
+  have left two sources of truth for one behaviour. All four new constants
+  are mutable `var`s like every other tuning knob (the criterion reassigns
+  `BETWEEN_WAVES_S` from the console). The gate greps in `.devloop.json`
+  moved with the names (`ASTEROID_TARGET`/`DRONE_TARGET` → `*_BASE`,
+  `*_GROWTH`, plus a new `BETWEEN_WAVES_S` check).
+- **A wave's roster is a fixed set, built through the existing spawners:
+  `waveBuilt` counts spawns since the wave started, and top-up only runs
+  while `waveBuilt < waveTotal(wave)`.** Destroyed hazards are never
+  replaced mid-wave — that is what makes "destroying every hazard ends the
+  wave" reachable at all (a continuous top-up to a constant could be
+  outrun, at best, and a mid-wave respawn would resurrect the player's own
+  kills); this holds while the wave's clamped roster fits its pools —
+  with no free pool slot, no replaced hazard could spawn at all.
+  Alternative: keep top-up running and declare the wave cleared
+  when the count hits zero (rejected — with live respawns the field never
+  reliably empties, and a burst of quick kills would end the wave before
+  its roster even materialised).
+- **Completion requires `waveBuilt >= total` AND zero live hazards, and a
+  zero-sized roster can never complete.** The `waveBuilt` gate stops a
+  wave from being "cleared" while its roster is still building (e.g. the
+  player wipes out the first two rocks of a six-rock wave); the `total > 0`
+  gate keeps hermetic zero-roster test setups — and a console tune to all
+  zeros — from cycling through infinite empty waves. A zero roster simply
+  holds the wave number steady. Alternative: a per-phase state machine
+  (building/live/cleared; rejected — the two scalars plus the gates
+  already encode it without a third state field).
+- **Intermission is an absolute sim-time threshold
+  (`intermissionEndsAt = gameTime + BETWEEN_WAVES_S`), checked at the top
+  of `updateWaves`; `BETWEEN_WAVES_S = 0` flips on the very next frame,**
+  i.e. ~16.7 ms after the detection frame — "immediately" by the game's
+  own clock. The wave number is incremented by exactly `+= 1` in that one
+  place, so the "+exactly one" criterion has a single code path to break.
+  No hazards can exist during the pause (completion required zero), so the
+  pause reads as an empty field by construction. Alternative: a
+  frame-counter countdown (equivalent; the threshold form matches the
+  `invulnUntil` precedent and needs no per-frame mutation).
+- **The HUD gains a third left-column line, `WAVE n` at (16, 76)**, drawn
+  with the existing SCORE/HP `fillText` batch — the PRD's wave counter is
+  cheapest as canvas text and is verifiable through the ctx stub, exactly
+  like the score and hull lines. Alternative: a DOM overlay (rejected —
+  same reasons as recorded for the score in ticket #4).
+- **Existing suites adapted, mirroring the ticket-#6 precedent:**
+  `quietField`/`suppressSpawns` now zero all four roster constants
+  (`ASTEROID_BASE = 0; ASTEROID_GROWTH = 0; DRONE_BASE = 0;
+  DRONE_GROWTH = 0`); the asteroid population test re-anchors on
+  `ASTEROID_BASE` (mid-wave reassignment still repopulates, because
+  `waveBuilt < total` resumes when the roster grows); the drone cap test
+  uses a rock-free world with `DRONE_BASE = 3, DRONE_GROWTH = 0` and
+  asserts the field builds to 3 and never exceeds it (the exact final
+  count is no longer meaningful — chasers die on the parked ship and new
+  waves rebuild the roster, so the cap and the build are the invariants).
+  The safe-radius soak now counts new-wave rosters instead of respawns.
+  Alternatives: keeping `ASTEROID_TARGET` as a hidden multiplier over the
+  roster (rejected — dead/parallel knob) or rewriting the wave machine as
+  a module with injected config (rejected — no module system; the single
+  file must stay directly openable).
+
+## 2026-10-30 — Ticket #7 review round 1: pool-capacity clamps and a deterministic wave suite
+
+- **Per-wave rosters are clamped to pool capacity: `waveTotal(n) =
+  waveAsteroidCap(n) + waveDroneCap(n)` where the caps are
+  `Math.min(waveAsteroidCount(n), ASTEROID_POOL_SIZE)` /
+  `Math.min(waveDroneCount(n), DRONE_POOL_SIZE)`, applied at the two
+  spawner caps and the completion check.** The raw formulas stay exposed
+  as `waveAsteroidCount`/`waveDroneCount` (still unit-tested, still the
+  source of truth for "what wave N calls for"); the caps are the
+  *effective* rosters. Without them the ticket's own defaults deadlock
+  at wave 23 (50 wanted > 48 slots): the wave never completes and
+  cleared hazards respawn from the unreachable remainder. Alternative:
+  grow the pools dynamically (rejected — allocates, breaks the pooled,
+  no-churn rule) or leave it as a known limitation (rejected — a
+  soft-lock on the default settings is a correctness bug, not a tuning
+  quirk).
+- **The wave behavioural suite is seeded, not corner-parked, for
+  determinism:** `boot()` pins the game's `random` hook to a fixed
+  `mulberry32` sequence (same self-contained-source factory as
+  `tests/asteroids.test.mjs`), and `keepLast` additionally zeroes the
+  survivors' drift. The corner-park assumption was false — a lone
+  survivor can drift into the parked ship and shatter, flaking the
+  "survivor is the only hazard" invariant. Seeding makes every
+  roster-count wait reproducible, not just that one. Alternative: pin
+  positions only (fragile — other waits still roll the RNG).
