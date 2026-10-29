@@ -1,0 +1,14 @@
+{
+  "base_branch": "main",
+  "remote": "origin",
+  "fast_check": "",
+  "checks": [
+    "test -s index.html",
+    "head -c 15 index.html | tr -d '\\0' | grep -qi '<!doctype html>'",
+    "grep -q 'requestAnimationFrame' index.html",
+    "grep -qE 'class=\"game\"|id=\"game\"|<canvas' index.html"
+  ],
+  "heavy": { "slots": 2 },
+  "stop_gate": { "require_clean_tree": true, "max_blocks": 5 },
+  "merge": { "method": "squash", "delete_branch": true }
+}
