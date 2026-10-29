@@ -182,19 +182,25 @@ check("active asteroid count converges on ASTEROID_TARGET and follows reassignme
 check("every naturally spawned asteroid starts at least SPAWN_SAFE_RADIUS (200) px from the ship", () => {
   const g = boot(480, 360); // ship (240,180); corners ~300 px away -> room to live
   g.q("ASTEROID_TARGET = 4");
-  const ids = new Set();
+  // Pool slots are recycled in place, so we cannot memoise on slot identity
+  // alone: detect each inactive->active transition every frame instead,
+  // which catches respawns as well as first activations.
+  let prevActive = new Set();
   let spawns = 0;
   for (let i = 0; i < 4800; i++) { // 80 s of drift, wraps and respawns
     g.tick();
-    for (const a of g.activeAsteroids()) {
-      if (ids.has(a)) continue;
-      ids.add(a);
+    const act = g.activeAsteroids();
+    const nowActive = new Set(act);
+    for (const a of act) {
+      if (prevActive.has(a)) continue; // still alive from the previous frame
       spawns++;
       const ship = g.ship();
       const d = Math.hypot(a.x - ship.x, a.y - ship.y);
       assert(d >= g.q("SPAWN_SAFE_RADIUS") - 1e-9,
         `spawn must be >= SPAWN_SAFE_RADIUS from the ship (dist ${d.toFixed(1)} at spawn)`);
     }
+    for (const a of prevActive) if (!nowActive.has(a)) prevActive.delete(a);
+    for (const a of nowActive) if (!prevActive.has(a)) prevActive.add(a);
   }
   assert(spawns > 0, "the field must actually respawn asteroids over the run");
 });
@@ -225,18 +231,56 @@ check("edge spawns within the safe radius are rejected; a candidate outside it i
     "accepted spawn must lie outside the safe disc");
 });
 
-check("spawned asteroids drift from the edge into the field", () => {
+// Regression for the wrap-before-entry bug: a freshly spawned rock is fully
+// off-screen, so the old "fully off -> wrap" rule teleported it to the
+// opposite edge on the very next frame. While the rock's centre is still
+// outside the field, its coordinate along the spawn axis must therefore move
+// monotonically through the edge it spawned at, and never leave the spawn
+// band. (Previously this test only asserted y > y0 with y0 = -17, which the
+// teleport to y = 615 trivially satisfied.)
+check("spawned asteroids enter monotonically through their spawn edge (no wrap-teleport)", () => {
   const g = boot(960, 600); // ship (480,300) at centre: every edge is well outside the safe disc
-  const rands = [0.2, 0.5, 0.5, 0.5]; // top edge at (464,-17), jitter 0 -> straight toward centre
+  // Seeded: top edge at (480, -17) (r = 16), jitter 0 -> straight down toward
+  // the centre at 100 px/s; with vy > 0, y must climb smoothly from -17 to 0.
+  const rands = [0.2, 0.5, 0.5, 0.5];
   g.q(`random = (() => { const r = [${rands}]; let i = 0; return () => r[i++ % r.length]; })()`);
   assert(g.q("spawnAsteroid()"), "fixture spawn succeeds");
-  const a = g.activeAsteroids()[0];
-  // The spawn point sits just above the top edge (y = -(r+1)).
-  assert(a.y < 0 && a.y > -2 * g.q("ASTEROID_MAX_R"), "spawn sits just off the top edge");
+  const a = g.activeAsteroids()[0]; // vm slot objects keep identity across ticks
+  assertClose(a.y, -17, 1e-9, "spawn sits just off the top edge at y = -(r+1)");
   assert(a.vy > 0, "velocity is directed into the field (downward from the top edge)");
-  const y0 = a.y;
-  g.tick(10);
-  assert(a.y > y0, "asteroid drifts inward over the next frames");
+  let prev = a.y;
+  for (let i = 0; i < 30 && a.y <= 0; i++) {
+    g.tick();
+    assert(a.y >= prev - 1e-9, `y must not decrease while entering (frame ${i + 1}: ${prev} -> ${a.y})`);
+    assert(a.y >= -(a.r + 1) - 1e-9, `y must stay inside the spawn band, got ${a.y}`);
+    assert(a.y < 600, `rock must not be teleported across the field, got y=${a.y}`);
+    prev = a.y;
+  }
+  assert(a.y > 0, "rock's centre must cross into the field at the top edge");
+});
+
+// Even with bounded ±60° jitter, a candidate near a screen corner can be
+// aimed outward along the spawn edge (velocity component away from the
+// field). Such a candidate must be re-aimed inward, or it would drift away
+// forever and silently eat a pool slot.
+check("outward-pointing spawn candidates are re-aimed into the field", () => {
+  const g = boot(960, 600);
+  // Seeded: top edge at x = 0; direction to centre tilts ~57° off the
+  // inward normal, and the seeded jitter rotates the heading a further
+  // ~46° the wrong way -> raw velocity points up and away from the field.
+  const rands = [0.01, 0.5, 0, 0.1];
+  g.q(`random = (() => { const r = [${rands}]; let i = 0; return () => r[i++ % r.length]; })()`);
+  assert(g.q("spawnAsteroid()"), "corner candidate still spawns");
+  const a = g.activeAsteroids()[0];
+  assert(a.x === 0 && a.y < 0, "fixture is the top-edge corner candidate");
+  assert(a.vy > 0, "spawn velocity must point into the field (downward from the top edge)");
+  let prev = a.y;
+  for (let i = 0; i < 900 && a.y <= 0; i++) {
+    g.tick();
+    assert(a.y >= prev - 1e-9, `y must not decrease while entering (frame ${i + 1})`);
+    prev = a.y;
+  }
+  assert(a.y > 0, "re-aimed rock must eventually cross into the field");
 });
 
 // ================================================================
