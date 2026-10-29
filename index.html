@@ -36,6 +36,10 @@
     const STOP_SPEED = 1;        // px/s — below this the ship snaps to stillness
     const MAX_FRAME_SECONDS = 1 / 30; // clamp long frames (tab switches) to avoid teleporting
     const SHIP_RADIUS = 14;      // px, hull size and wrap margin
+    var LASER_COOLDOWN_MS = 150; // ms between shots while Space is held
+    var LASER_SPEED = 700;        // px/s along the ship's heading
+    const LASER_POOL_SIZE = 32;   // pre-allocated laser slots, recycled (never reallocated)
+    const LASER_LENGTH = 18;      // px, visual length of the beam
 
     // ================================================================
     // STATE
@@ -50,6 +54,14 @@
       vy: 0,
     };
     const keys = new Set();
+    let gameTime = 0; // seconds of accumulated simulation time
+
+    // Pre-allocated laser pool: every shot mutates an existing slot in
+    // place, so sustained fire never creates new objects.
+    const laserPool = { slots: [] };
+    for (let i = 0; i < LASER_POOL_SIZE; i++) {
+      laserPool.slots.push({ active: false, x: 0, y: 0, dx: 0, dy: 0 });
+    }
 
     function resize() {
       canvas.width = window.innerWidth;
@@ -63,7 +75,7 @@
     // ================================================================
     // INPUT — arrow keys and WASD both handled
     // ================================================================
-    const KEY_CODES = ["ArrowUp", "KeyW", "ArrowLeft", "KeyA", "ArrowRight", "KeyD"];
+    const KEY_CODES = ["ArrowUp", "KeyW", "ArrowLeft", "KeyA", "ArrowRight", "KeyD", "Space"];
 
     window.addEventListener("keydown", (e) => {
       if (!KEY_CODES.includes(e.code)) return;
@@ -73,6 +85,40 @@
     window.addEventListener("keyup", (e) => {
       keys.delete(e.code);
     });
+
+    // ================================================================
+    // FIRING — Space releases one laser from the nose, cooldown-gated
+    // ================================================================
+    let lastFireAt = Number.NEGATIVE_INFINITY; // permits an instant first shot
+
+    function tryFire() {
+      if (!keys.has("Space")) return;
+      if (gameTime - lastFireAt < LASER_COOLDOWN_MS / 1000) return;
+      const slot = laserPool.slots.find((s) => !s.active);
+      if (!slot) return; // pool exhausted — wait for a free slot, never allocate
+      const dx = Math.cos(ship.heading);
+      const dy = Math.sin(ship.heading);
+      const nose = SHIP_RADIUS + LASER_LENGTH / 2; // spawn the beam just past the tip
+      slot.active = true;
+      slot.x = ship.x + dx * nose;
+      slot.y = ship.y + dy * nose;
+      slot.dx = dx;
+      slot.dy = dy;
+      lastFireAt = gameTime;
+    }
+
+    function updateLasers(dt) {
+      const w = canvas.width;
+      const h = canvas.height;
+      const m = LASER_LENGTH; // recycle only once fully off-screen
+      for (let i = 0; i < laserPool.slots.length; i++) {
+        const s = laserPool.slots[i];
+        if (!s.active) continue;
+        s.x += s.dx * LASER_SPEED * dt;
+        s.y += s.dy * LASER_SPEED * dt;
+        if (s.x < -m || s.x > w + m || s.y < -m || s.y > h + m) s.active = false;
+      }
+    }
 
     // ================================================================
     // UPDATE — physics with delta-time integration
@@ -111,6 +157,10 @@
       else if (ship.x > w + SHIP_RADIUS) ship.x -= w + 2 * SHIP_RADIUS;
       if (ship.y < -SHIP_RADIUS) ship.y += h + 2 * SHIP_RADIUS;
       else if (ship.y > h + SHIP_RADIUS) ship.y -= h + 2 * SHIP_RADIUS;
+
+      // Fire and advance the beam.
+      tryFire();
+      updateLasers(dt);
     }
 
     // ================================================================
@@ -135,6 +185,19 @@
       ctx.lineWidth = 2;
       ctx.stroke();
       ctx.restore();
+
+      // Lasers: one batched path so a full pool costs a single stroke.
+      ctx.strokeStyle = "#5eead4";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      const half = LASER_LENGTH / 2;
+      for (let i = 0; i < laserPool.slots.length; i++) {
+        const s = laserPool.slots[i];
+        if (!s.active) continue;
+        ctx.moveTo(s.x - s.dx * half, s.y - s.dy * half);
+        ctx.lineTo(s.x + s.dx * half, s.y + s.dy * half);
+      }
+      ctx.stroke();
     }
 
     // ================================================================
@@ -144,6 +207,7 @@
     function frame(time) {
       const dt = lastTime ? Math.min((time - lastTime) / 1000, MAX_FRAME_SECONDS) : 0;
       lastTime = time;
+      gameTime += dt;
       update(dt);
       render();
       requestAnimationFrame(frame);
