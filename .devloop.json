@@ -10,6 +10,7 @@
     "grep -q 'THRUST' index.html",
     "grep -q 'FRICTION' index.html",
     "grep -q 'TURN_SPEED' index.html",
+    "grep -q 'LASER_COOLDOWN_MS' index.html",
     "[ \"$(grep -cE '(src|href)=' index.html)\" -eq 0 ]"
   ],
   "heavy": { "slots": 2 },
