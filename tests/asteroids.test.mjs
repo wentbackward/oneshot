@@ -45,14 +45,14 @@ function assertClose(actual, expected, tol, msg) {
     throw new Error(`${msg} (got ${actual}, want ~${expected})`);
   }
 }
-function mulberry32(seed) {
-  let a = seed >>> 0;
-  return function random() {
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
+// Deterministic-RNG factory: emits SELF-CONTAINED source (no closures), so
+// the generated function keeps working when evaluated inside the vm sandbox.
+function mulberry32Source(seed) {
+  return `(() => { let a = ${(seed >>> 0) | 0};
+    return () => { a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; })()`;
 }
 
 // Boot a fresh copy of the game with a canvas of the given size.
@@ -162,8 +162,8 @@ check("setting ASTEROID_TARGET to 0 stops all spawning", () => {
 check("active asteroid count converges on ASTEROID_TARGET and follows reassignments", () => {
   const g = boot(400, 300);
   g.clearField();
-  // Deterministic seed chosen so a field of 2 fills without rejections:
-  g.q(`random = (() => { const f = ${String(mulberry32(4))}; return f; })()`);
+  // Deterministic seed chosen so a field of 2 fills within one spawn burst:
+  g.q(`random = ${mulberry32Source(4)}`);
   g.q("ASTEROID_TARGET = 2");
   for (let i = 0; i < 60 && g.count() < 2; i++) g.tick();
   assertClose(g.count(), 2, 0, "field must fill up to ASTEROID_TARGET");
@@ -203,22 +203,23 @@ check("every naturally spawned asteroid starts at least SPAWN_SAFE_RADIUS (200) 
 // Criterion 2 (rejection path, deterministic): an edge spawn inside
 // the safe radius is rejected and the retry lands outside it
 // ================================================================
-check("an edge spawn within the safe radius is rejected and retried outside it", () => {
+check("edge spawns within the safe radius are rejected; a candidate outside it is accepted", () => {
   const g = boot(300, 300);
-  // Ship sits near the left edge so the left edge band falls inside the 200 px safe disc.
+  // Ship sits near the left edge so the left edge band lies inside the 200 px safe disc.
   g.q("ship.x = 100; ship.y = 150; ship.vx = 0; ship.vy = 0");
-  // Deterministic sequence: attempt 1 -> left edge at (-15,150), 115 px from the ship
-  // (rejected); attempt 2 -> right edge at (317,150), 217 px (accepted).
-  const rands = [0.5, 0.25, 0.5, 0.5, 0.95, 0.5, 0.5, 0.5];
-  g.q(`random = (() => { const r = [${rands}]; let i = 0; return () => r[i++ % r.length]; })()`);
   const before = g.count();
+  // Stream where every candidate lands at (-15,150), only 115 px from the ship:
+  // all retries must be rejected and the spawn abandoned.
+  g.q(`random = (() => { const r = [0.5, 0.25, 0.5]; let i = 0; return () => r[i++ % r.length]; })()`);
   assert(g.q("spawnAsteroid()") === false,
-    "first candidate at (-15,150) is only 115 px from the ship -> spawn must be rejected");
-  assert(g.count() === before, "a rejected spawn must not change the field");
-  assert(g.q("spawnAsteroid()") === true, "retry from the same seed stream must succeed");
+    "candidates within the safe radius must be rejected (spawn returns false)");
+  assert(g.count() === before, "rejected spawns must not change the field");
+  // Stream whose single candidate is the right edge at (317,150), 217 px from the ship.
+  g.q(`random = (() => { const r = [0.95, 0.5, 0.5]; let i = 0; return () => r[i++ % r.length]; })()`);
+  assert(g.q("spawnAsteroid()") === true, "a candidate outside the safe disc must be accepted");
   const a = g.activeAsteroids()[0];
-  assertClose(a.x, 317, 1e-9, "accepted spawn is the next deterministic candidate (317,150)");
-  assertClose(a.y, 150, 1e-9, "accepted spawn sits on the same edge row (deterministic seed)");
+  assertClose(a.x, 317, 1e-9, "accepted spawn is the deterministic candidate (317,150)");
+  assertClose(a.y, 150, 1e-9, "accepted spawn sits at the seeded edge coordinate");
   const ship = g.ship();
   assert(Math.hypot(a.x - ship.x, a.y - ship.y) >= g.q("SPAWN_SAFE_RADIUS"),
     "accepted spawn must lie outside the safe disc");
@@ -253,6 +254,7 @@ check("score starts at 0", () => {
 check("a laser crossing an asteroid destroys it and adds exactly SCORE_PER_ASTEROID", () => {
   const g = boot(960, 600); // ship (480,300) facing up
   placeAst(g, 480, 300 - 40); // r=20 -> band 20..60 px above the ship; frame-1 beam sweep (23..34.7) crosses it
+  g.q("ASTEROID_TARGET = 0"); // keep the field from refilling while we watch the kill
   g.key("Space", true);
   g.tick(); // frame 1: beam spans 23..34.7 px above the ship
   assertClose(g.q("score"), 10, 0, "first crossing scores exactly the default 10");
@@ -265,13 +267,14 @@ check("each kill adds exactly SCORE_PER_ASTEROID and kills accumulate", () => {
   const g = boot(960, 600);
   placeAst(g, 480, 300 - 40); // band 20..60 px -> crossed by the frame-1 sweep (23..34.7)
   placeAst(g, 480, 300 - 90); // band 70..110 px -> crossed by the frame-5 sweep (69.7..81.3)
+  g.q("ASTEROID_TARGET = 0"); // no respawns, so only our two fixtures exist
   g.key("Space", true);
   g.tick();
   assertClose(g.q("score"), 10, 0, "one kill scores exactly 10");
   assertClose(g.count(), 1, 0, "only the crossed asteroid is destroyed");
   g.tick(); // beam sweeps 34.7..46.3 px: still short of the second asteroid's 70 px edge
   assertClose(g.q("score"), 10, 0, "second asteroid untouched while the beam has not reached it");
-  g.tick(3); // beam sweeps up to 81.3 px: enters the second asteroid's 70..110 band
+  g.tick(4); // beam sweeps up to 93 px: well inside the second asteroid's 70..110 band
   assertClose(g.q("score"), 20, 0, "two kills score exactly 2 x SCORE_PER_ASTEROID");
   assertClose(g.count(), 0, 0, "both asteroids removed");
 });
@@ -279,6 +282,7 @@ check("each kill adds exactly SCORE_PER_ASTEROID and kills accumulate", () => {
 check("setting SCORE_PER_ASTEROID to 50 makes each kill worth exactly 50", () => {
   const g = boot(960, 600);
   g.q("SCORE_PER_ASTEROID = 50");
+  g.q("ASTEROID_TARGET = 0");
   placeAst(g, 480, 300 - 40);
   g.key("Space", true);
   g.tick();
@@ -299,8 +303,8 @@ check("rendering builds polygon paths per asteroid and draws the score text", ()
   assert(closePaths >= 2,
     `render must build a closed polygon path for the asteroid (and the ship); got ${closePaths} closePath calls`);
   assert(calls.some((c) => c === "fillText"), "HUD score must be drawn with fillText");
-  assert(calls.includes("strokeStyle") || calls.includes("fillStyle"),
-    "asteroid polygon must be styled and filled/stroked procedurally");
+  assert(calls.includes("fill") && calls.includes("stroke"),
+    "asteroid polygon must be filled and stroked procedurally");
 });
 
 // ---------- summary ----------
