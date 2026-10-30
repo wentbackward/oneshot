@@ -218,14 +218,14 @@ const start = (g) => {
 // vertically (vx = 0) at the paddle-relative offset the game itself
 // normalises: rel is a fraction of the half width, exactly as the
 // bounce handler computes it (-1 = left rim, -0.75 = left-quarter
-// centre = offset -0.375·PADDLE_WIDTH, 0 = centre, 0.75 = right
+// centre = offset -0.375·BASE_PADDLE_W, 0 = centre, 0.75 = right
 // quarter, 1 = right rim). Vertical approach keeps the contact point
 // exactly where the fixture places the ball.
 function incomingHit(g, rel) {
   g.q(
     "paddle.x = canvas.width / 2;\n" +
       "ball.attached = false;\n" +
-      "ball.x = paddle.x + (PADDLE_WIDTH / 2) * " + rel + ";\n" +
+      "ball.x = paddle.x + (BASE_PADDLE_W / 2) * " + rel + ";\n" +
       "ball.y = (canvas.height - PADDLE_BOTTOM_GAP - PADDLE_HEIGHT) - BALL_RADIUS - 5;\n" +
       "ball.vx = 0; ball.vy = 400;"
   );
@@ -271,7 +271,7 @@ check("keyboard: ArrowRight and KeyD keydown move the paddle right, keyup stops 
 
 check("keyboard: a held key presses the paddle to the canvas edge and no further", () => {
   const W = (g) => g.q("canvas.width");
-  const half = (g) => g.q("PADDLE_WIDTH / 2");
+  const half = (g) => g.q("BASE_PADDLE_W / 2");
   const right = boot(960, 600);
   start(right);
   right.key("keydown", "ArrowRight");
@@ -386,10 +386,10 @@ check("pointer positions beyond the canvas clamp the paddle inside the field", (
   const g = boot(960, 600);
   start(g);
   g.mouseMove(-5000);
-  assertClose(g.paddleX(), g.q("PADDLE_WIDTH / 2"), 1e-9,
+  assertClose(g.paddleX(), g.q("BASE_PADDLE_W / 2"), 1e-9,
     `a far-left pointer must clamp the paddle to the left edge, got ${g.paddleX()}`);
   g.mouseMove(50000);
-  assertClose(g.paddleX(), g.q("canvas.width - PADDLE_WIDTH / 2"), 1e-9,
+  assertClose(g.paddleX(), g.q("canvas.width - BASE_PADDLE_W / 2"), 1e-9,
     `a far-right pointer must clamp the paddle to the right edge, got ${g.paddleX()}`);
 });
 
@@ -475,7 +475,7 @@ check("identical incoming hit at the paddle's left quarter comes out leftward wi
   start(left);
   incomingHit(left, -0.75); // left-quarter centre (offset -0.375·W)
   assert(
-    left.ball().x === left.q("paddle.x - PADDLE_WIDTH * 0.375"),
+    left.ball().x === left.q("paddle.x - BASE_PADDLE_W * 0.375"),
     `the fixture must sit at the true left quarter (offset -0.375·W), x=${left.ball().x}`
   );
   left.tick(1);
