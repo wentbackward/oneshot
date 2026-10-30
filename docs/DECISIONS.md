@@ -824,3 +824,69 @@
   `enterGameOver()` (destroys in-flight state the restart path does
   not guarantee), or draw them dimmed (extra palette state for no
   player-visible benefit).
+
+## 2026-10-30 — Ticket #26: extra ball and sticky paddle power-ups
+
+- **The single `ball` object becomes a fixed pool `balls` allocated once
+  at the named `var MAX_BALLS` (5); slot 0 is the run's serve ball, a
+  free slot is activated per extra-ball catch, and the pool never grows.**
+  Campaign pool precedent (#22 bricks, #25 capsules): activation is a flag
+  flip, so a catch never allocates and the MAX_BALLS cap falls out of the
+  pool size — a catch with no free slot is a no-op. Alternatives: cap the
+  *active* count over an unbounded pool (rejected — allocating, and the
+  ticket names the cap as the structural bound), or a grow-on-catch array
+  (rejected — allocation churn, the 60 fps rule).
+- **An extra-ball catch spawns at the paddle centre and launches straight
+  up at the current (level-grown) `serveSpeed` immediately — "second ball
+  into active play" (PRD §4) — rather than parking attached for the next
+  click.** PRD says the ball enters active play; the ticket says it spawns
+  at the paddle. Immediate launch satisfies both readings with one code
+  path and no new serve-queue state. Alternatives: attach-and-await-click
+  (requires multi-attached serve bookkeeping and a weaker reading of the
+  PRD), random angle (untestable, #21 precedent rejects it).
+- **A ball dropped below the bottom edge only costs a life when it was
+  the last live ball: the drop path deactivates the slot and calls
+  `loseLife()` iff `liveBallCount() === 0`; `loseLife()` itself keeps its
+  exact #21 meaning (−1 life, fresh serve or game over).** Keeps the
+  existing `loseLife` contract (and the #25 suite's direct `lives = 1;
+  loseLife()` game-over test) intact while adding the multi-ball rule at
+  the drop site — one decision point, not a flag scattered over the life
+  flow. Alternatives: fold the count check into `loseLife` (changes its
+  contract; the direct-call tests would need rewiring), or treat every
+  drop as a life loss (rejected — violates the criterion).
+- **Sticky is an absolute sim-time threshold `stickyUntil` (armed
+  `simTime + STICKY_DURATION_S`, 6 s, re-arm = now + full duration like
+  expand), checked at the paddle contact as `simTime < stickyUntil`.**
+  Same simulation-time discipline as #25 (pause-safe, exactly frame-
+  deterministic, no per-frame expiry mutation). At the expiry frame the
+  paddle is already non-sticky, so the boundary test lands unambiguously.
+  Alternatives: per-frame countdown variable (equivalent; the threshold
+  form matches the `expandUntil` precedent), or sticky-until-first-catch
+  (rejected — the ticket fixes a duration).
+- **A sticky contact attaches the ball at its contact offset
+  (`attachOff`, clamped to the paddle half width), the attached ball rides
+  `paddle.x + attachOff` each frame, and a click launches *every* attached
+  ball, each inheriting the position-dependent paddle-angle logic for its
+  own offset at the `serveSpeed`.** Attaching at the hit point (instead of
+  re-centering) makes the ride feel like a catch, keeps the re-launch
+  angle honestly position-derived, and handles the (legal) two-attached
+  case without special-casing. Alternatives: re-center on catch (loses the
+  catch feel and makes the "position-dependent" launch trivially
+  centre-fire), launch only the oldest attached (extra branch for an edge
+  case players would read as broken).
+- **`serveBall()` drains every slot and parks slot 0 — so a level win, a
+  lost last ball, a restart and the game-over re-serve all reset to ONE
+  fresh attached ball; extra balls and sticky arms never carry across a
+  serve.** Reuses #21's single park/serve path; the frozen game-over field
+  shows the canonical rest pose exactly as before. Alternatives: carry
+  extra balls across a level win (the win re-serve would desync from the
+  "fresh serve" contract, and a cleared board with N leftover balls is a
+  softer difficulty drop the ticket does not ask for), or keep the sticky
+  arm across a serve (an armed paddle at a rest ball is invisible state
+  that would catch the next serve bounce).
+- **Legacy `bricks-paddle` / `bricks-grid` suites adapted to the pool,
+  mirroring the campaign precedent for entity-shape changes (#6 suite
+  adaptations, #25's `PADDLE_WIDTH` → `BASE_PADDLE_W` mechanical rename):**
+  every fixture and accessor now addresses `balls[0]` (the serve slot,
+  which is the only active ball in their scenarios) and direct
+  `collideBricks()` calls pass `balls[0]`. No test semantics changed.
