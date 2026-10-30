@@ -75,8 +75,10 @@ function makeCtx() {
 }
 
 // Boot a fresh copy of the scaffold on a width×height viewport.
-// storedHigh optionally seeds the localStorage high-score value.
-function boot(width, height, storedHigh = null) {
+// storedHigh optionally seeds the localStorage high-score value;
+// throwingStorage replaces the stub with one whose accessors throw
+// (blocked / quota-exhausted storage).
+function boot(width, height, storedHigh = null, throwingStorage = false) {
   const canvas = { width: 0, height: 0, getContext: () => makeCtx() };
   const els = {
     "game": canvas,
@@ -91,12 +93,21 @@ function boot(width, height, storedHigh = null) {
   let rafCb = null;
   let rafId = 0;
   const sandbox = {
-    localStorage: {
-      getItem: () => storedHigh,
-      setItem: (_key, value) => {
-        storedHigh = String(value);
-      },
-    },
+    localStorage: throwingStorage
+      ? {
+          getItem: () => {
+            throw new Error("SecurityError: access to storage denied");
+          },
+          setItem: () => {
+            throw new Error("QuotaExceededError: storage unavailable");
+          },
+        }
+      : {
+          getItem: () => storedHigh,
+          setItem: (_key, value) => {
+            storedHigh = String(value);
+          },
+        },
     window: {
       innerWidth: width,
       innerHeight: height,
@@ -310,6 +321,31 @@ check("an unremarkable score does not rewrite the stored high score", () => {
   g.tick(1);
   assert(g.q("highScore") === 900, `highScore must stay 900, got ${g.q("highScore")}`);
   assert(g.storedHigh() === "900", `localStorage must stay "900", got ${JSON.stringify(g.storedHigh())}`);
+});
+
+// ================================================================
+// Supporting: a blocked localStorage (throwing accessors) never
+// breaks the game
+// ================================================================
+check("booting with a throwing localStorage degrades to high score 0 on the start screen", () => {
+  const g = boot(960, 600, null, true);
+  assert(g.q("highScore") === 0, `highScore must degrade to 0, got ${g.q("highScore")}`);
+  assert(g.state() === "start", `the game must still boot to "start", state is ${g.state()}`);
+  assert(g.els["screen-start"].style.display === "flex",
+    "the start overlay must still be visible with blocked storage");
+  g.tick(2);
+  assert(g.state() === "start", `the loop must keep running, state is ${g.state()}`);
+});
+
+check("a throwing setItem never crashes the loop when the live score rises", () => {
+  const g = boot(960, 600, null, true);
+  g.els["btn-start"].click();
+  g.q("score = 300");
+  g.tick(1);
+  assert(g.q("highScore") === 300, `highScore must still rise in-session, got ${g.q("highScore")}`);
+  assert(g.state() === "playing", `the loop must survive the write failure, state is ${g.state()}`);
+  g.tick(30);
+  assert(g.state() === "playing", `frames must keep flowing after the write failure, state is ${g.state()}`);
 });
 
 // ================================================================
