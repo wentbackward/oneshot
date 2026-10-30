@@ -199,6 +199,10 @@ var CAPSULE_POOL_SIZE = 4;         // fixed pre-allocated pool of concurrent cap
 var KIND_EXPAND = 0;
 var CAPSULE_KINDS = [KIND_EXPAND];
 var COLOR_CAPSULE_EXPAND = "#ffd23f";
+// Exhaustive kind-to-colour table, indexed by kind: every enumerated
+// kind has exactly one row. A new kind adds a row here and an entry
+// in CAPSULE_KINDS — never a branch in the draw pass.
+var CAPSULE_COLORS = [COLOR_CAPSULE_EXPAND];
 var PADDLE_EXPAND_FACTOR = 1.6;         // widened width = BASE_PADDLE_W * factor
 var PADDLE_EXPAND_DURATION_S = 6;       // simulated seconds of widen
 
@@ -661,7 +665,9 @@ function draw() {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   if (gameState === "start") return;
   drawBricks();
-  drawPowerups();
+  // Outside "playing" the field is frozen: capsules stay pooled but
+  // undrawn, so the game-over screen shows a tidy board.
+  if (gameState === "playing") drawPowerups();
   drawPaddle();
   drawBall();
 }
@@ -677,7 +683,7 @@ function drawPowerups() {
   for (var i = 0; i < capsules.length; i += 1) {
     var c = capsules[i];
     if (!c.active) continue;
-    ctx.fillStyle = c.kind === KIND_EXPAND ? COLOR_CAPSULE_EXPAND : COLOR_BALL;
+    ctx.fillStyle = CAPSULE_COLORS[c.kind];
     ctx.fillRect(c.x - CAPSULE_W / 2, c.y, CAPSULE_W, CAPSULE_H);
   }
 }
