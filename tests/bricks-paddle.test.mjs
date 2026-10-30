@@ -393,12 +393,16 @@ check("pointer positions beyond the canvas clamp the paddle inside the field", (
     `a far-right pointer must clamp the paddle to the right edge, got ${g.paddleX()}`);
 });
 
-check("a mousemove before the game starts also moves the paddle (serve aiming)", () => {
+// The canvas pointer listeners are deliberately state-ungated; this
+// locks in that a mousemove dispatched while state is still "start"
+// moves the paddle. In a real browser the full-viewport start overlay
+// occludes the canvas, so such input never reaches the handlers.
+check("pointer listeners are state-ungated: a canvas mousemove dispatched during 'start' still moves the paddle", () => {
   const g = boot(960, 600);
-  g.mouseMove(100); // state "start"
+  g.mouseMove(100); // state "start"; the start overlay would occlude the canvas in a browser
   const want = (100 / 960) * g.canvas.width;
   assertClose(g.paddleX(), want, 1,
-    `pointer tracking must work on the start screen too, got ${g.paddleX()}`);
+    `the mousemove listener is state-ungated and must set the paddle x in 'start' too, got ${g.paddleX()}`);
 });
 
 // ================================================================
@@ -635,6 +639,18 @@ check("when lives reach 0 the game enters 'gameover' with the overlay and a Try 
   assert(g.els["screen-start"].style.display === "none",
     `the start overlay must be hidden at game over`);
   assert(g.lifeIcons() === 0, `#lives must hold 0 icons at game over, got ${g.lifeIcons()}`);
+  // enterGameOver re-serves: the frozen field behind the overlay shows
+  // the ball at rest on the paddle, not stale drop coordinates.
+  const b = g.ball();
+  assert(b.attached === true && b.vx === 0 && b.vy === 0,
+    `game over must leave the ball parked at rest, got ${JSON.stringify(b)}`);
+  assert(b.x === g.paddleX(), `game over must show the ball on the paddle centre, x=${b.x} vs ${g.paddleX()}`);
+  assertClose(b.y, g.serveY(), 1e-9, `game over must show the ball on the paddle top, y=${b.y}`);
+  g.tick(5);
+  assert(g.state() === "gameover",
+    `the frozen field must stay frozen at game over, state=${g.state()}`);
+  assert(b.x === g.ball().x && b.y === g.ball().y,
+    "the parked ball must not move while the overlay is up");
   assert(
     /<button\b[^>]*id="btn-restart"[^>]*>\s*try again\s*<\/button>/i.test(html),
     "the game-over overlay markup must carry a Try Again <button id=btn-restart>"
