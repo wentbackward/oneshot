@@ -192,7 +192,10 @@ var lastFrameTime = null;
 var paddle = { x: 0 };
 // One ball per run (a pool arrives with #25's extra-ball power-up).
 var ball = { x: 0, y: 0, vx: 0, vy: 0, attached: true };
-var keys = { left: false, right: false }; // held-key edges, polled per frame
+// Held keys per direction: one set entry per distinct held code.
+// Auto-repeat keydowns re-add the same code (idempotent), so the
+// set size mirrors the fingers on the deck, not the re-dispatches.
+var keys = { left: new Set(), right: new Set() };
 
 // ---- High score (localStorage persistence, PRD section 4) ----
 function loadHighScore() {
@@ -245,28 +248,28 @@ function clampPaddle() {
 function updatePaddle(dt) {
   // update() only runs in "playing", so releasing a key stops the
   // paddle automatically; both key and pointer write the same x.
-  var dir = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+  var dir = (keys.right.size > 0 ? 1 : 0) - (keys.left.size > 0 ? 1 : 0);
   if (dir !== 0) paddle.x += dir * PADDLE_SPEED * dt;
   clampPaddle();
 }
 function onKeyDown(e) {
   if (e.code === "ArrowLeft" || e.code === "KeyA") {
-    keys.left = true;
+    keys.left.add(e.code);
     e.preventDefault();
   } else if (e.code === "ArrowRight" || e.code === "KeyD") {
-    keys.right = true;
+    keys.right.add(e.code);
     e.preventDefault();
   }
 }
 function onKeyUp(e) {
-  if (e.code === "ArrowLeft" || e.code === "KeyA") keys.left = false;
-  else if (e.code === "ArrowRight" || e.code === "KeyD") keys.right = false;
+  if (e.code === "ArrowLeft" || e.code === "KeyA") keys.left.delete(e.code);
+  else if (e.code === "ArrowRight" || e.code === "KeyD") keys.right.delete(e.code);
 }
-// A blurred window drops its keyups; drop the held flags with it so
+// A blurred window drops its keyups; clear the held sets with it so
 // the paddle cannot keep gliding on ghost keys.
 function onBlur() {
-  keys.left = false;
-  keys.right = false;
+  keys.left.clear();
+  keys.right.clear();
 }
 window.addEventListener("keydown", onKeyDown);
 window.addEventListener("keyup", onKeyUp);
