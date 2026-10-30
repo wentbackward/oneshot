@@ -875,18 +875,49 @@
   centre-fire), launch only the oldest attached (extra branch for an edge
   case players would read as broken).
 - **`serveBall()` drains every slot and parks slot 0 — so a level win, a
-  lost last ball, a restart and the game-over re-serve all reset to ONE
-  fresh attached ball; extra balls and sticky arms never carry across a
-  serve.** Reuses #21's single park/serve path; the frozen game-over field
-  shows the canonical rest pose exactly as before. Alternatives: carry
+  lost last ball, and the game-over re-serve all reset to ONE fresh
+  attached ball; extra balls never carry across a serve, while the
+  sticky WINDOW intentionally does.** The window is a fixed sim-time span
+  anchored at the catch (`stickyUntil`), so a re-serve that lands inside
+  it leaves the paddle armed until the anchor expires — disarming on
+  serve would silently shorten a bought duration, and a parked (attached)
+  serve ball never crosses the contact sweep anyway, so there is no
+  "sticky paddle at rest" surprise state. Reuses #21's single park/serve
+  path; the frozen game-over field shows the canonical rest pose exactly
+  as before. Only the run-level reset
+  (`beginRun()` on start/restart) clears the arm. Alternatives: carry
   extra balls across a level win (the win re-serve would desync from the
   "fresh serve" contract, and a cleared board with N leftover balls is a
-  softer difficulty drop the ticket does not ask for), or keep the sticky
-  arm across a serve (an armed paddle at a rest ball is invisible state
-  that would catch the next serve bounce).
+  softer difficulty drop the ticket does not ask for), or disarm sticky
+  in `serveBall()` (truncates the fixed duration the ticket fixes —
+  rejected in review round 1; the earlier draft's "sticky arms never
+  carry" wording was false and has been corrected).
 - **Legacy `bricks-paddle` / `bricks-grid` suites adapted to the pool,
   mirroring the campaign precedent for entity-shape changes (#6 suite
   adaptations, #25's `PADDLE_WIDTH` → `BASE_PADDLE_W` mechanical rename):**
   every fixture and accessor now addresses `balls[0]` (the serve slot,
   which is the only active ball in their scenarios) and direct
   `collideBricks()` calls pass `balls[0]`. No test semantics changed.
+
+## 2026-10-30 — Ticket #26 review round 1: fold-ins
+
+- **The same-frame double-drop edge is locked by a committed fixture
+  rather than new code.** Both fixture balls share one height, so both
+  cross the loss line in one `updateBalls()` pass; the pool-order loop
+  deactivates ball #0 first (a ball still lives → no life spent) and
+  only the last live drop triggers `loseLife()`. The new test asserts
+  exactly one life lost and exactly one fresh slot-0 attached serve.
+  Alternatives: special-case simultaneous drops in `updateBalls()`
+  (rejected — the count-after-deactivate rule already handles it; the
+  branch would be dead code).
+- **`launchBall` renamed to `launchAttachedBalls`.** The singular name
+  was false — the handler iterates and launches EVERY attached ball
+  (the legal two-attached case). No signature, listener or behaviour
+  change; the name now matches the code. Alternatives: keep the name
+  (review rejected it — dishonest singular).
+- **The sticky-survives-serve wording in `serveBall()`'s comment and in
+  this file is corrected to state what the code actually does** (above
+  and in the `stickyUntil` declaration): the window is a fixed sim-time
+  span that intentionally survives mid-run re-serves; only `beginRun()`
+  clears it. No behaviour change. Alternatives: change the behaviour to
+  match the old wording (review kept the behaviour instead).
