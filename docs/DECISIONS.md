@@ -983,3 +983,35 @@
   A catch fixture that kills a brick also emits a break sound, so the
   routing/mute tests count four sounds for three visible events and
   pin `random` to force no unplanned capsule before intermediate kills.
+
+## 2026-10-30 — Ticket #27 review round 1: exp-ramp clamps, mute-product pin, resume() rejections
+
+- **Exponential ramp start and target are clamped: `Math.max(SFX_PEAK, SFX_EXP_EPS)` /
+  `Math.max(SFX_DECAY_FLOOR, SFX_EXP_EPS)`**, with the start set at the schedule time
+  (`t0`). Exponential ramps only span positive values — a console zeroed `SFX_PEAK`
+  or `SFX_DECAY_FLOOR` previously produced an unbounded/invalid parameter region
+  (start 0 → −inf dB) or a rejected target. The guard is a named constant
+  `SFX_EXP_EPS = 1e-4`, applied at scheduling so the runtime constants stay the
+  source of truth. The audio stub now enforces the same positivity contract
+  (RangeError on a non-positive ramp target or start), so the regression tests
+  fail for the real reason. Alternatives: reject-and-stay-silent (rejected —
+  a zeroed knob means "quiet", not "broken") or clamp at the constants
+  (rejected — the knobs must keep working from the console).
+- **"Terminates at 0" is pinned as the audible level: the mute test now also
+  asserts post-mute envelope terminus × bus gain === 0 exactly.** The envelope
+  keeps its named shape (peak → floor); silence comes from the zeroed bus.
+  Alternative reading — rewrite the envelope to literal 0 — rejected: diverges
+  from the campaign-1 decay and loses the named-floor contract.
+- **Both `audioCtx.resume()` call sites swallow rejection with a bare
+  `.catch(() => {})`.** `resume()` returns a Promise that rejects when the
+  context cannot resume; an unhandled rejection would log (and, under some
+  engines, crash) the silent-degradation path. The stub's `resume()` returns a
+  promise-like that records `.catch` attachment, so the test proves every call
+  is guarded. Alternatives: `await`/try-catch (needs an async wrapper around
+  the gesture handlers) or ignore the Promise (unhandled rejections are the
+  defect being fixed).
+- **Campaign 1 (`asteroids.html`) carries the same un-guarded `resume()` and
+  hardcoded 0.001 decays; left untouched.** Ticket #27 scopes to the bricks
+  campaign; campaign 1's decay constants are literal (not console-tunable) so
+  the clamp hazard is absent there. A follow-up ticket should mirror the
+  review fixes there if desired.
