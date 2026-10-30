@@ -3,7 +3,7 @@
 // Unit tests — start screen, game over, and restart (ticket #8)
 //
 // Same harness style as tests/waves.test.mjs: runs the REAL
-// <script> from index.html in a sandboxed vm context with stubbed
+// <script> from asteroids.html in a sandboxed vm context with stubbed
 // window/document/canvas, drives frames through the captured
 // requestAnimationFrame callback, dispatches key events into the
 // registered listeners, and asserts on observable game state plus
@@ -22,9 +22,9 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-const html = readFileSync(path.join(root, "index.html"), "utf8");
+const html = readFileSync(path.join(root, "asteroids.html"), "utf8");
 const match = html.match(/<script>([\s\S]*?)<\/script>/);
-if (!match) throw new Error("no <script> block found in index.html");
+if (!match) throw new Error("no <script> block found in asteroids.html");
 const gameSource = match[1];
 
 // Exact strings the screens must draw (retro: upper-case, terse).
@@ -438,8 +438,8 @@ check("every HUD/overlay glyph is drawn monospace in the single accent colour", 
   }
 });
 
-check("index.html declares the retro monospace UI (gate grep) with a single UI accent constant", () => {
-  assert(/monospace/i.test(html), "index.html must declare a monospace face for its UI text");
+check("asteroids.html declares the retro monospace UI (gate grep) with a single UI accent constant", () => {
+  assert(/monospace/i.test(html), "asteroids.html must declare a monospace face for its UI text");
   // #8-2 (should-fix): the ticket wording asks for the retro styling
   // in the STYLE block itself — assert font-family there, not just in
   // the canvas-drawn UI constants below.

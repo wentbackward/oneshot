@@ -2,7 +2,7 @@
 // ================================================================
 // Unit tests — laser subsystem (ticket #3)
 //
-// Runs the REAL <script> from index.html inside a sandboxed
+// Runs the REAL <script> from asteroids.html inside a sandboxed
 // vm context with a stubbed window/document/canvas, drives frames
 // through the captured requestAnimationFrame callback, and asserts
 // on observable game state. No network, no external services.
@@ -15,9 +15,9 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-const html = readFileSync(path.join(root, "index.html"), "utf8");
+const html = readFileSync(path.join(root, "asteroids.html"), "utf8");
 const match = html.match(/<script>([\s\S]*?)<\/script>/);
-if (!match) throw new Error("no <script> block found in index.html");
+if (!match) throw new Error("no <script> block found in asteroids.html");
 const gameSource = match[1];
 
 // ---------- tiny test harness ----------

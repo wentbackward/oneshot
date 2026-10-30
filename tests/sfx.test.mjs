@@ -3,7 +3,7 @@
 // Unit tests — procedural Web Audio sound effects (ticket #9)
 //
 // Same harness style as tests/screens.test.mjs: runs the REAL
-// <script> from index.html in a sandboxed vm context with stubbed
+// <script> from asteroids.html in a sandboxed vm context with stubbed
 // window/document/canvas. The audio criterion is verified with a
 // recording FAKE AudioContext injected as a sandbox global: it
 // mirrors the Web Audio node graph (oscillators, gain envelopes,
@@ -21,9 +21,9 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-const html = readFileSync(path.join(root, "index.html"), "utf8");
+const html = readFileSync(path.join(root, "asteroids.html"), "utf8");
 const match = html.match(/<script>([\s\S]*?)<\/script>/);
-if (!match) throw new Error("no <script> block found in index.html");
+if (!match) throw new Error("no <script> block found in asteroids.html");
 const gameSource = match[1];
 
 // ---------- tiny test harness ----------
@@ -297,12 +297,12 @@ function assertNoiseBurst(g, src, cutoffName, levelName, durName) {
 // references the AudioContext API and contains no audio files or
 // media loaders whatsoever
 // ================================================================
-check("index.html references AudioContext and ships no audio files or media loaders", () => {
+check("asteroids.html references AudioContext and ships no audio files or media loaders", () => {
   assert(html.includes("AudioContext"),
-    "index.html must use the Web Audio API (AudioContext)");
+    "asteroids.html must use the Web Audio API (AudioContext)");
   const loaders = html.match(/new Audio\(|\.mp3|\.wav|\.ogg|\.m4a/gi) ?? [];
   assert(loaders.length === 0,
-    `no audio files or loaders may appear in index.html, found ${JSON.stringify(loaders)}`);
+    `no audio files or loaders may appear in asteroids.html, found ${JSON.stringify(loaders)}`);
 });
 
 // #9-1 (should-fix): the noise buffer is baked through the injectable
