@@ -563,7 +563,15 @@ check("soak: over 600 seeded frames the ball never leaves the field and its spee
   start(g);
   const W = g.q("canvas.width");
   const R = g.q("BALL_RADIUS");
-  g.q("ball.attached = false; ball.x = 300; ball.y = 250; ball.vx = 500; ball.vy = -310;");
+  g.q("ball.attached = false; ball.x = 340; ball.y = 250; ball.vx = 500; ball.vy = -310;");
+  // The wall-bounce soak predates the brick grid (ticket #22); keep
+  // it isolated by deactivating the brick field for this fixture only
+  // (nothing live can be destroyed, so no win can trigger either).
+  // The seed x moved 300 -> 340 when #22 switched ball integration to
+  // radius-sized sub-steps: the old seed's single top-wall bounce
+  // phase-shifted by the sub-step overshoot and the run ended 4 px
+  // short of the right wall.
+  g.q("for (var i = 0; i < bricks.length; i += 1) bricks[i].active = false; bricksLeft = 0;");
   const s0 = Math.hypot(500, 310);
   let touchedTop = false;
   let touchedRight = false;

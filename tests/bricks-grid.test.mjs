@@ -183,8 +183,9 @@ function boot(width = 960, height = 600) {
       q("typeof bricks === 'undefined' ? -1 : bricks.reduce((n, b) => n + (b.active ? 1 : 0), 0)"),
     grid: () => q("typeof BRICK_ROWS === 'undefined' ? -1 : BRICK_ROWS * BRICK_COLS"),
     brickAt(row, col) {
+      const cols = q("BRICK_COLS");
       return q(`(() => {
-        const t = bricks[row * BRICK_COLS + col];
+        const t = bricks[${row * cols + col}];
         return { active: t.active, tier: t.tier, x: t.x, y: t.y, w: t.w, h: t.h };
       })()`);
     },
@@ -332,16 +333,17 @@ check("destroying a brick adds exactly that colour's point value and mirrors it 
 check("score accrues exactly per colour across the grid and the HUD mirrors the running total", () => {
   const g = boot(960, 600);
   start(g);
-  const pts = (row, col) => g.q(`BRICK_TIERS[bricks[${row * BRICK_COLS + col}].tier].points`);
-  // One physics strike (tier B, bottom row), then two direct kills
-  // of different tiers through the same destroyBrick path.
+  const cols = g.q("BRICK_COLS");
+  const pts = (row, col) => g.q(`BRICK_TIERS[bricks[${row * cols + col}].tier].points`);
+  const tierObj = (row, col) => g.q(`BRICK_TIERS[bricks[${row * cols + col}].tier]`);
+  // One physics strike (bottom row), then two direct kills of the two
+  // remaining tiers through the same destroyBrick path.
   strikeBrick(g, 4, 5);
   const s1 = pts(4, 5);
-  g.q("destroyBrick(0)");           // top row, another tier
-  g.q("destroyBrick(2 * BRICK_COLS + 9)"); // mid row, the third tier
-  const tiersSeen = new Set([g.q(`BRICK_TIERS[bricks[0].tier]`),
-                             g.q(`BRICK_TIERS[bricks[${2 * BRICK_COLS + 9}].tier]`)]);
-  assert(tiersSeen.size === 2, "setup: the direct kills must hit different tiers than each other");
+  g.q("destroyBrick(0)");            // top row, another tier
+  g.q(`destroyBrick(${2 * cols + 9})`); // mid row, the third tier
+  const tiersSeen = new Set([tierObj(4, 5), tierObj(0, 0), tierObj(2, 9)]);
+  assert(tiersSeen.size === 3, `the three kills must cover three different colours, got ${tiersSeen.size}`);
   const want = s1 + pts(0, 0) + pts(2, 9);
   assert(g.score() === want,
     `the running total must be exactly the sum of the struck colours (${want}), got ${g.score()}`);
