@@ -8,7 +8,8 @@
     "grep -q 'requestAnimationFrame' bricks.html",
     "grep -qE 'class=\"game\"|id=\"game\"|<canvas' bricks.html",
     "grep -qi 'monospace' bricks.html",
-    "[ \"$(grep -cE '(src|href)=' bricks.html)\" -eq 0 ]"
+    "[ \"$(grep -cE '(src|href)=' bricks.html)\" -eq 0 ]",
+    "for f in tests/bricks-*.test.mjs; do node \"$f\" || exit 1; done"
   ],
   "heavy": { "slots": 2 },
   "stop_gate": { "require_clean_tree": true, "max_blocks": 5 },
