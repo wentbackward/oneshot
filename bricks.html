@@ -133,14 +133,18 @@
 <script>
 "use strict";
 // ================================================================
-// BRICK BREAKER — campaign 2: shell, paddle, ball, lives, game over
+// BRICK BREAKER — campaign 2: shell, paddle, ball, lives, game over,
+// brick grid, ball-brick collision, scoring, level progression and
+// the win condition
 //
 // Single file: responsive full-viewport canvas with an internal-
 // resolution scale factor, a requestAnimationFrame loop with a
 // clamped frame delta, start / game-over overlay screens, keyboard
 // and pointer paddle control, a served ball with wall and paddle
-// bounces (position-dependent angle, speed-preserving), and the
-// lose-a-life / game-over / restart flow. Bricks, power-ups and
+// bounces (position-dependent angle, speed-preserving), a fixed-pool
+// brick grid the ball breaks for colour-valued points, level
+// progression on a cleared board (faster serve per level, capped),
+// and the lose-a-life / game-over / restart flow. Power-ups and
 // audio are later campaign-2 tickets.
 // ================================================================
 
@@ -157,8 +161,30 @@ var PADDLE_BOTTOM_GAP = 24;       // clear space between paddle and bottom edge
 var PADDLE_SPEED = 720;           // keyboard travel speed, px/s
 // Ball
 var BALL_RADIUS = 8;
-var BALL_SERVE_SPEED = 480;       // launch speed on click/tap, px/s
+var BALL_SERVE_SPEED = 480;       // level-1 launch speed on click/tap, px/s
+var LEVEL_SPEED_GROWTH = 1.15;    // per-level serve-speed multiplier (PRD section 4)
+var MAX_BALL_SPEED = 1500;        // ceiling the per-level growth caps at, px/s
 var MAX_PADDLE_BOUNCE_ANGLE = Math.PI / 3;  // 60 deg from vertical at the rim
+// Bricks: grid geometry (internal canvas px) over a fixed-size pool
+var BRICK_ROWS = 5;
+var BRICK_COLS = 10;
+var BRICK_SIDE_MARGIN = 24;
+var BRICK_TOP_MARGIN = 64;
+var BRICK_GAP = 6;
+var BRICK_HEIGHT = 26;
+// Brick colours map to named per-colour point values (PRD section 2);
+// every brick is one-hit (ticket #22), so the colour encodes the value.
+var COLOR_BRICK_A = "#ef5d62";
+var POINTS_BRICK_A = 30;
+var COLOR_BRICK_B = "#f2a541";
+var POINTS_BRICK_B = 20;
+var COLOR_BRICK_C = "#4fc1e9";
+var POINTS_BRICK_C = 10;
+var BRICK_TIERS = [
+  { color: COLOR_BRICK_A, points: POINTS_BRICK_A },
+  { color: COLOR_BRICK_B, points: POINTS_BRICK_B },
+  { color: COLOR_BRICK_C, points: POINTS_BRICK_C }
+];
 
 // ---- Palette (the page accent lives in the CSS --accent property;
 // a canvas-drawn mirror is added with the canvas-text gameplay tickets) ----
@@ -192,6 +218,16 @@ var lastFrameTime = null;
 var paddle = { x: 0 };
 // One ball per run (a pool arrives with #25's extra-ball power-up).
 var ball = { x: 0, y: 0, vx: 0, vy: 0, attached: true };
+// Brick pool: allocated once at this size and reused in place for
+// every level, so the grid never allocates on a level spawn.
+var bricks = [];
+for (var i = 0; i < BRICK_ROWS * BRICK_COLS; i += 1) {
+  bricks.push({ active: false, tier: 0, x: 0, y: 0, w: 0, h: 0 });
+}
+var bricksLeft = 0;               // live bricks, kept as an O(1) win check
+// Runtime serve speed: reset to BALL_SERVE_SPEED at (re)start, grown
+// per cleared level and capped at MAX_BALL_SPEED.
+var serveSpeed = BALL_SERVE_SPEED;
 // Held keys per direction: one set entry per distinct held code.
 // Auto-repeat keydowns re-add the same code (idempotent), so the
 // set size mirrors the fingers on the deck, not the re-dispatches.
@@ -220,6 +256,7 @@ function saveHighScore() {
 function resizeCanvas() {
   canvas.width = Math.round(window.innerWidth * CANVAS_SCALE);
   canvas.height = Math.round(window.innerHeight * CANVAS_SCALE);
+  if (gameState === "playing") layoutBricks(); // keep the grid inside the new field
 }
 window.addEventListener("resize", function () {
   resizePending = true; // defer the actual rescale to the next frame
@@ -288,13 +325,64 @@ canvas.addEventListener("touchmove", function (e) {
   e.preventDefault(); // keep the page from scrolling while dragging
 }, { passive: false });
 
+// ---- Bricks (fixed-size pool, mutated in place across levels) ----
+// Geometry derives from the current canvas size, so the deferred
+// viewport rescale keeps the grid inside the field.
+function layoutBricks() {
+  var bw = (canvas.width - 2 * BRICK_SIDE_MARGIN - (BRICK_COLS - 1) * BRICK_GAP) / BRICK_COLS;
+  for (var i = 0; i < bricks.length; i += 1) {
+    var row = Math.floor(i / BRICK_COLS);
+    var col = i % BRICK_COLS;
+    bricks[i].x = BRICK_SIDE_MARGIN + col * (bw + BRICK_GAP);
+    bricks[i].y = BRICK_TOP_MARGIN + row * (BRICK_HEIGHT + BRICK_GAP);
+    bricks[i].w = bw;
+    bricks[i].h = BRICK_HEIGHT;
+  }
+}
+// Activate the whole pool for the current level (module global):
+// the colour/value rows cycle by one tier per level, so every
+// level presents a shifted layout.
+function spawnLevel() {
+  var shift = (level - 1) % BRICK_TIERS.length;
+  for (var i = 0; i < bricks.length; i += 1) {
+    var row = Math.floor(i / BRICK_COLS);
+    bricks[i].tier = (row + shift) % BRICK_TIERS.length;
+    bricks[i].active = true;
+  }
+  bricksLeft = bricks.length;
+  layoutBricks();
+}
+// One kill path shared by the physics hit and console access: a
+// brick is destroyed in one hit, credits exactly its tier's points,
+// and the final brick wins the level.
+function destroyBrick(index) {
+  var b = bricks[index];
+  if (!b.active) return;
+  b.active = false;
+  bricksLeft -= 1;
+  score += BRICK_TIERS[b.tier].points;
+  syncHud();
+  if (bricksLeft === 0) advanceLevel();
+}
+// Cleared board: the level rises by exactly 1, the next layout is
+// spawned into the same pool, and the next serve is the current
+// speed grown by LEVEL_SPEED_GROWTH (capped at MAX_BALL_SPEED).
+function advanceLevel() {
+  level += 1;
+  serveSpeed = Math.min(serveSpeed * LEVEL_SPEED_GROWTH, MAX_BALL_SPEED);
+  spawnLevel();
+  serveBall();
+  syncHud();
+}
+
 // ---- Ball ----
-// A click/tap detaches an attached ball straight up at the serve speed.
+// A click/tap detaches an attached ball straight up at the
+// (level-grown) serve speed.
 function launchBall() {
   if (gameState !== "playing" || !ball.attached) return;
   ball.attached = false;
   ball.vx = 0;
-  ball.vy = -BALL_SERVE_SPEED;
+  ball.vy = -serveSpeed;
 }
 canvas.addEventListener("click", launchBall);
 canvas.addEventListener("touchend", launchBall);
@@ -308,20 +396,26 @@ function updateBall(dt) {
     return;
   }
   var prevBottom = ball.y + BALL_RADIUS;
-  ball.x += ball.vx * dt;
-  ball.y += ball.vy * dt;
-  // Walls: mirror the velocity component, pin to the inner edge.
-  if (ball.x - BALL_RADIUS < 0) {
-    ball.x = BALL_RADIUS;
-    ball.vx = Math.abs(ball.vx);
-  } else if (ball.x + BALL_RADIUS > canvas.width) {
-    ball.x = canvas.width - BALL_RADIUS;
-    ball.vx = -Math.abs(ball.vx);
+  // Integrate in sub-steps of at most one ball radius, so a fast
+  // ball can never skip a brick face inside a clamped frame.
+  var travel = Math.hypot(ball.vx, ball.vy) * dt;
+  var steps = Math.max(1, Math.ceil(travel / BALL_RADIUS));
+  var sdt = dt / steps;
+  var bricked = false;
+  for (var s = 0; s < steps; s += 1) {
+    ball.x += ball.vx * sdt;
+    ball.y += ball.vy * sdt;
+    bounceWalls();
+    if (collideBricks()) {
+      bricked = true;
+      // The gap is narrower than the ball: pinning to a brick face
+      // can land the ball inside the seam neighbour. Drain the
+      // residual overlap now so the frame ends clear of the grid.
+      while (collideBricks()) { /* resolved */ }
+      break;
+    }
   }
-  if (ball.y - BALL_RADIUS < 0) {
-    ball.y = BALL_RADIUS;
-    ball.vy = Math.abs(ball.vy);
-  }
+  if (bricked) return; // reflected by a brick (or re-served on a win)
   // Paddle: sweep test across the top face (no tunnelling even on a
   // clamped frame). The outgoing angle derives from the hit offset;
   // the incoming speed is preserved.
@@ -343,6 +437,46 @@ function updateBall(dt) {
   // Dropped below the bottom edge: one life, fresh serve or game over.
   if (ball.y - BALL_RADIUS > canvas.height) loseLife();
 }
+// Walls: mirror the velocity component, pin to the inner edge. The
+// bottom is open — that is how a life is lost.
+function bounceWalls() {
+  if (ball.x - BALL_RADIUS < 0) {
+    ball.x = BALL_RADIUS;
+    ball.vx = Math.abs(ball.vx);
+  } else if (ball.x + BALL_RADIUS > canvas.width) {
+    ball.x = canvas.width - BALL_RADIUS;
+    ball.vx = -Math.abs(ball.vx);
+  }
+  if (ball.y - BALL_RADIUS < 0) {
+    ball.y = BALL_RADIUS;
+    ball.vy = Math.abs(ball.vy);
+  }
+}
+// Circle vs brick overlap resolved along the shallowest axis; the
+// sign-based flip preserves the incoming speed exactly. One brick
+// per call (the first contact in pool order); the sub-step loop
+// drains follow-on seam overlaps after a hit.
+function collideBricks() {
+  for (var i = 0; i < bricks.length; i += 1) {
+    var b = bricks[i];
+    if (!b.active) continue;
+    var cx = b.x + b.w / 2;
+    var cy = b.y + b.h / 2;
+    var ovx = b.w / 2 + BALL_RADIUS - Math.abs(ball.x - cx);
+    var ovy = b.h / 2 + BALL_RADIUS - Math.abs(ball.y - cy);
+    if (ovx <= 0 || ovy <= 0) continue;
+    if (ovx < ovy) {
+      ball.vx = ball.x < cx ? -Math.abs(ball.vx) : Math.abs(ball.vx);
+      ball.x = ball.x < cx ? b.x - BALL_RADIUS : b.x + b.w + BALL_RADIUS;
+    } else {
+      ball.vy = ball.y < cy ? -Math.abs(ball.vy) : Math.abs(ball.vy);
+      ball.y = ball.y < cy ? b.y - BALL_RADIUS : b.y + b.h + BALL_RADIUS;
+    }
+    destroyBrick(i);
+    return true;
+  }
+  return false;
+}
 
 // ---- Flow ----
 function setScreen(which) {
@@ -361,12 +495,14 @@ function restartRun() {
   setScreen("playing");
   beginRun();
 }
-// One reset path shared by first start and restart: zero live
-// entities by construction (fresh attached serve; no bricks yet).
+// One reset path shared by first start and restart: a fresh
+// attached serve plus a fully live brick grid (spawnLevel below).
 function beginRun() {
   score = 0;
   level = 1;
   lives = PLAYER_LIVES;
+  serveSpeed = BALL_SERVE_SPEED;
+  spawnLevel();
   serveBall();
   renderLives();
   syncHud();
@@ -445,8 +581,17 @@ function draw() {
   ctx.fillStyle = COLOR_BG;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   if (gameState === "start") return;
+  drawBricks();
   drawPaddle();
   drawBall();
+}
+function drawBricks() {
+  for (var i = 0; i < bricks.length; i += 1) {
+    var b = bricks[i];
+    if (!b.active) continue;
+    ctx.fillStyle = BRICK_TIERS[b.tier].color;
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+  }
 }
 function drawPaddle() {
   ctx.fillStyle = COLOR_PADDLE;

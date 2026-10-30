@@ -646,3 +646,113 @@
   a script-layer fact exercised by direct dispatch in tests) and the
   test is renamed to that claim. No code change: the gating question
   was about the claim, not the listeners.
+
+
+## 2026-10-30 — Ticket #22: brick grid, ball collision, scoring, levels, win condition
+
+- **Bricks live in a fixed-size pool allocated once at module scope
+  (`BRICK_ROWS * BRICK_COLS` slots, each `{active, tier, x, y, w, h}`),
+  mutated in place for every level.** Campaign-1 pool precedent
+  (tickets #3/#4): spawning and respawning never allocate, keeping the
+  hot path GC-free, and the ticket's "fixed-size pool (no per-level
+  allocation)" criterion has exactly one structure that can satisfy
+  it. A level spawn is an activation pass over the same slots plus a
+  geometry pass (`layoutBricks` reads the *current* canvas size, so
+  the deferred viewport rescale — which now also re-lays the grid
+  while playing — keeps the grid inside the field). The win check is
+  an O(1) `bricksLeft` counter decremented in the single
+  `destroyBrick` kill path. Alternatives: rebuild the array per level
+  (rejected — allocates, violates the criterion), a live subset
+  array + swap-remove (rejects — moves slots around, which is
+  allocation-free but complicates the tier/row indexing the layout
+  and tests rely on).
+- **Three colour tiers with named per-colour point constants
+  (`COLOR_BRICK_{A,B,C}` / `POINTS_BRICK_{A,B,C}` = 30/20/10), every
+  brick one-hit.** The ticket mandates "destroyed in one hit" for the
+  ball collision, so durability variation is out of scope for this
+  ticket and the colour encodes the point value (PRD section 2:
+  "different colors represent different point values or durability").
+  Per-level layout variation (PRD section 4 "a faster, more
+  challenging brick layout") is the tier rows cycling by one slot per
+  level — `tier = (row + (level - 1)) % 3` — deterministic, one line,
+  and observably different per level (locked in by the layout-differs
+  test). Alternatives: identical layout each level (ignores the PRD
+  word "layout"), random tier shuffles (needs the campaign-1
+  `random` hook for test determinism — more machinery than this
+  ticket asks for), multi-hit durability (contradicts the one-hit
+  criterion; belongs to a later ticket if ever wanted).
+- **Ball integration sub-steps in chunks of at most `BALL_RADIUS`
+  (≤ 8 px) before the brick scan; at most one brick is hit per
+  sub-step (first contact), resolved along the shallowest
+  penetration axis with a sign-based velocity flip.** With the
+  sub-step shorter than a radius, the ball can never skip a brick
+  face even at `MAX_BALL_SPEED` on a clamped 1/30 s frame, and the
+  sign flip preserves the incoming speed exactly — the same
+  speed-preservation contract the wall and paddle bounces already
+  honour. Alternatives: swept segment-vs-rectangle intersection
+  (the campaign-1 laser technique; a circle needs an
+  entry-point/quadratic solve — more code for the same guarantee at
+  10× fewer bodies than 32 lasers), per-frame overlap band around the
+  ball (tunnels on fast clamped frames, which is exactly the
+  criterion being locked in).
+- **Progression state is a runtime `serveSpeed` variable, reset to
+  `BALL_SERVE_SPEED` in `beginRun`, grown by
+  `serveSpeed * LEVEL_SPEED_GROWTH` (capped at `MAX_BALL_SPEED`) in
+  `advanceLevel`.** The level-2 serve is then *exactly*
+  `BALL_SERVE_SPEED * LEVEL_SPEED_GROWTH` (one multiplication, same
+  operand order the test uses — the "exact, via vm query" criterion
+  holds bit-for-bit). `MAX_BALL_SPEED = 1500` is what makes "the
+  maximum per-level speed" well-defined for the tunnelling criterion:
+  growth reaches the cap at level 10 (480 × 1.15⁹ ≈ 1688) and the
+  fixture runs at the cap. A cap also keeps unbounded play playable
+  (a 1.15ⁿ serve would exceed the paddle's keyboard traversal well
+  before a human could react). Alternatives: no cap (the "maximum
+  per-level speed" would be level-dependent and the criterion's
+  fixture unanchored), scaling `BALL_SERVE_SPEED` itself (mutates
+  the level-1 constant the #21 suite asserts on restart).
+- **A level win is triggered from inside the single `destroyBrick`
+  kill path when `bricksLeft` reaches 0: `advanceLevel` raises the
+  level by exactly 1, spawns the next layout, and re-serves through
+  the shared `serveBall()` (fresh attached ball at rest on the
+  paddle, #21's single park/serve path).** Physics-driven kills and
+  console-style kills (`destroyBrick(i)` from the vm/tests) therefore
+  share the whole scoring-and-winning pipeline, and "level +=
+  exactly 1" has one code path to break. The post-win frame skips the
+  paddle/drop checks (early return), since the ball was just
+  reflected — or re-served and is attached — so it cannot legally
+  meet the paddle or the bottom edge in the same instant. Alternative:
+  a per-frame win scan (`bricks.every(inactive)`) (rejected — O(n)
+  per frame for what the counter answers for free).
+- **The paddle suite's 600-frame wall-bounce soak now deactivates the
+  brick field in its fixture and moves its seed x 300 → 340.**
+  Campaign-1 precedent for adapting old suites when a new entity
+  class joins the field (ticket #6's `suppressSpawns`). The reseed
+  was forced, not cosmetic: #22's sub-stepped integration conserves
+  the top-wall overshoot instead of discarding it, which phase-shifts
+  the bounce by up to a radius; under the old seed the run ends 3.7
+  px short of the right wall (measured 1908.33 vs 1912). The new
+  seed keeps both mandated reflections (top and right) with margin.
+  Alternatives: keep the old seed and let the soak lose its
+  right-wall assertion (weakens the locked-in behaviour), or change
+  the sub-step wall handling to discard overshoot (defeats the point
+  of sub-stepping).
+
+## 2026-10-30 — Ticket #22 review round 2: sub-step overlap drain
+
+- **After a brick hit, the sub-step loop now drains residual overlaps —
+  `while (collideBricks()) {}` before resuming/breaking — so the frame
+  always ends with the ball clear of every live brick.** Root cause:
+  `BRICK_GAP` (6 px) is narrower than the ball (16 px diameter), so the
+  x-resolution pin (ball pushed to `face ± BALL_RADIUS`) of a row-centre
+  side hit can land the ball inside the seam neighbour; the old
+  single-shot `if (collideBricks()) break` then left that overlap to be
+  popped a frame early. The drain is structurally terminating: each
+  `true` destroys exactly one brick, so at most `bricks.length`
+  iterations, and a draining win (last brick) is safe because the
+  re-served ball rides the paddle, far from the fresh grid. Locked by
+  the row-centre side-hit regression test in the grid suite.
+  Alternatives: shrink the push-out to the seam midpoint (rejected —
+  fudges the physics and still leaks partial overlaps), or widen the
+  drain to a full pre-flight check before every sub-step (rejected —
+  O(n) per sub-step with no behaviour gain; overlaps only ever appear
+  from our own push-out).
