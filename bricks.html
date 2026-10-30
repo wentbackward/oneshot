@@ -154,14 +154,14 @@ function loadHighScore() {
   try {
     var value = parseInt(localStorage.getItem(HIGH_SCORE_KEY), 10);
     return Number.isFinite(value) && value > 0 ? value : 0;
-  } catch (err) {
+  } catch {
     return 0; // storage unavailable or blocked: play on
   }
 }
 function saveHighScore() {
   try {
     localStorage.setItem(HIGH_SCORE_KEY, String(highScore));
-  } catch (err) {
+  } catch {
     // Non-persistent storage (e.g. blocked): the session still works.
   }
 }
@@ -203,17 +203,19 @@ function startGame() {
 btnStart.addEventListener("click", startGame);
 
 // ---- Frame loop ----
+// Per-frame order: resize -> update(dt) -> syncScore -> draw, so a
+// record overtaken inside update persists on the same frame it happens.
 function frame(time) {
   var dt = lastFrameTime === null
     ? 0
-    : Math.min((time - lastFrameTime) / 1000, MAX_FRAME_SECONDS);
+    : Math.min(Math.max(0, (time - lastFrameTime) / 1000), MAX_FRAME_SECONDS);
   lastFrameTime = time;
   if (resizePending) {
     resizePending = false;
     resizeCanvas();
   }
-  syncScore();
   if (gameState === "playing") update(dt);
+  syncScore();
   draw();
   requestAnimationFrame(frame);
 }
