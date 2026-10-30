@@ -144,18 +144,20 @@
 // bounces (position-dependent angle, speed-preserving), a fixed-pool
 // brick grid the ball breaks for colour-valued points, level
 // progression on a cleared board (faster serve per level, capped),
-// and the lose-a-life / game-over / restart flow. Power-ups and
-// audio are later campaign-2 tickets.
+// and the lose-a-life / game-over / restart flow, and the power-up
+// drop / catch framework with the expand paddle effect. Audio is a
+// later campaign-2 ticket.
 // ================================================================
 
 // ---- Tunables (var: addressable as globals, e.g. from the console) ----
 var CANVAS_SCALE = 2;             // canvas pixels per viewport pixel
 var UI_FONT = "monospace";        // retro face for canvas UI text
 var MAX_FRAME_SECONDS = 1 / 30;   // dt clamp: no teleports after tab switches
+var random = Math.random;          // mutable hook: test suites pin it for determinism
 var HIGH_SCORE_KEY = "brickbreaker.highScore";
 var PLAYER_LIVES = 3;             // lives per run (PRD section 2 loss rule)
 // Paddle (internal canvas px, so values scale with CANVAS_SCALE)
-var BASE_PADDLE_W = 120;
+var BASE_PADDLE_W = 120;           // resting width; the runtime width widens on expand
 var PADDLE_HEIGHT = 14;
 var PADDLE_BOTTOM_GAP = 24;       // clear space between paddle and bottom edge
 var PADDLE_SPEED = 720;           // keyboard travel speed, px/s
@@ -185,6 +187,20 @@ var BRICK_TIERS = [
   { color: COLOR_BRICK_B, points: POINTS_BRICK_B },
   { color: COLOR_BRICK_C, points: POINTS_BRICK_C }
 ];
+// Power-ups (PRD section 4): capsules released by destroyed bricks
+var POWERUP_DROP_RATE = 0.25;      // chance per destroyed brick, rolled via `random`
+var CAPSULE_FALL_SPEED = 200;      // descent speed, px/s
+var CAPSULE_W = 24;                // capsule footprint, internal px
+var CAPSULE_H = 14;
+var CAPSULE_POOL_SIZE = 4;         // fixed pre-allocated pool of concurrent capsules
+// Enumerated capsule kinds; later effects add a constant, a pool
+// entry here, and a case in applyCapsule() — the catch handler itself
+// never changes.
+var KIND_EXPAND = 0;
+var CAPSULE_KINDS = [KIND_EXPAND];
+var COLOR_CAPSULE_EXPAND = "#ffd23f";
+var PADDLE_EXPAND_FACTOR = 1.6;         // widened width = BASE_PADDLE_W * factor
+var PADDLE_EXPAND_DURATION_S = 6;       // simulated seconds of widen
 
 // ---- Palette (the page accent lives in the CSS --accent property;
 // a canvas-drawn mirror is added with the canvas-text gameplay tickets) ----
@@ -216,7 +232,18 @@ var lastFrameTime = null;
 // Paddle position is its centre x; the top-edge y derives from the
 // (resizable) canvas height so a relayout never strands the paddle.
 var paddle = { x: 0 };
-// One ball per run (a pool arrives with #25's extra-ball power-up).
+// Runtime paddle width: widened while an expand capsule's effect is
+// live, otherwise the base width.
+var paddleW = BASE_PADDLE_W;
+var simTime = 0;                     // simulated seconds; advances only while playing
+var expandUntil = -1;                // simTime at which the current widen expires
+// Capsule pool: allocated once, reused in place for every drop, so a
+// drop never allocates.
+var capsules = [];
+for (var i = 0; i < CAPSULE_POOL_SIZE; i += 1) {
+  capsules.push({ active: false, kind: KIND_EXPAND, x: 0, y: 0 });
+}
+// One ball per run (a pool arrives with #26's extra-ball power-up).
 var ball = { x: 0, y: 0, vx: 0, vy: 0, attached: true };
 // Brick pool: allocated once at this size and reused in place for
 // every level, so the grid never allocates on a level spawn.
@@ -278,7 +305,7 @@ function paddleTop() {
   return canvas.height - PADDLE_BOTTOM_GAP - PADDLE_HEIGHT;
 }
 function clampPaddle() {
-  var half = BASE_PADDLE_W / 2;
+  var half = paddleW / 2;
   if (paddle.x < half) paddle.x = half;
   if (paddle.x > canvas.width - half) paddle.x = canvas.width - half;
 }
@@ -362,6 +389,7 @@ function destroyBrick(index) {
   bricksLeft -= 1;
   score += BRICK_TIERS[b.tier].points;
   syncHud();
+  maybeDropCapsule(b.x + b.w / 2, b.y + b.h);
   if (bricksLeft === 0) advanceLevel();
 }
 // Cleared board: the level rises by exactly 1, the next layout is
@@ -373,6 +401,50 @@ function advanceLevel() {
   spawnLevel();
   serveBall();
   syncHud();
+}
+
+// ---- Power-ups (drop / fall / catch, ticket #25) ----
+// A destroyed brick rolls its drop through the mutable `random` hook;
+// a hit takes the first free slot of the fixed pool, so a drop never
+// allocates and quietly vanishes when the pool is full.
+function maybeDropCapsule(x, y) {
+  if (random() >= POWERUP_DROP_RATE) return;
+  for (var i = 0; i < capsules.length; i += 1) {
+    var c = capsules[i];
+    if (c.active) continue;
+    c.active = true;
+    c.kind = CAPSULE_KINDS[Math.floor(random() * CAPSULE_KINDS.length)];
+    c.x = x;
+    c.y = y;
+    return;
+  }
+}
+// One dispatch per kind; later effects slot in here. Catching expand
+// (re)arms the widen: the expiry is set to now + the full duration,
+// never added to whatever the previous arm had left.
+function applyCapsule(kind) {
+  if (kind === KIND_EXPAND) {
+    paddleW = BASE_PADDLE_W * PADDLE_EXPAND_FACTOR;
+    expandUntil = simTime + PADDLE_EXPAND_DURATION_S;
+    clampPaddle();
+  }
+}
+function updatePowerups(dt) {
+  if (paddleW !== BASE_PADDLE_W && simTime >= expandUntil) paddleW = BASE_PADDLE_W;
+  var pt = paddleTop();
+  var halfSpan = paddleW / 2 + CAPSULE_W / 2;
+  for (var i = 0; i < capsules.length; i += 1) {
+    var c = capsules[i];
+    if (!c.active) continue;
+    c.y += CAPSULE_FALL_SPEED * dt;
+    var overPaddle = c.y + CAPSULE_H >= pt && c.y <= pt + PADDLE_HEIGHT;
+    if (overPaddle && Math.abs(c.x - paddle.x) <= halfSpan) {
+      c.active = false; // caught: consumed by its effect
+      applyCapsule(c.kind);
+    } else if (c.y - CAPSULE_H > canvas.height) {
+      c.active = false; // missed: fell past the bottom edge
+    }
+  }
 }
 
 // ---- Ball ----
@@ -423,9 +495,9 @@ function updateBall(dt) {
     ball.vy > 0 &&
     prevBottom <= pt &&
     ball.y + BALL_RADIUS >= pt &&
-    Math.abs(ball.x - paddle.x) <= BASE_PADDLE_W / 2 + BALL_RADIUS
+    Math.abs(ball.x - paddle.x) <= paddleW / 2 + BALL_RADIUS
   ) {
-    var rel = (ball.x - paddle.x) / (BASE_PADDLE_W / 2);
+    var rel = (ball.x - paddle.x) / (paddleW / 2);
     if (rel > 1) rel = 1;
     else if (rel < -1) rel = -1;
     var speed = Math.hypot(ball.vx, ball.vy);
@@ -496,12 +568,17 @@ function restartRun() {
   beginRun();
 }
 // One reset path shared by first start and restart: a fresh
-// attached serve plus a fully live brick grid (spawnLevel below).
+// attached serve, a fully live brick grid (spawnLevel below), and a
+// drained power-up state (no capsule or widen carries over).
 function beginRun() {
   score = 0;
   level = 1;
   lives = PLAYER_LIVES;
   serveSpeed = BALL_SERVE_SPEED;
+  simTime = 0;
+  paddleW = BASE_PADDLE_W;
+  expandUntil = -1;
+  for (var i = 0; i < capsules.length; i += 1) capsules[i].active = false;
   spawnLevel();
   serveBall();
   renderLives();
@@ -574,14 +651,17 @@ function syncScore() {
   }
 }
 function update(dt) {
+  simTime += dt;
   updatePaddle(dt);
   updateBall(dt);
+  updatePowerups(dt);
 }
 function draw() {
   ctx.fillStyle = COLOR_BG;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   if (gameState === "start") return;
   drawBricks();
+  drawPowerups();
   drawPaddle();
   drawBall();
 }
@@ -593,9 +673,17 @@ function drawBricks() {
     ctx.fillRect(b.x, b.y, b.w, b.h);
   }
 }
+function drawPowerups() {
+  for (var i = 0; i < capsules.length; i += 1) {
+    var c = capsules[i];
+    if (!c.active) continue;
+    ctx.fillStyle = c.kind === KIND_EXPAND ? COLOR_CAPSULE_EXPAND : COLOR_BALL;
+    ctx.fillRect(c.x - CAPSULE_W / 2, c.y, CAPSULE_W, CAPSULE_H);
+  }
+}
 function drawPaddle() {
   ctx.fillStyle = COLOR_PADDLE;
-  ctx.fillRect(paddle.x - BASE_PADDLE_W / 2, paddleTop(), BASE_PADDLE_W, PADDLE_HEIGHT);
+  ctx.fillRect(paddle.x - paddleW / 2, paddleTop(), paddleW, PADDLE_HEIGHT);
 }
 function drawBall() {
   ctx.fillStyle = COLOR_BALL;

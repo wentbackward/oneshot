@@ -756,3 +756,44 @@
   drain to a full pre-flight check before every sub-step (rejected —
   O(n) per sub-step with no behaviour gain; overlaps only ever appear
   from our own push-out).
+
+## 2026-10-30 — Ticket #25: power-up drops with the expand paddle
+
+- **The paddle now has a runtime width `paddleW` alongside the new
+  base constant `BASE_PADDLE_W`; every consumer (clamp, ball-bounce
+  span and angle, draw) reads the runtime width, and
+  `PADDLE_WIDTH` was renamed to `BASE_PADDLE_W`** (mechanical
+  update in the paddle suite). The ticket names the base width
+  `BASE_PADDLE_W`, so the old constant became the base and the
+  widening became state. Alternatives: keep `PADDLE_WIDTH` and add a
+  parallel `BASE_PADDLE_W` alias (rejected — two names for one
+  value), or make the widen a per-frame draw-only illusion (rejected
+  — the collision span must match what is rendered).
+- **Simulated-time clock `simTime` advances only while "playing",
+  and the widen expires at `simTime >= expandUntil`.** The effect
+  duration is simulation time per the ticket (paused/tab-hidden time
+  must not consume it); the rAF loop already clamps `dt`, so the
+  expiry is exact to one frame. Alternatives: wall-clock timestamps
+  (rejected — violates "simulation time" and is unfreezeable in the
+  test harness).
+- **Recatching Expand assigns `expandUntil = simTime +
+  PADDLE_EXPAND_DURATION_S` (now + full duration), never adds.**
+  Straight assignment implements the ticket's "extended, not
+  additive" wording; locked by the re-arm test that asserts
+  `expandUntil === t1 + D` exactly.
+- **Capsules come from a fixed 4-slot pool pre-allocated at boot; a
+  drop with no free slot is silently dropped, and a drop rolls its
+  kind as `CAPSULE_KINDS[floor(random() * len)]`.** The pool length
+  is constant across the run (the ticket's no-allocation criterion)
+  and 4 concurrent capsules is generous for a single-column fall
+  stream. Silent overflow drop keeps `destroyBrick` allocation-free
+  and branch-simple. Alternatives: grow the pool (violates the
+  criterion), or recycle the lowest capsule (arbitrary displacement
+  of a visible object).
+- **Catch detection is a plain rect-overlap of the capsule and the
+  paddle band per frame (no sweep).** At `CAPSULE_FALL_SPEED`
+  (200 px/s) the clamped-frame travel (≤ 6.7 px) is far under the
+  capture band height (`CAPSULE_H + PADDLE_HEIGHT`), so tunnelling is
+  structurally impossible at these values. Alternatives: the
+  ball-style sweep test (rejected — no tunneling risk at capsule
+  speeds).

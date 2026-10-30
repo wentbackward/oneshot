@@ -329,8 +329,10 @@ check("the widen lasts exactly PADDLE_EXPAND_DURATION_S of simulation time, then
   while (g.simTime() < expiry && guard < 2000) {
     g.tick(1);
     guard += 1;
-    assert(g.paddleW() === g.baseW() * g.q("PADDLE_EXPAND_FACTOR"),
-      `the paddle must stay widened before its expiry (sim ${g.simTime()} < ${expiry})`);
+    if (g.simTime() < expiry) {
+      assert(g.paddleW() === g.baseW() * g.q("PADDLE_EXPAND_FACTOR"),
+        `the paddle must stay widened before its expiry (sim ${g.simTime()} < ${expiry})`);
+    }
   }
   assert(g.simTime() >= expiry, `setup: the clock must reach the expiry, sim=${g.simTime()}`);
   assert(g.paddleW() === g.baseW(),
@@ -375,8 +377,10 @@ check("a second expand caught while active extends the expiry to now + full dura
   while (g.simTime() < exp2 && guard < 2000) {
     g.tick(1);
     guard += 1;
-    assert(g.paddleW() === widened,
-      `the paddle must stay widened before the re-armed expiry (sim ${g.simTime()} < ${exp2})`);
+    if (g.simTime() < exp2) {
+      assert(g.paddleW() === widened,
+        `the paddle must stay widened before the re-armed expiry (sim ${g.simTime()} < ${exp2})`);
+    }
   }
   assert(g.paddleW() === g.baseW(),
     `after the re-armed expiry the paddle must restore to the base width, got ${g.paddleW()}`);
