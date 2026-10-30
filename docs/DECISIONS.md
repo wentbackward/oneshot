@@ -546,22 +546,28 @@
   predictable baseline and makes "launched upward at the named serve speed" exactly
   testable. Alternatives: small random angle (untestable, worse serve feel),
   paddle-offset serve (that mechanic is what the paddle bounce already does).
-- **Pointer tracking is not state-gated: `mousemove`/`touchmove` set the paddle x in any
-  state; launch is gated to `"playing"` and to `attached`.** Hovering before Start lets
-  the player aim the serve position — free, since no sim runs — and the `touchmove`
+- **Pointer listeners are state-ungated: `mousemove`/`touchmove` set the
+  paddle x in any state; launch is gated to `"playing"` and to `attached`.**
+  In a real browser the full-viewport start overlay occludes the canvas, so
+  no pointer input reaches the listeners before start — the ungating is a
+  script-layer property (which the tests exercise by dispatching events
+  directly), not a serve-aiming feature. The `touchmove`
   handler passes `{ passive: false }` so its `preventDefault` keeps the page from
   scrolling mid-drag. Keyboard movement stays confined to `update`, which the loop only
   calls in `"playing"`, so "stops on release" falls out with no extra state; a window
-  `blur` clears both held-key flags so a key released off-window cannot leave the paddle
-  gliding. Alternatives: gate the pointer to playing (loses serve-aiming), buffer pointer
+  `blur` clears both held-key sets so a key released off-window cannot leave the paddle
+  gliding. Alternatives: gate the pointer to playing (rejected — invisible in
+  a real browser, since the overlay occludes anyway, and it adds state), buffer pointer
   events until play (extra state, no player-visible benefit).
 - **Restart and first start share one `beginRun()` reset path (score, level, lives,
   serve, icons, HUD); `restartRun` additionally requires `gameState === "gameover"`, so a
   stray `btn-restart` click mid-run is a no-op.** "No live ball or bricks from the
   previous run" is read as: after restart the only ball is the fresh *attached* serve,
   at rest on the paddle centre — nothing in flight carries over (no bricks exist yet).
-  At game over the dropped ball is parked (attached, zero velocity) rather than deleted,
-  so the frozen field behind the overlay draws cleanly. Alternatives: a separate restart
+  At game over the ball is re-served through the same `serveBall()`
+  as after each lost life (attached, at rest on the paddle centre) rather
+  than deleted, so the frozen field behind the overlay shows the ball
+  riding the paddle. Alternatives: a separate restart
   reset function (drift risk — the #8 single-reset-path precedent argues against),
   deleting the ball object (needs recreation machinery for no behaviour).
 - **`#lives` renders one small paddle-bar `<span class="life-icon">` per remaining life,
@@ -617,3 +623,26 @@
   (review round 2, item 1).** The #21 rewrite ("keeps one colour doing the
   entire UI") overclaimed: no canvas UI text exists yet, and `COLOR_PADDLE`
   is an entity colour, not a UI mirror.
+
+## 2026-10-30 — Ticket #21 review round 3: re-serve at game over, honest pointer-ungating claim
+
+- **`enterGameOver` now calls `serveBall()` instead of hand-writing the
+  parked-ball fields (review round 3, item 1).** The old parking set
+  `attached`/zero velocity but left the ball at its stale drop
+  coordinates — below the bottom edge, i.e. off-screen — so the comment
+  claiming the frozen field "draws cleanly" pointed at a ball the player
+  could not see. Re-serving through the shared `serveBall()` puts the
+  frozen field behind the overlay in exactly the canonical rest pose
+  (ball on the paddle centre) and reuses the single park/serve path.
+  Alternative: keep manual parking and add two coordinate assignments
+  (duplicates `serveBall`'s contract; the round-1 "stale parked-ball
+  coordinates" note is retired as behaviour, superseded by this fix).
+- **The pointer-ungating bullet is reworded to its honest claim and the
+  matching test renamed (review round 3, item 2).** The old bullet sold
+  "hovering before Start aims the serve position", but the full-viewport
+  start overlay occludes the canvas in a real browser, so pre-start
+  pointer input never reaches the handlers and no serve aiming exists.
+  The bullet now states the true property (listeners are state-ungated,
+  a script-layer fact exercised by direct dispatch in tests) and the
+  test is renamed to that claim. No code change: the gating question
+  was about the claim, not the listeners.
