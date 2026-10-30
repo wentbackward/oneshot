@@ -256,7 +256,8 @@ check("hazard flown through during the INVULN_MS window does not decrement HP", 
   g.clearField();
   suppressSpawns(g);
   placeAst(g, HIT_X, HIT_Y);
-  g.tick(); // hit #1 at t ~= 16.7 ms; invulnerable until t ~= 1516.7 ms
+  g.tick(); // first frame runs with dt = 0, so the hit lands at gameTime = 0;
+            // the ship is then invulnerable for INVULN_MS of sim time
   assertClose(g.hp(), 2, 0, "first impact drops hp to 2");
   placeAst(g, 480, 300 + 25); // second hazard, overlapping during the window
   g.tick(45); // t ~= 766 ms: deep inside the 1500 ms window
@@ -323,6 +324,24 @@ check("at HP 0 the ship is removed from the scene and a static GAME OVER text is
   g.tick(30);
   const gameOverCount = g.ctxTexts.filter((t) => t.includes("GAME OVER")).length;
   assert(gameOverCount === 31, "GAME OVER must be drawn statically every frame (one text per frame)");
+});
+
+// ================================================================
+// #6-2 (should-fix): the rock/drone hull-impact block is defined once
+// (a single named helper) so the hit pipeline can never diverge
+// ================================================================
+check("the hull-impact pipeline is defined once in a single named helper (applyHullImpact)", () => {
+  const g = boot();
+  assert(g.q("typeof applyHullImpact") === "function",
+    "applyHullImpact must be the single named hull-impact helper");
+  // Behavioural spot-check that the shared pipeline still runs: one rock
+  // overlap costs exactly 1 hp through it.
+  g.clearField();
+  suppressSpawns(g);
+  g.tick();
+  placeAst(g, HIT_X, HIT_Y);
+  g.tick();
+  assertClose(g.hp(), 2, 0, "one overlap through the shared pipeline must cost exactly 1 hp");
 });
 
 // ---------- summary ----------

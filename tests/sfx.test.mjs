@@ -259,6 +259,15 @@ function masterOf(g) {
 const shoots = (rec) => rec.nodes.filter((n) => n.kind === "osc");
 const bursts = (rec) => rec.nodes.filter((n) => n.kind === "buffersource");
 
+// For each scheduled noise burst, its envelope gain (the node that
+// feeds the master bus). Declared above its first use below.
+function burstEndpoints(g) {
+  return bursts(g.rec).map((src) => {
+    const filter = src.connections[0];
+    return filter.connections[0];
+  });
+}
+
 // A noise burst must be: the baked noise buffer -> lowpass filter at
 // the preset cutoff -> envelope gain at the preset level and decay
 // -> the single master gain. Returns the burst's envelope gain node.
@@ -294,6 +303,21 @@ check("index.html references AudioContext and ships no audio files or media load
   const loaders = html.match(/new Audio\(|\.mp3|\.wav|\.ogg|\.m4a/gi) ?? [];
   assert(loaders.length === 0,
     `no audio files or loaders may appear in index.html, found ${JSON.stringify(loaders)}`);
+});
+
+// #9-1 (should-fix): the noise buffer is baked through the injectable
+// `var random`, like every other randomized value in the game
+check("the baked noise buffer comes from the injectable random, not raw Math.random", () => {
+  const g = boot();
+  g.q("random = () => 0.25"); // constant source: every baked sample must be 0.25*2-1 = -0.5
+  g.press("Enter"); // first gesture: context creation + buffer bake
+  const buf = g.rec.buffers[0];
+  assert(buf, "the first gesture must bake the noise buffer");
+  assert(buf.data.length > 0, "the baked buffer must not be empty");
+  for (const v of buf.data) {
+    assert(v === 0.25 * 2 - 1,
+      `every baked sample must come from random() (constant 0.25 -> -0.5), got ${v} — raw Math.random?`);
+  }
 });
 
 // ================================================================
@@ -336,7 +360,7 @@ check("a suspended context is resumed on the next keydown", () => {
 
 // ================================================================
 // Robustness: environments without Web Audio degrade to silence
-// (also the reality of the other five vm suites)
+// (also the reality of the other six vm suites)
 // ================================================================
 check("with no AudioContext available the game boots, fires and takes damage without error", () => {
   const g = boot({ audio: false });
@@ -420,15 +444,6 @@ check("MASTER_GAIN = 0 silences every SFX: shoot and all three noise presets sti
       "no SFX may bypass the master gain node — silence at 0 must mean total silence");
   }
 });
-
-// For each scheduled noise burst, its envelope gain (the node that
-// feeds the master bus).
-function burstEndpoints(g) {
-  return bursts(g.rec).map((src) => {
-    const filter = src.connections[0];
-    return filter.connections[0];
-  });
-}
 
 // ================================================================
 // Criterion 2 (asteroid kill): noise-burst based, asteroid preset

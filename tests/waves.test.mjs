@@ -135,15 +135,18 @@ function boot(width = 960, height = 600) {
       "asteroids.slots.forEach((a) => (a.active = false)); " +
         "drones.slots.forEach((d) => (d.active = false))"
     ),
-    // Destroy all but the last `keep` live hazards, then park the
-    // survivors: zeroing their drift guarantees they can never wander
-    // into the parked ship and die for the test's sake.
+    // Destroy all but the last `keep` live hazards, then pin the
+    // survivors so they can never wander into the parked ship and die
+    // for the test's sake: zeroing vx/vy pins asteroids, but drone
+    // motion is heading x DRONE_SPEED — pinning a drone requires
+    // DRONE_SPEED = 0 (position/heading alone would just re-steer).
     keepLast: (keep) => q(`(() => {
       const ast = asteroids.slots.filter((a) => a.active);
       const dro = drones.slots.filter((d) => d.active);
       const all = ast.concat(dro);
       all.slice(${keep}).forEach((h) => (h.active = false));
       all.slice(0, ${keep}).forEach((h) => { h.vx = 0; h.vy = 0; });
+      if (dro.length > 0) DRONE_SPEED = 0; // pin drone survivors (see above)
     })()`),
   };
 }
