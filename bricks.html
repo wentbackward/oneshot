@@ -264,7 +264,9 @@ var balls = [];
 for (var i = 0; i < MAX_BALLS; i += 1) {
   balls.push({ active: false, attached: false, attachOff: 0, x: 0, y: 0, vx: 0, vy: 0 });
 }
-var stickyUntil = -1;              // simTime at which the sticky catch expires
+var stickyUntil = -1;              // simTime at which the sticky catch expires;
+                                   // absolute clock, so a mid-run re-serve
+                                   // inside the window leaves it armed
 // Brick pool: allocated once at this size and reused in place for
 // every level, so the grid never allocates on a level spawn.
 var bricks = [];
@@ -498,10 +500,10 @@ function spawnExtraBall() {
   free.vx = 0;
   free.vy = -serveSpeed;
 }
-// A click/tap launches every attached ball at the (level-grown)
+// A click/tap launches EVERY attached ball at the (level-grown)
 // serve speed, each inheriting the position-dependent paddle-angle
 // logic for its own offset from the paddle centre.
-function launchBall() {
+function launchAttachedBalls() {
   if (gameState !== "playing") return;
   for (var i = 0; i < balls.length; i += 1) {
     var b = balls[i];
@@ -514,8 +516,8 @@ function launchBall() {
     b.vy = -serveSpeed * Math.cos(rel * MAX_PADDLE_BOUNCE_ANGLE);
   }
 }
-canvas.addEventListener("click", launchBall);
-canvas.addEventListener("touchend", launchBall);
+canvas.addEventListener("click", launchAttachedBalls);
+canvas.addEventListener("touchend", launchAttachedBalls);
 
 function updateBalls(dt) {
   var pt = paddleTop();
@@ -670,8 +672,12 @@ btnRestart.addEventListener("click", restartRun);
 
 // ---- Lives / game over ----
 // A fresh serve always parks ONE resting ball at the paddle centre:
-// every slot is drained and slot 0 rides the paddle, so neither an
-// extra ball nor a sticky arm ever carries across the serve.
+// every slot is drained and slot 0 rides the paddle, so an extra ball
+// never carries across a serve. The sticky WINDOW does: it is a fixed
+// sim-time span anchored at the moment the capsule was caught, and a serve does
+// not disarm it — a window still armed when the serve lands stays
+// armed until stickyUntil (the run-level reset in beginRun() is the
+// one place sticky state is cleared).
 function serveBall() {
   for (var i = 0; i < balls.length; i += 1) {
     balls[i].active = false;
