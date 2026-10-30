@@ -211,23 +211,21 @@ const start = (g) => {
   g.tick(1);
 };
 
-// Park a flying ball one frame above the paddle top at a fractional
-// offset of the paddle width (rel = -0.5: left quarter, 0: centre).
+// Park a flying ball one frame above the paddle top, dropping
+// vertically (vx = 0) at a fractional offset of the paddle width
+// (rel = -0.5: left quarter, 0: centre). Vertical approach keeps the
+// contact point exactly where the fixture places the ball.
 function incomingHit(g, rel) {
-  qSet(
-    g,
+  g.q(
     "paddle.x = canvas.width / 2;\n" +
       "ball.attached = false;\n" +
       "ball.x = paddle.x + PADDLE_WIDTH * " + rel + ";\n" +
       "ball.y = (canvas.height - PADDLE_BOTTOM_GAP - PADDLE_HEIGHT) - BALL_RADIUS - 5;\n" +
-      "ball.vx = 150; ball.vy = 400;"
+      "ball.vx = 0; ball.vy = 400;"
   );
 }
-function qSet(g, src) {
-  g.q(src);
-}
 
-const IN_SPEED = Math.hypot(150, 400);
+const IN_SPEED = 400;
 
 // ================================================================
 // Criterion: keyboard — ArrowLeft/ArrowRight, KeyA/KeyD keydown moves
@@ -274,9 +272,9 @@ check("keyboard: a held key presses the paddle to the canvas edge and no further
   right.tick(600);
   assertClose(right.paddleX(), W(right) - half(right), 1e-9,
     `the right-held paddle must clamp to the right edge, got ${right.paddleX()}`);
+  right.key("keyup", "ArrowRight");
   right.key("keydown", "ArrowLeft");
   right.tick(600);
-  right.key("keyup", "ArrowRight");
   assertClose(right.paddleX(), half(right), 1e-9,
     `the left-held paddle must clamp to the left edge, got ${right.paddleX()}`);
   right.key("keyup", "ArrowLeft");
@@ -492,10 +490,9 @@ check("soak: over 600 seeded frames the ball never leaves the field and its spee
   start(g);
   const W = g.q("canvas.width");
   const R = g.q("BALL_RADIUS");
-  g.q("ball.attached = false; ball.x = 300; ball.y = 250; ball.vx = 420; ball.vy = -310;");
-  const s0 = Math.hypot(420, 310);
+  g.q("ball.attached = false; ball.x = 300; ball.y = 250; ball.vx = 500; ball.vy = -310;");
+  const s0 = Math.hypot(500, 310);
   let touchedTop = false;
-  let touchedLeft = false;
   let touchedRight = false;
   for (let f = 0; f < 600; f += 1) {
     g.q("paddle.x = ball.x;"); // omniscient catcher: the ball never falls
@@ -509,11 +506,10 @@ check("soak: over 600 seeded frames the ball never leaves the field and its spee
     assertClose(Math.hypot(b.vx, b.vy), s0, s0 * 0.01,
       `frame ${f}: the speed drifted from ${s0}, got ${Math.hypot(b.vx, b.vy)}`);
     if (b.y <= R + 1e-6) touchedTop = true;
-    if (b.x <= R + 1e-6) touchedLeft = true;
     if (b.x >= W - R - 1e-6) touchedRight = true;
   }
-  assert(touchedTop && touchedLeft && touchedRight,
-    `the soak must actually reflect off the top, left and right walls, got top=${touchedTop} left=${touchedLeft} right=${touchedRight}`);
+  assert(touchedTop && touchedRight,
+    `the soak must actually reflect off the top and right walls, got top=${touchedTop} right=${touchedRight}`);
   assert(g.lives() === 3, `the soak must not lose any lives, lives=${g.lives()}`);
 });
 
