@@ -921,3 +921,105 @@
   span that intentionally survives mid-run re-serves; only `beginRun()`
   clears it. No behaviour change. Alternatives: change the behaviour to
   match the old wording (review kept the behaviour instead).
+
+## 2026-10-30 — Ticket #27: synthesized Web Audio SFX on a master gain bus
+
+- **The campaign-1 audio architecture (ticket #9) is mirrored exactly,
+  including the `MASTER_GAIN` semantics.** `MASTER_GAIN` (mutable `var`,
+  default 0.2) is the **bus level**, not a per-envelope scalar:
+  `MASTER_BUS.gain.value = MASTER_GAIN` is applied at init and re-read on
+  **every** `scheduleSound()` call ("live console retunes apply"), so
+  `MASTER_GAIN = 0` zeroes the single GainNode wired to `destination`
+  from the next scheduled sound onward — which is how "every
+  subsequently scheduled envelope terminates at 0" is asserted on the
+  stub graph (bus gain 0 × any envelope = 0). The brick suite's tests
+  therefore assert the bus value, not per-envelope zeros. Alternatives:
+  a peak-scaling `MASTER_GAIN` (diverges from the campaign-1 precedent
+  and its testable semantics; rejected) or an immutable bus with a
+  separate mute flag (extra state the ticket does not ask for).
+- **Four named recipes, one per required event, on the shared
+  primitives:** paddle bounce — sine 220 Hz / 0.05 s; brick break —
+  filtered noise, 900 Hz lowpass / 0.09 s (the campaign-1 noise-burst
+  pattern: a pre-baked white-noise buffer replayed through a lowpass
+  cut at the recipe's `freq`, since a noise waveform has no fundamental
+  to set directly); power-up catch — square 660 Hz / 0.12 s (caught by
+  kind — the catch blip is kind-independent); game over — sine
+  110 Hz / 0.50 s, the longest of the four. Spec-silent values picked
+  so the four sounds sit in distinct pitch/texture bands, as in
+  campaign 1. Alternatives: per-recipe `LEVEL` constants (campaign 1
+  differentiates its presets by level; rejected here — the ticket names
+  only wave/frequency/duration per recipe, so one shared `SFX_PEAK`
+  is the smaller surface) or a fourth texture for the catch (nothing
+  to gain over the two proven primitives).
+- **The AudioContext is built only on the first user gesture, exactly
+  once:** `ensureAudio()` guards with `if (audioCtx) { resume-if-suspended; return; }`
+  and is hooked into the four gesture paths — `onKeyDown` (any key,
+  matching campaign 1's "any key counts"), `launchAttachedBalls`
+  (canvas click **and** touchend land here), `startGame` and
+  `restartRun` (the overlay buttons). Hooks sit *before* the state
+  gates, so a stray click on the wrong screen still counts as the
+  warming gesture but changes nothing else. `typeof AudioContext ===
+  "undefined"` is the entire platform guard (bare global, no
+  `webkitAudioContext` fallback — the campaign-1 rationale stands);
+  before the first gesture and on such platforms every
+  `scheduleSound()` is a silent no-op, which is the silent-degradation
+  path the existing five suites exercise unchanged. Alternatives:
+  create-on-load (autoplay-policy violation) or a dedicated
+  "pointerdown" listener (new listener surface; click/keydown cover the
+  ticket).
+- **Envelope shape: `setValueAtTime(SFX_PEAK)` then
+  `exponentialRampToValueAtTime(SFX_DECAY_FLOOR, t + dur)`** — the
+  campaign-1 decay, kept verbatim. Exact 0 is unreachable with an
+  exponential ramp, hence the named `SFX_DECAY_FLOOR` (0.001); the
+  tests assert decay-to-floor, and the muting test asserts the bus
+  carries 0 instead. Alternatives: a linear ramp to literal 0 (diverges
+  from campaign 1; "terminates at 0" is met by the zeroed bus either
+  way).
+- **The noise buffer is baked once in `ensureAudio()`** from the
+  game's mutable `random` hook (deterministic under the suites'
+  `random = ...` pins, like every other random value) — never on the
+  60 fps hot path; per-sound nodes (source/filter/envelope) are
+  scheduled and dropped at event rate, the standard Web Audio pattern.
+  A catch fixture that kills a brick also emits a break sound, so the
+  routing/mute tests count four sounds for three visible events and
+  pin `random` to force no unplanned capsule before intermediate kills.
+
+## 2026-10-30 — Ticket #27 review round 1: exp-ramp clamps, mute-product pin, resume() rejections
+
+- **Exponential ramp start and target are clamped: `Math.max(SFX_PEAK, SFX_EXP_EPS)` /
+  `Math.max(SFX_DECAY_FLOOR, SFX_EXP_EPS)`**, with the start set at the schedule time
+  (`t0`). Exponential ramps only span positive values — a console zeroed `SFX_PEAK`
+  or `SFX_DECAY_FLOOR` previously produced an unbounded/invalid parameter region
+  (start 0 → −inf dB) or a rejected target. The guard is a named constant
+  `SFX_EXP_EPS = 1e-4`, applied at scheduling so the runtime constants stay the
+  source of truth. The audio stub now enforces the same positivity contract
+  (RangeError on a non-positive ramp target or start), so the regression tests
+  fail for the real reason. Alternatives: reject-and-stay-silent (rejected —
+  a zeroed knob means "quiet", not "broken") or clamp at the constants
+  (rejected — the knobs must keep working from the console).
+- **"Terminates at 0" is pinned as the audible level: the mute test now also
+  asserts post-mute envelope terminus × bus gain === 0 exactly.** The envelope
+  keeps its named shape (peak → floor); silence comes from the zeroed bus.
+  Alternative reading — rewrite the envelope to literal 0 — rejected: diverges
+  from the campaign-1 decay and loses the named-floor contract.
+- **Both `audioCtx.resume()` call sites swallow rejection with a bare
+  `.catch(() => {})`.** `resume()` returns a Promise that rejects when the
+  context cannot resume; an unhandled rejection would log (and, under some
+  engines, crash) the silent-degradation path. The stub's `resume()` returns a
+  promise-like that records `.catch` attachment, so the test proves every call
+  is guarded. Alternatives: `await`/try-catch (needs an async wrapper around
+  the gesture handlers) or ignore the Promise (unhandled rejections are the
+  defect being fixed).
+- **Campaign 1 (`asteroids.html`) carries the same un-guarded `resume()` and
+  hardcoded 0.001 decays; left untouched.** Ticket #27 scopes to the bricks
+  campaign; campaign 1's decay constants are literal (not console-tunable) so
+  the clamp hazard is absent there. A follow-up ticket should mirror the
+  review fixes there if desired.
+- **The scaffold suite's catch-binding rule now carves out dotted Promise
+  methods.** Its round-2 static check banned `catch (` anywhere in the
+  source (intent: storage guards keep bare `catch {`); the review-required
+  `.catch(() => {})` collided with the over-broad regex. The check now
+  ignores a `.` before `catch` — try/catch statement bindings with an unused
+  parameter are still flagged. Alternatives: `then(undefined, …)` (obscure,
+  and the review named `.catch` explicitly) or a synchronous wrapper that
+  cannot observe the Promise rejection.

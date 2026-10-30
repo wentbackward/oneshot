@@ -148,8 +148,10 @@
 // catch framework with the expand paddle, extra ball (a fixed ball
 // pool capped at MAX_BALLS — a life is lost only when the last live
 // ball falls) and sticky paddle (a timed window during which paddle
-// contact catches a ball that a click re-launches) effects. Audio is
-// a later campaign-2 ticket.
+// contact catches a ball that a click re-launches) effects, and
+// synthesized Web Audio SFX (named recipes per required event on a
+// single master gain bus, built on the first user gesture, degrading
+// to silent where Web Audio is missing)
 // ================================================================
 
 // ---- Tunables (var: addressable as globals, e.g. from the console) ----
@@ -220,6 +222,90 @@ var STICKY_DURATION_S = 6;              // simulated seconds the paddle still ca
 var COLOR_BG = "#0b0f14";
 var COLOR_PADDLE = "#5cf2b0";
 var COLOR_BALL = "#e8ecf1";
+
+// ---- Audio: synthesized SFX on a master gain bus (ticket #27) ----
+// All sound effects are synthesized with the Web Audio API (PRD
+// section 4) — no audio files. The context is constructed only on
+// the first user gesture (click or keydown), never on page load;
+// before then — and in engines without Web Audio — every schedule is
+// a silent no-op. Each sound's envelope gain connects to the single
+// MASTER_BUS gain node, whose level tracks MASTER_GAIN live so a
+// console reassignment applies to the next sound (and 0 silences
+// everything). Mirrors the campaign-1 audio architecture (ticket #9).
+var MASTER_GAIN = 0.2;                 // master bus level (0..1); 0 silences every SFX
+var WAVE_SINE = "sine";               // named waveform sources
+var WAVE_SQUARE = "square";
+var WAVE_NOISE = "noise";
+// Named per-recipe constants: wave, frequency (Hz) and duration (s).
+var SFX_PADDLE_BOUNCE = { wave: WAVE_SINE,   freq: 220, dur: 0.05 };
+var SFX_BRICK_BREAK   = { wave: WAVE_NOISE,  freq: 900, dur: 0.09 };
+var SFX_POWERUP_CATCH = { wave: WAVE_SQUARE, freq: 660, dur: 0.12 };
+var SFX_GAME_OVER     = { wave: WAVE_SINE,   freq: 110, dur: 0.50 };
+var SFX_PEAK = 0.5;                    // every envelope peaks here; the bus scales it
+var SFX_DECAY_FLOOR = 0.001;           // decay target: exp ramps cannot reach exact 0
+var SFX_EXP_EPS = 1e-4;                // exp-ramp guard: start and target stay positive
+var SFX_NOISE_BUFFER_SECONDS = 0.25;   // shared noise source length
+var audioCtx = null;                   // AudioContext, built on the first gesture
+var MASTER_BUS = null;                 // the one gain node wired to destination
+var noiseBuffer = null;                // white noise, built once, reused per hit
+// Build the audio graph on the first user gesture; later calls reuse
+// the existing context, resuming it if the browser has suspended it.
+// Silently no-ops when the platform has no Web Audio.
+function ensureAudio() {
+  if (audioCtx) {
+    if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
+    return;
+  }
+  if (typeof AudioContext === "undefined") return; // silent, no error
+  audioCtx = new AudioContext();
+  if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
+  MASTER_BUS = audioCtx.createGain();
+  MASTER_BUS.gain.value = MASTER_GAIN;
+  MASTER_BUS.connect(audioCtx.destination);
+  var frames = Math.max(1, Math.ceil(audioCtx.sampleRate * SFX_NOISE_BUFFER_SECONDS));
+  noiseBuffer = audioCtx.createBuffer(1, frames, audioCtx.sampleRate);
+  var data = noiseBuffer.getChannelData(0);
+  for (var i = 0; i < data.length; i += 1) data[i] = random() * 2 - 1;
+}
+// Schedule one shot of a named recipe: the source — an oscillator for
+// sine/square, or the shared noise buffer through a lowpass at the
+// recipe frequency for noise — feeds a freshly shaped envelope gain,
+// which connects to the single MASTER_BUS. The envelope peaks at
+// SFX_PEAK, then decays to SFX_DECAY_FLOOR at the recipe duration,
+// so the node's audio is bounded. Both ramp values are clamped to
+// SFX_EXP_EPS (exp ramps must stay positive); the start is set at the
+// schedule time, so a console zeroed SFX_PEAK/SFX_DECAY_FLOOR can
+// never make the scheduler throw.
+function scheduleSound(recipe) {
+  if (!audioCtx) return; // audio not enabled yet: silent no-op
+  var t0 = audioCtx.currentTime;
+  MASTER_BUS.gain.value = MASTER_GAIN; // live console retunes apply
+  var input = null; // node feeding the envelope
+  if (recipe.wave === WAVE_NOISE) {
+    input = audioCtx.createBiquadFilter();
+    input.type = "lowpass";
+    input.frequency.value = recipe.freq;
+    var noiseSrc = audioCtx.createBufferSource();
+    noiseSrc.buffer = noiseBuffer;
+    noiseSrc.connect(input);
+    noiseSrc.start(t0);
+    noiseSrc.stop(t0 + recipe.dur);
+  } else {
+    input = audioCtx.createOscillator();
+    input.type = recipe.wave;
+    input.frequency.value = recipe.freq;
+  }
+  var env = audioCtx.createGain();
+  env.gain.setValueAtTime(Math.max(SFX_PEAK, SFX_EXP_EPS), t0);
+  env.gain.exponentialRampToValueAtTime(
+    Math.max(SFX_DECAY_FLOOR, SFX_EXP_EPS), t0 + recipe.dur);
+  input.connect(env);
+  env.connect(MASTER_BUS);
+  if (input.start) { // oscillator path (buffer sources started above)
+    input.start(t0);
+    input.stop(t0 + recipe.dur);
+  }
+}
 
 // ---- DOM handles ----
 var canvas = document.getElementById("game");
@@ -339,6 +425,7 @@ function updatePaddle(dt) {
   clampPaddle();
 }
 function onKeyDown(e) {
+  ensureAudio(); // a keydown is a user gesture: build the audio graph once
   if (e.code === "ArrowLeft" || e.code === "KeyA") {
     keys.left.add(e.code);
     e.preventDefault();
@@ -410,6 +497,7 @@ function destroyBrick(index) {
   b.active = false;
   bricksLeft -= 1;
   score += BRICK_TIERS[b.tier].points;
+  scheduleSound(SFX_BRICK_BREAK);
   syncHud();
   maybeDropCapsule(b.x + b.w / 2, b.y + b.h);
   if (bricksLeft === 0) advanceLevel();
@@ -445,6 +533,7 @@ function maybeDropCapsule(x, y) {
 // (re)arms the widen: the expiry is set to now + the full duration,
 // never added to whatever the previous arm had left.
 function applyCapsule(kind) {
+  scheduleSound(SFX_POWERUP_CATCH); // the catch blip is kind-independent
   if (kind === KIND_EXPAND) {
     paddleW = BASE_PADDLE_W * PADDLE_EXPAND_FACTOR;
     expandUntil = simTime + PADDLE_EXPAND_DURATION_S;
@@ -504,6 +593,7 @@ function spawnExtraBall() {
 // serve speed, each inheriting the position-dependent paddle-angle
 // logic for its own offset from the paddle centre.
 function launchAttachedBalls() {
+  ensureAudio(); // a click/tap is a user gesture: build the audio graph once
   if (gameState !== "playing") return;
   for (var i = 0; i < balls.length; i += 1) {
     var b = balls[i];
@@ -581,6 +671,7 @@ function updateBalls(dt) {
         b.vx = speed * Math.sin(angle);
         b.vy = -speed * Math.cos(angle);
         b.y = pt - BALL_RADIUS; // push out above the paddle
+        scheduleSound(SFX_PADDLE_BOUNCE);
       }
     }
     // Dropped below the bottom edge: only the last live ball costs a
@@ -638,12 +729,14 @@ function setScreen(which) {
   screenOver.style.display = which === "gameover" ? "flex" : "none";
 }
 function startGame() {
+  ensureAudio(); // a click is a user gesture: build the audio graph once
   if (gameState !== "start") return; // the button only lives on the start screen
   gameState = "playing";
   setScreen("playing");
   beginRun();
 }
 function restartRun() {
+  ensureAudio(); // a click is a user gesture: build the audio graph once
   if (gameState !== "gameover") return; // the button only lives on that screen
   gameState = "playing";
   setScreen("playing");
@@ -707,6 +800,7 @@ function loseLife() {
 }
 function enterGameOver() {
   gameState = "gameover";
+  scheduleSound(SFX_GAME_OVER);
   // Re-serve: the frozen field behind the overlay shows the ball at
   // rest on the paddle; no live ball carries over.
   serveBall();

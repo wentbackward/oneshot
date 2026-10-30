@@ -326,7 +326,10 @@ check("UI_FONT exists as an addressable global equal to 'monospace'", () => {
 // (no unused catch parameter)
 // ================================================================
 check("storage guards use bare optional catch bindings (no unused catch parameter)", () => {
-  assert(!/catch\s*\(/.test(gameSource),
+  // try/catch statement bindings only: the dot guard means a Promise
+  // method call (.catch(handler)) is not a catch binding and is
+  // carved out (ticket #27 swallows resume() rejections this way).
+  assert(!/(^|[^.\w])catch\s*\(/.test(gameSource),
     "unused catch parameters (e.g. 'catch (err)') must be bare 'catch {' bindings");
   assert(
     (gameSource.match(/catch\s*\{/g) ?? []).length >= 2,
