@@ -1015,3 +1015,11 @@
   campaign; campaign 1's decay constants are literal (not console-tunable) so
   the clamp hazard is absent there. A follow-up ticket should mirror the
   review fixes there if desired.
+- **The scaffold suite's catch-binding rule now carves out dotted Promise
+  methods.** Its round-2 static check banned `catch (` anywhere in the
+  source (intent: storage guards keep bare `catch {`); the review-required
+  `.catch(() => {})` collided with the over-broad regex. The check now
+  ignores a `.` before `catch` — try/catch statement bindings with an unused
+  parameter are still flagged. Alternatives: `then(undefined, …)` (obscure,
+  and the review named `.catch` explicitly) or a synchronous wrapper that
+  cannot observe the Promise rejection.
