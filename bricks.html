@@ -226,13 +226,13 @@ var COLOR_BALL = "#e8ecf1";
 // ---- Audio: synthesized SFX on a master gain bus (ticket #27) ----
 // All sound effects are synthesized with the Web Audio API (PRD
 // section 4) — no audio files. The context is constructed only on
-// the first user gesture (click or keydown); platforms without Web
-// Audio run the whole game on the silent-degradation path. Every
-// sound's envelope gain connects to the single MASTER_BUS gain node,
-// and that bus is the only node wired to the context destination.
-// MASTER_GAIN is the bus master volume (0..1), read at schedule
-// time: reassigning it to 0 mutes every sound scheduled afterwards.
-var MASTER_GAIN = 1;                  // bus master volume, 0..1
+// the first user gesture (click or keydown), never on page load;
+// before then — and in engines without Web Audio — every schedule is
+// a silent no-op. Each sound's envelope gain connects to the single
+// MASTER_BUS gain node, whose level tracks MASTER_GAIN live so a
+// console reassignment applies to the next sound (and 0 silences
+// everything). Mirrors the campaign-1 audio architecture (ticket #9).
+var MASTER_GAIN = 0.2;                 // master bus level (0..1); 0 silences every SFX
 var WAVE_SINE = "sine";               // named waveform sources
 var WAVE_SQUARE = "square";
 var WAVE_NOISE = "noise";
@@ -241,23 +241,27 @@ var SFX_PADDLE_BOUNCE = { wave: WAVE_SINE,   freq: 220, dur: 0.05 };
 var SFX_BRICK_BREAK   = { wave: WAVE_NOISE,  freq: 900, dur: 0.09 };
 var SFX_POWERUP_CATCH = { wave: WAVE_SQUARE, freq: 660, dur: 0.12 };
 var SFX_GAME_OVER     = { wave: WAVE_SINE,   freq: 110, dur: 0.50 };
-var SFX_PEAK = 0.2;                    // envelope peak, scaled by MASTER_GAIN
-var SFX_ATTACK_SECONDS = 0.005;        // envelope rise from 0 to peak
+var SFX_PEAK = 0.5;                    // every envelope peaks here; the bus scales it
+var SFX_DECAY_FLOOR = 0.001;           // decay target: exp ramps cannot reach exact 0
 var SFX_NOISE_BUFFER_SECONDS = 0.25;   // shared noise source length
 var audioCtx = null;                   // AudioContext, built on the first gesture
 var MASTER_BUS = null;                 // the one gain node wired to destination
 var noiseBuffer = null;                // white noise, built once, reused per hit
 // Build the audio graph on the first user gesture; later calls reuse
-// the existing context. Silently no-ops when the platform has no
-// Web Audio (window.AudioContext / webkitAudioContext both missing).
+// the existing context, resuming it if the browser has suspended it.
+// Silently no-ops when the platform has no Web Audio.
 function ensureAudio() {
-  if (audioCtx) return;
-  var AC = window.AudioContext || window.webkitAudioContext;
-  if (typeof AC !== "function") return;
-  audioCtx = new AC();
+  if (audioCtx) {
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    return;
+  }
+  if (typeof AudioContext === "undefined") return; // silent, no error
+  audioCtx = new AudioContext();
+  if (audioCtx.state === "suspended") audioCtx.resume();
   MASTER_BUS = audioCtx.createGain();
+  MASTER_BUS.gain.value = MASTER_GAIN;
   MASTER_BUS.connect(audioCtx.destination);
-  var frames = Math.floor(SFX_NOISE_BUFFER_SECONDS * audioCtx.sampleRate);
+  var frames = Math.max(1, Math.ceil(audioCtx.sampleRate * SFX_NOISE_BUFFER_SECONDS));
   noiseBuffer = audioCtx.createBuffer(1, frames, audioCtx.sampleRate);
   var data = noiseBuffer.getChannelData(0);
   for (var i = 0; i < data.length; i += 1) data[i] = random() * 2 - 1;
@@ -265,12 +269,13 @@ function ensureAudio() {
 // Schedule one shot of a named recipe: the source — an oscillator for
 // sine/square, or the shared noise buffer through a lowpass at the
 // recipe frequency for noise — feeds a freshly shaped envelope gain,
-// which connects to the single MASTER_BUS. The envelope rises to
-// SFX_PEAK * MASTER_GAIN over SFX_ATTACK_SECONDS, then returns to 0
-// at the recipe duration, so the node's audio is bounded.
+// which connects to the single MASTER_BUS. The envelope peaks at
+// SFX_PEAK, then decays to SFX_DECAY_FLOOR at the recipe duration,
+// so the node's audio is bounded.
 function scheduleSound(recipe) {
   if (!audioCtx) return; // audio not enabled yet: silent no-op
   var t0 = audioCtx.currentTime;
+  MASTER_BUS.gain.value = MASTER_GAIN; // live console retunes apply
   var input = null; // node feeding the envelope
   if (recipe.wave === WAVE_NOISE) {
     input = audioCtx.createBiquadFilter();
@@ -287,10 +292,8 @@ function scheduleSound(recipe) {
     input.frequency.value = recipe.freq;
   }
   var env = audioCtx.createGain();
-  var peak = SFX_PEAK * MASTER_GAIN;
-  env.gain.setValueAtTime(0, t0);
-  env.gain.linearRampToValueAtTime(peak, t0 + SFX_ATTACK_SECONDS);
-  env.gain.linearRampToValueAtTime(0, t0 + recipe.dur);
+  env.gain.setValueAtTime(SFX_PEAK, t0);
+  env.gain.exponentialRampToValueAtTime(SFX_DECAY_FLOOR, t0 + recipe.dur);
   input.connect(env);
   env.connect(MASTER_BUS);
   if (input.start) { // oscillator path (buffer sources started above)

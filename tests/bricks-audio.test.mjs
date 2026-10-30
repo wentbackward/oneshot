@@ -128,6 +128,8 @@ function makeAudioGraph() {
     destination,
     currentTime: 0,
     sampleRate: 44100,
+    state: "running",
+    resume() {},
     createOscillator() {
       const n = {
         kind: "oscillator",
@@ -171,6 +173,9 @@ function makeAudioGraph() {
           n.events.push([v, t]);
         },
         linearRampToValueAtTime(v, t) {
+          n.events.push([v, t]);
+        },
+        exponentialRampToValueAtTime(v, t) {
           n.events.push([v, t]);
         },
       };
@@ -248,7 +253,6 @@ function boot(width = 960, height = 600, opts = {}) {
     window: {
       innerWidth: width,
       innerHeight: height,
-      AudioContext: audio ? audio.ctor : undefined,
       addEventListener: (type, cb) => {
         (winListeners[type] ??= []).push(cb);
       },
@@ -262,6 +266,7 @@ function boot(width = 960, height = 600, opts = {}) {
       return ++rafId;
     },
   };
+  if (audio) sandbox.AudioContext = audio.ctor;
   const context = vm.createContext(sandbox);
   vm.runInContext(gameSource, context);
 
@@ -402,7 +407,7 @@ check("without an AudioContext stub the full game loop runs silently with no exc
 check("with a stubbed AudioContext, boot and frames alone never construct one (no gesture yet)", () => {
   const g = boot(960, 600, { audio: true });
   assert(g.q("typeof MASTER_GAIN === 'number'"), "setup: MASTER_GAIN must be a named numeric var");
-  assert(g.q("MASTER_GAIN") === 1, `the master volume must default to 1, got ${g.q("MASTER_GAIN")}`);
+  assert(g.q("MASTER_GAIN") === 0.2, `the master bus level must default to 0.2, got ${g.q("MASTER_GAIN")}`);
   g.tick(30);
   assert(g.audio.rec.constructions === 0,
     `before any user gesture the constructor must not run, constructions=${g.audio.rec.constructions}`);
@@ -455,9 +460,12 @@ check("recipes are named constants: every required event has a recipe whose wave
       `${name}.freq must be a positive frequency constant, got ${r && r.freq}`);
     assert(Number.isFinite(r.dur) && r.dur > 0,
       `${name}.dur must be a positive duration constant, got ${r && r.dur}`);
-    assert(Number.isFinite(g.q("SFX_ATTACK_SECONDS")) && g.q("SFX_ATTACK_SECONDS") < r.dur,
-      `the named attack must be shorter than ${name}.dur`);
   }
+  assert(Number.isFinite(g.q("SFX_PEAK")) && g.q("SFX_PEAK") > 0,
+    "SFX_PEAK must be a positive named constant");
+  const floor = g.q("SFX_DECAY_FLOOR");
+  assert(Number.isFinite(floor) && floor > 0 && floor < 0.01,
+    `SFX_DECAY_FLOOR must be a small positive named constant, got ${floor}`);
 });
 
 check("a paddle bounce schedules the paddle recipe: a sine oscillator at SFX_PADDLE_BOUNCE.freq, sounding for exactly SFX_PADDLE_BOUNCE.dur", () => {
@@ -495,7 +503,7 @@ check("a brick break schedules the brick recipe: the shared noise buffer (no osc
     "the buffer source must play the game's prebuilt noise buffer");
   const buf = g.audio.rec.buffers[0];
   assert(buf && buf.channels === 1 &&
-      buf.length === Math.floor(g.q("SFX_NOISE_BUFFER_SECONDS") * 44100),
+      buf.length === Math.max(1, Math.ceil(g.q("SFX_NOISE_BUFFER_SECONDS") * 44100)),
     "the noise buffer must be the named-length mono buffer built once at init");
   assert(buf.data.some((v) => v !== 0), "the noise buffer must contain generated noise, not silence");
   assertClose(src.stopTimes[0] - src.startTimes[0], r.dur, 1e-9,
@@ -546,7 +554,7 @@ check("game over schedules the game-over recipe: a sine oscillator at SFX_GAME_O
     `SFX_GAME_OVER.dur must be the longest recipe duration, got ${JSON.stringify(durs)}`);
 });
 
-check("an envelope is shaped by the named attack constant: 0 -> SFX_PEAK * MASTER_GAIN -> 0, terminating at the recipe duration", () => {
+check("an envelope peaks at SFX_PEAK and decays to the named floor at the recipe duration", () => {
   const g = boot(960, 600, { audio: true });
   start(g);
   const before = envelopes(g).length;
@@ -554,17 +562,14 @@ check("an envelope is shaped by the named attack constant: 0 -> SFX_PEAK * MASTE
   assert(envelopes(g).length === before + 1, "the bounce must create exactly one envelope gain");
   const env = envelopes(g)[before];
   const r = g.q("SFX_PADDLE_BOUNCE");
-  const atk = g.q("SFX_ATTACK_SECONDS");
-  assert(env.events.length === 3,
-    `the envelope must schedule exactly three automation events, got ${JSON.stringify(env.events)}`);
-  assert(env.events[0][0] === 0, `the envelope must start at 0, got ${JSON.stringify(env.events[0])}`);
-  assertClose(env.events[1][0], g.q("SFX_PEAK") * g.q("MASTER_GAIN"), 1e-9,
-    `the peak must be the named SFX_PEAK scaled by MASTER_GAIN`);
-  assertClose(env.events[1][1] - env.events[0][1], atk, 1e-9,
-    `the peak must land at start + SFX_ATTACK_SECONDS`);
-  assert(env.events[2][0] === 0, `the envelope must terminate at 0, got ${JSON.stringify(env.events[2])}`);
-  assertClose(env.events[2][1] - env.events[0][1], r.dur, 1e-9,
-    `the termination must land at the recipe duration ${r.dur}s`);
+  assert(env.events.length === 2,
+    `the envelope must schedule exactly two automation events, got ${JSON.stringify(env.events)}`);
+  assertClose(env.events[0][0], g.q("SFX_PEAK"), 1e-9,
+    `the envelope must peak at the named SFX_PEAK`);
+  assertClose(env.events[1][0], g.q("SFX_DECAY_FLOOR"), 1e-9,
+    `the envelope must decay to the named SFX_DECAY_FLOOR`);
+  assertClose(env.events[1][1] - env.events[0][1], r.dur, 1e-9,
+    `the decay must land at the recipe duration ${r.dur}s`);
 });
 
 check("events outside the required set schedule no sound: a wall reflection and a non-fatal ball loss stay silent", () => {
@@ -618,12 +623,14 @@ check("every envelope gain connects to the one master bus gain, and the bus is t
   assert(bus[0].events.length === 0, "the bus must not carry sound envelopes of its own");
 });
 
-check("reassigning MASTER_GAIN = 0 silences every subsequently scheduled envelope (peak and terminus at 0), leaving earlier envelopes untouched", () => {
+check("reassigning MASTER_GAIN = 0 zeroes the bus for every subsequent schedule: the envelopes run into the zeroed bus and decay to the named floor", () => {
   const g = boot(960, 600, { audio: true });
   start(g);
   bouncePaddle(g); // a pre-mute sound
-  const pre = envelopes(g)[0];
-  assert(pre.events[1][0] > 0, `setup: the pre-mute envelope must have a nonzero peak, got ${pre.events[1][0]}`);
+  const [bus] = busGains(g);
+  assert(bus !== undefined, "setup: the bus must exist after the first sound");
+  assertClose(bus.gain.value, g.q("MASTER_GAIN"), 0,
+    `the bus must carry MASTER_GAIN after a scheduled sound, got ${bus.gain.value}`);
   g.q("MASTER_GAIN = 0");
   const n0 = soundParts(g);
   bouncePaddle(g);
@@ -631,16 +638,21 @@ check("reassigning MASTER_GAIN = 0 silences every subsequently scheduled envelop
   killBrick(g, 0, 0);
   catchCapsule(g, 4, 9);
   assert(soundParts(g) - n0 > 0, "setup: the post-mute events must still schedule sounds");
+  assertClose(bus.gain.value, 0, 0,
+    `with MASTER_GAIN = 0 the bus must carry zero gain for the subsequent sounds, got ${bus.gain.value}`);
   const post = envelopes(g).slice(1);
   // Four post-mute sounds: bounce, break, break, catch — the catch
   // fixture also destroys a brick.
   assert(post.length === 4, `the post-mute events must yield four envelopes, got ${post.length}`);
   for (const e of post) {
-    assert(e.events.every(([v]) => v === 0),
-      `a post-mute envelope must be silent: every automation value is 0, got ${JSON.stringify(e.events)}`);
+    // The envelope keeps its named shape (the mute is the bus), but
+    // it is silenced: peak x 0 bus = 0, decay floor x 0 = 0.
+    assertClose(e.events[e.events.length - 1][0], g.q("SFX_DECAY_FLOOR"), 1e-9,
+      `a post-mute envelope must decay to the named floor, got ${JSON.stringify(e.events)}`);
   }
-  assert(pre.events[1][0] > 0,
-    "the pre-mute envelope must keep its original peak (muting affects only subsequent sounds)");
+  const pre = envelopes(g)[0];
+  assertClose(pre.events[0][0], g.q("SFX_PEAK"), 1e-9,
+    "the pre-mute envelope must keep its original peak");
 });
 
 // ================================================================
