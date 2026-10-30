@@ -353,6 +353,62 @@ check("score accrues exactly per colour across the grid and the HUD mirrors the 
     `exactly three bricks may be gone, active=${g.activeCount()}`);
 });
 
+// ----------------------------------------------------------------
+// Axis selection in collideBrick (review should-fix for #22):
+// a side hit must reflect horizontally (vx flips, vy untouched,
+// ball pinned to the brick face) and a near-corner hit must
+// resolve along the single shallowest axis, preserving the
+// incoming speed exactly. The fixture parks the ball directly in
+// the overlap and calls collideBricks() console-style, so the
+// outcome is frame-independent and deterministic. Column 0 is
+// used because the brick gap is narrower than the ball radius:
+// in an interior column the parked ball would also overlap the
+// neighbour.
+// ----------------------------------------------------------------
+check("side hit: collideBricks reflects horizontally — vx flips, vy untouched, ball pinned to the brick face", () => {
+  const g = boot(960, 600);
+  start(g);
+  const b = g.brickAt(4, 0);
+  const r = g.q("BALL_RADIUS");
+  g.q(`ball.attached = false;
+       ball.x = ${b.x} - BALL_RADIUS + 0.5;   // 0.5 px into the left face
+       ball.y = ${b.y + b.h / 2};              // centred on the brick
+       ball.vx = 250; ball.vy = 0;`);
+  const hit = g.q("collideBricks()");
+  assert(hit === true, "the overlapping side contact must register as a hit");
+  const n = g.ball();
+  assert(n.vx === -250, `vx must flip to exactly -250, got ${n.vx}`);
+  assert(n.vy === 0, `vy must stay untouched at 0, got ${n.vy}`);
+  assert(n.x === b.x - r, `the ball must be pinned to the brick's left face, x=${n.x} want ${b.x - r}`);
+  assert(n.y === b.y + b.h / 2, `y must be unchanged, got ${n.y}`);
+  assert(g.brickAt(4, 0).active === false, "the struck brick must be destroyed");
+  assert(g.activeCount() === g.grid() - 1, "exactly one brick may be destroyed");
+  assert(g.brickAt(4, 1).active, "the neighbouring brick must survive");
+});
+
+check("near-corner hit: collideBricks resolves the shallowest axis — exactly one axis flips and the speed is preserved", () => {
+  const g = boot(960, 600);
+  start(g);
+  const b = g.brickAt(4, 0); // bottom-left corner of the leftmost brick
+  const r = g.q("BALL_RADIUS");
+  g.q(`ball.attached = false;
+       ball.x = ${b.x} - BALL_RADIUS + 0.2;   // 0.2 px into the side (shallow)
+       ball.y = ${b.y + b.h} + BALL_RADIUS - 0.8; // 0.8 px into the bottom (deep)
+       ball.vx = 200; ball.vy = -250;`);
+  const speedBefore = Math.hypot(200, -250);
+  const yPlaced = g.ball().y;
+  const hit = g.q("collideBricks()");
+  assert(hit === true, "the near-corner contact must register as a hit");
+  const n = g.ball();
+  assert(n.x === b.x - r, `x must be pinned to the shallow (side) face, x=${n.x} want ${b.x - r}`);
+  assert(n.y === yPlaced, `y must be unchanged on a side resolution, got ${n.y}`);
+  assert(n.vx === -200 && n.vy === -250,
+    `exactly one axis may flip (the shallow, horizontal one): got vx=${n.vx} vy=${n.vy}`);
+  assertClose(Math.hypot(n.vx, n.vy), speedBefore, 1e-9, "the incoming speed must be preserved");
+  assert(g.brickAt(4, 0).active === false, "the struck brick must be destroyed");
+  assert(g.activeCount() === g.grid() - 1, "exactly one brick may be destroyed");
+});
+
 // ================================================================
 // Criterion 3: no tunnelling — a deterministic fixture at the
 // top-level maximum speed; one clamped frame displaces the ball
