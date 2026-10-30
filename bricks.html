@@ -339,8 +339,9 @@ function layoutBricks() {
     bricks[i].h = BRICK_HEIGHT;
   }
 }
-// Activate the whole pool for `level`: the colour/value rows cycle
-// by one tier per level, so every level presents a shifted layout.
+// Activate the whole pool for the current level (module global):
+// the colour/value rows cycle by one tier per level, so every
+// level presents a shifted layout.
 function spawnLevel() {
   var shift = (level - 1) % BRICK_TIERS.length;
   for (var i = 0; i < bricks.length; i += 1) {
@@ -487,8 +488,8 @@ function restartRun() {
   setScreen("playing");
   beginRun();
 }
-// One reset path shared by first start and restart: zero live
-// entities by construction (fresh attached serve; no bricks yet).
+// One reset path shared by first start and restart: a fresh
+// attached serve plus a fully live brick grid (spawnLevel below).
 function beginRun() {
   score = 0;
   level = 1;
