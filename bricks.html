@@ -395,10 +395,9 @@ function loseLife() {
 }
 function enterGameOver() {
   gameState = "gameover";
-  // Park the ball (attached, at rest): no live ball carries over.
-  ball.attached = true;
-  ball.vx = 0;
-  ball.vy = 0;
+  // Re-serve: the frozen field behind the overlay shows the ball at
+  // rest on the paddle; no live ball carries over.
+  serveBall();
   gameoverFinal.textContent = "Final score " + score;
   setScreen("gameover");
   syncHud();
