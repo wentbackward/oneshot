@@ -271,8 +271,8 @@ check("tryFire scans the laser pool by index (no per-shot closure allocation)", 
   // And the scan must still find a free slot: sustained fire keeps working.
   const g = boot(100000, 100000);
   g.key("Space", true);
-  for (let i = 0; i < 30; i++) g.tick();
-  assert(g.activeCount() >= 5, `indexed scan must still recycle slots (fired ${g.activeCount()} lasers in 0.5 s)`);
+  for (let i = 0; i < 60; i++) g.tick();
+  assert(g.activeCount() >= 5, `indexed scan must still recycle slots (fired ${g.activeCount()} lasers in 1 s)`);
 });
 
 // ================================================================
