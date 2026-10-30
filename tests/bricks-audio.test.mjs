@@ -114,9 +114,11 @@ function makeCtx() {
 // start/stop times; gain nodes record every automation event as
 // [value, time] in schedule order. The destination object lets the
 // tests find the single bus gain wired to it.
-function makeAudioGraph() {
+function makeAudioGraph(opts = {}) {
   const rec = {
     constructions: 0,
+    resumeCalls: 0,
+    resumeCatches: 0,
     oscillators: [],
     bufferSources: [],
     filters: [],
@@ -128,8 +130,22 @@ function makeAudioGraph() {
     destination,
     currentTime: 0,
     sampleRate: 44100,
-    state: "running",
-    resume() {},
+    state: opts.suspended ? "suspended" : "running",
+    // resume() resolves asynchronously like the real API; callers
+    // must swallow rejection with a .catch handler (review fix #3).
+    resume() {
+      rec.resumeCalls += 1;
+      ctx.state = "running";
+      return {
+        then() {
+          return this;
+        },
+        catch(fn) {
+          if (typeof fn === "function") rec.resumeCatches += 1;
+          return this;
+        },
+      };
+    },
     createOscillator() {
       const n = {
         kind: "oscillator",
@@ -166,16 +182,30 @@ function makeAudioGraph() {
       return n;
     },
     createGain() {
-      const n = { kind: "gain", events: [], dest: [] };
+      const n = { kind: "gain", events: [], dest: [], lastValue: 1 };
       n.gain = {
         value: 1,
         setValueAtTime(v, t) {
+          n.lastValue = v;
           n.events.push([v, t]);
         },
         linearRampToValueAtTime(v, t) {
           n.events.push([v, t]);
         },
+        // Exponential ramps only ever span positive values: the real
+        // API rejects a non-positive target, and a non-positive start
+        // leaves the parameter undefined (-inf). Enforce both so the
+        // suites catch unclamped recipes (review fix #1).
         exponentialRampToValueAtTime(v, t) {
+          if (!(v > 0) || !Number.isFinite(v))
+            throw new RangeError(
+              `exponentialRampToValueAtTime: target must be positive and finite, got ${v}`
+            );
+          if (!(n.lastValue > 0))
+            throw new RangeError(
+              `exponentialRampToValueAtTime: ramp start must be positive, got ${n.lastValue}`
+            );
+          n.lastValue = v;
           n.events.push([v, t]);
         },
       };
@@ -220,7 +250,7 @@ const soundParts = (g) =>
 // window carries the recording AudioContext stub; otherwise the
 // platform simply has no Web Audio (the silent-degradation path).
 function boot(width = 960, height = 600, opts = {}) {
-  const audio = opts.audio ? makeAudioGraph() : null;
+  const audio = opts.audio ? makeAudioGraph(opts) : null;
   const canvas = {
     width: 0,
     height: 0,
@@ -572,6 +602,52 @@ check("an envelope peaks at SFX_PEAK and decays to the named floor at the recipe
     `the decay must land at the recipe duration ${r.dur}s`);
 });
 
+check("SFX_DECAY_FLOOR = 0 no longer throws: the exponential-ramp target is clamped to a positive floor (1e-4)", () => {
+  const g = boot(960, 600, { audio: true });
+  start(g);
+  g.q("SFX_DECAY_FLOOR = 0"); // the console can zero the named constant
+  let threw = null;
+  try {
+    bouncePaddle(g);
+  } catch (err) {
+    threw = err;
+  }
+  assert(threw === null,
+    `scheduling with SFX_DECAY_FLOOR = 0 must not throw, threw ${threw && threw.message}`);
+  const env = envelopes(g).slice(-1)[0];
+  assertClose(env.events[env.events.length - 1][0], 1e-4, 1e-12,
+    `the decay target must clamp to 1e-4, got ${JSON.stringify(env.events)}`);
+});
+
+check("SFX_PEAK = 0 no longer throws: the ramp start at schedule time is clamped to a positive floor (1e-4)", () => {
+  const g = boot(960, 600, { audio: true });
+  start(g);
+  g.q("SFX_PEAK = 0"); // the console can zero the named constant
+  let threw = null;
+  try {
+    bouncePaddle(g);
+  } catch (err) {
+    threw = err;
+  }
+  assert(threw === null,
+    `scheduling with SFX_PEAK = 0 must not throw, threw ${threw && threw.message}`);
+  const env = envelopes(g).slice(-1)[0];
+  assertClose(env.events[0][0], 1e-4, 1e-12,
+    `the ramp start at schedule time must clamp to 1e-4, got ${JSON.stringify(env.events)}`);
+  assertClose(env.events[0][1], 0, 1e-12,
+    "the clamped start must be set at the schedule time (t0)");
+});
+
+check("every audioCtx.resume() Promise gets a bare .catch: a rejecting resume() can never escape as an unhandled rejection", () => {
+  const g = boot(960, 600, { audio: true, suspended: true });
+  assert(g.audio.ctx.state === "suspended", "setup: the stub must start suspended");
+  g.key("keydown", "ArrowRight"); // first gesture: constructs and resumes
+  assert(g.audio.rec.resumeCalls >= 1,
+    `the suspended context must be resumed on the first gesture, calls=${g.audio.rec.resumeCalls}`);
+  assert(g.audio.rec.resumeCatches === g.audio.rec.resumeCalls,
+    `every resume() call must attach a .catch handler, calls=${g.audio.rec.resumeCalls} catches=${g.audio.rec.resumeCatches}`);
+});
+
 check("events outside the required set schedule no sound: a wall reflection and a non-fatal ball loss stay silent", () => {
   const g = boot(960, 600, { audio: true });
   start(g);
@@ -649,6 +725,10 @@ check("reassigning MASTER_GAIN = 0 zeroes the bus for every subsequent schedule:
     // it is silenced: peak x 0 bus = 0, decay floor x 0 = 0.
     assertClose(e.events[e.events.length - 1][0], g.q("SFX_DECAY_FLOOR"), 1e-9,
       `a post-mute envelope must decay to the named floor, got ${JSON.stringify(e.events)}`);
+    // Pinned interpretation (review fix #2): "terminates at 0" means
+    // the audible level — envelope terminus x bus gain = exactly 0.
+    assert(e.events[e.events.length - 1][0] * bus.gain.value === 0,
+      `post-mute terminus x bus gain must be exactly 0, got ${e.events[e.events.length - 1][0]} x ${bus.gain.value}`);
   }
   const pre = envelopes(g)[0];
   assertClose(pre.events[0][0], g.q("SFX_PEAK"), 1e-9,
