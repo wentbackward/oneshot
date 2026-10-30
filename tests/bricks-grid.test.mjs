@@ -410,6 +410,71 @@ check("near-corner hit: collideBricks resolves the shallowest axis — exactly o
 });
 
 // ================================================================
+// Review finding 1 (round 2): a side hit at row centre resolves
+// along x and pins the ball to the brick face — but the brick gap
+// is narrower than the ball, so the push-out position can
+// land inside the seam neighbour. The sub-step loop must drain
+// residual overlap after a hit (resolve until collideBricks()
+// returns false), locking: no live overlap at end of frame.
+// ================================================================
+function liveOverlapCount(g) {
+  // Counts active bricks whose rect overlaps the ball, using the
+  // same circle-vs-rect test as the game's collideBricks().
+  return g.q(`(function () {
+    var n = 0;
+    for (var i = 0; i < bricks.length; i += 1) {
+      var b = bricks[i];
+      if (!b.active) continue;
+      var ovx = b.w / 2 + BALL_RADIUS - Math.abs(ball.x - (b.x + b.w / 2));
+      var ovy = b.h / 2 + BALL_RADIUS - Math.abs(ball.y - (b.y + b.h / 2));
+      if (ovx > 0 && ovy > 0) n += 1;
+    }
+    return n;
+  })()`);
+}
+
+check("row-centre side hit: the sub-step loop drains residual overlap — no live overlap at end of frame", () => {
+  const g = boot(960, 600);
+  start(g);
+  const gap = g.q("BRICK_GAP");
+  const r = g.q("BALL_RADIUS");
+  assert(r * 2 > gap,
+    `fixture precondition: the ball must be wider than the seam (${2 * r} > ${gap})`);
+  const frame = g.q("MAX_FRAME_SECONDS");
+
+  // Ball nudged 0.5 px into the left face of a row-centre brick
+  // (bottom row, col 5), moving right: the x-resolution pins it to
+  // the face, and that pinned position sits in the seam against the
+  // col-4 neighbour. Without the drain, the frame ends with the ball
+  // overlapping that neighbour.
+  const b = g.brickAt(4, 5);
+  g.q(`ball.attached = false;
+       ball.x = ${b.x} - BALL_RADIUS + 0.5;
+       ball.y = ${b.y + b.h / 2};
+       ball.vx = 250; ball.vy = 0;`);
+  assert(liveOverlapCount(g) >= 1, "setup: the parked ball must overlap a live brick");
+
+  g.q(`update(${frame})`);
+
+  const left = g.brickAt(4, 4);
+  assert(left.active === false,
+    "the overlapped seam brick (col 4) must be resolved by the frame");
+  assert(g.brickAt(4, 5).active === false,
+    "the second seam brick (col 5) must be resolved by the drain");
+  assert(g.brickAt(4, 3).active && g.brickAt(4, 6).active,
+    "untouched neighbours must survive");
+  assert(g.activeCount() === g.grid() - 2,
+    `exactly the two seam bricks may be gone, active=${g.activeCount()} want ${g.grid() - 2}`);
+  // The regression lock: the frame must end with the ball clear of
+  // every live brick (a single-hit frame leaves the seam overlap
+  // behind and pops the neighbour a frame early).
+  assert(liveOverlapCount(g) === 0,
+    `no live brick may overlap the ball at end of frame, found ${liveOverlapCount(g)}`);
+  const n = g.ball();
+  assert(n.attached === false, "the ball must still be in flight");
+});
+
+// ================================================================
 // Criterion 3: no tunnelling — a deterministic fixture at the
 // top-level maximum speed; one clamped frame displaces the ball
 // farther than the whole brick band, yet the brick is still
