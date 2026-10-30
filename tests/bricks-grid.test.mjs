@@ -174,7 +174,7 @@ function boot(width = 960, height = 600) {
     score: () => q("typeof score === 'undefined' ? NaN : score"),
     paddleX: () => q("typeof paddle === 'undefined' ? NaN : paddle.x"),
     ball: () =>
-      q("typeof ball === 'undefined' ? null : ({ x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, attached: ball.attached })"),
+      q("typeof balls === 'undefined' ? null : ({ x: balls[0].x, y: balls[0].y, vx: balls[0].vx, vy: balls[0].vy, attached: balls[0].attached })"),
     serveY: () => q("canvas.height - PADDLE_BOTTOM_GAP - PADDLE_HEIGHT - BALL_RADIUS"),
     // Brick field accessors
     poolLen: () => q("typeof bricks === 'undefined' ? -1 : bricks.length"),
@@ -228,10 +228,10 @@ function winLevel(g) {
 // bottom row has open space beneath it, so callers target that row.
 function strikeBrick(g, row, col) {
   const b = g.brickAt(row, col);
-  g.q(`ball.attached = false;
-       ball.x = ${b.x + b.w / 2};
-       ball.y = ${b.y + b.h} + BALL_RADIUS + 9;
-       ball.vx = 0; ball.vy = -300;`);
+  g.q(`balls[0].attached = false;
+       balls[0].x = ${b.x + b.w / 2};
+       balls[0].y = ${b.y + b.h} + BALL_RADIUS + 9;
+       balls[0].vx = 0; balls[0].vy = -300;`);
   for (let f = 0; f < 8 && g.activeCount() === g.grid(); f += 1) g.tick(1);
   return g.brickAt(row, col);
 }
@@ -359,7 +359,7 @@ check("score accrues exactly per colour across the grid and the HUD mirrors the 
 // ball pinned to the brick face) and a near-corner hit must
 // resolve along the single shallowest axis, preserving the
 // incoming speed exactly. The fixture parks the ball directly in
-// the overlap and calls collideBricks() console-style, so the
+// the overlap and calls collideBricks(balls[0]) console-style, so the
 // outcome is frame-independent and deterministic. Column 0 is
 // used because the brick gap is narrower than the ball radius:
 // in an interior column the parked ball would also overlap the
@@ -370,11 +370,11 @@ check("side hit: collideBricks reflects horizontally — vx flips, vy untouched,
   start(g);
   const b = g.brickAt(4, 0);
   const r = g.q("BALL_RADIUS");
-  g.q(`ball.attached = false;
-       ball.x = ${b.x} - BALL_RADIUS + 0.5;   // 0.5 px into the left face
-       ball.y = ${b.y + b.h / 2};              // centred on the brick
-       ball.vx = 250; ball.vy = 0;`);
-  const hit = g.q("collideBricks()");
+  g.q(`balls[0].attached = false;
+       balls[0].x = ${b.x} - BALL_RADIUS + 0.5;   // 0.5 px into the left face
+       balls[0].y = ${b.y + b.h / 2};              // centred on the brick
+       balls[0].vx = 250; balls[0].vy = 0;`);
+  const hit = g.q("collideBricks(balls[0])");
   assert(hit === true, "the overlapping side contact must register as a hit");
   const n = g.ball();
   assert(n.vx === -250, `vx must flip to exactly -250, got ${n.vx}`);
@@ -391,13 +391,13 @@ check("near-corner hit: collideBricks resolves the shallowest axis — exactly o
   start(g);
   const b = g.brickAt(4, 0); // bottom-left corner of the leftmost brick
   const r = g.q("BALL_RADIUS");
-  g.q(`ball.attached = false;
-       ball.x = ${b.x} - BALL_RADIUS + 0.2;   // 0.2 px into the side (shallow)
-       ball.y = ${b.y + b.h} + BALL_RADIUS - 0.8; // 0.8 px into the bottom (deep)
-       ball.vx = 200; ball.vy = -250;`);
+  g.q(`balls[0].attached = false;
+       balls[0].x = ${b.x} - BALL_RADIUS + 0.2;   // 0.2 px into the side (shallow)
+       balls[0].y = ${b.y + b.h} + BALL_RADIUS - 0.8; // 0.8 px into the bottom (deep)
+       balls[0].vx = 200; balls[0].vy = -250;`);
   const speedBefore = Math.hypot(200, -250);
   const yPlaced = g.ball().y;
-  const hit = g.q("collideBricks()");
+  const hit = g.q("collideBricks(balls[0])");
   assert(hit === true, "the near-corner contact must register as a hit");
   const n = g.ball();
   assert(n.x === b.x - r, `x must be pinned to the shallow (side) face, x=${n.x} want ${b.x - r}`);
@@ -414,19 +414,19 @@ check("near-corner hit: collideBricks resolves the shallowest axis — exactly o
 // along x and pins the ball to the brick face — but the brick gap
 // is narrower than the ball, so the push-out position can
 // land inside the seam neighbour. The sub-step loop must drain
-// residual overlap after a hit (resolve until collideBricks()
+// residual overlap after a hit (resolve until collideBricks(balls[0])
 // returns false), locking: no live overlap at end of frame.
 // ================================================================
 function liveOverlapCount(g) {
   // Counts active bricks whose rect overlaps the ball, using the
-  // same circle-vs-rect test as the game's collideBricks().
+  // same circle-vs-rect test as the game's collideBricks(balls[0]).
   return g.q(`(function () {
     var n = 0;
     for (var i = 0; i < bricks.length; i += 1) {
       var b = bricks[i];
       if (!b.active) continue;
-      var ovx = b.w / 2 + BALL_RADIUS - Math.abs(ball.x - (b.x + b.w / 2));
-      var ovy = b.h / 2 + BALL_RADIUS - Math.abs(ball.y - (b.y + b.h / 2));
+      var ovx = b.w / 2 + BALL_RADIUS - Math.abs(balls[0].x - (b.x + b.w / 2));
+      var ovy = b.h / 2 + BALL_RADIUS - Math.abs(balls[0].y - (b.y + b.h / 2));
       if (ovx > 0 && ovy > 0) n += 1;
     }
     return n;
@@ -448,10 +448,10 @@ check("row-centre side hit: the sub-step loop drains residual overlap — no liv
   // col-4 neighbour. Without the drain, the frame ends with the ball
   // overlapping that neighbour.
   const b = g.brickAt(4, 5);
-  g.q(`ball.attached = false;
-       ball.x = ${b.x} - BALL_RADIUS + 0.5;
-       ball.y = ${b.y + b.h / 2};
-       ball.vx = 250; ball.vy = 0;`);
+  g.q(`balls[0].attached = false;
+       balls[0].x = ${b.x} - BALL_RADIUS + 0.5;
+       balls[0].y = ${b.y + b.h / 2};
+       balls[0].vx = 250; balls[0].vy = 0;`);
   assert(liveOverlapCount(g) >= 1, "setup: the parked ball must overlap a live brick");
 
   g.q(`update(${frame})`);
@@ -504,10 +504,10 @@ check("tunnelling: a ball at the top-level max speed that skips a brick row in o
 
   // Console-style fixture: ball tangent to the brick's underside,
   // velocity reassigned to the negative maximum per-level speed.
-  g.q(`ball.attached = false;
-       ball.x = ${b.x + b.w / 2};
-       ball.y = ${b.y + b.h} + BALL_RADIUS;
-       ball.vx = 0; ball.vy = -${topSpeed};`);
+  g.q(`balls[0].attached = false;
+       balls[0].x = ${b.x + b.w / 2};
+       balls[0].y = ${b.y + b.h} + BALL_RADIUS;
+       balls[0].vx = 0; balls[0].vy = -${topSpeed};`);
   g.q(`update(${frame})`);
 
   assert(g.brickAt(SEED_ROW, SEED_COL).active === false,
