@@ -571,3 +571,28 @@
   `createElement`/`appendChild`/`firstChild`). Alternative: per-icon show/hide over a
   fixed trio (keeps stale nodes alive; a rebuild on the rare life event is trivially
   exact and cheaper to reason about).
+
+## 2026-10-30 — Ticket #21 review round 1: per-direction held keys, true-quarter fixture
+
+- **Held keys are tracked as one `Set` of key codes per direction (`keys.left` /
+  `keys.right`), not booleans (review should-fix 1).** With booleans, holding
+  `ArrowLeft` + `KeyA` and releasing one stopped the paddle although the other was
+  still held. The review suggested counters; a set of *distinct* held codes is the
+  repeat-safe form of that counter — browser auto-repeat re-dispatches the same
+  `keydown`, which would inflate a naive per-event counter, whereas `add(code)` is
+  idempotent, so set size mirrors the fingers on the deck, not the re-dispatches.
+  `onBlur` clears both sets (same ghost-key protection as before). The travel speed is
+  sign-based (`size > 0`), so two held same-direction keys never double the speed
+  (locked in by the new auto-repeat travel test). Alternatives: raw per-event
+  counters with `e.repeat` filtering (depends on the event property, which the vm
+  stubs would also have to fake), per-code boolean map + reduction (same result,
+  more code than a set).
+- **The `incomingHit` test fixture's parameter is now the game's own normalised
+  offset — a fraction of the paddle *half* width (review should-fix 2).** The old
+  fixture multiplied by the full `PADDLE_WIDTH`, so its "left quarter" (`rel = -0.5`)
+  actually sat on the left **rim** (`rel = -1`). Call sites now pass `±0.75`, i.e.
+  the quarter centres at offset `∓0.375·PADDLE_WIDTH`, and the left-quarter test
+  additionally asserts the pre-bounce x equals `paddle.x - PADDLE_WIDTH * 0.375` so
+  label and placement cannot drift apart again. The reviewed "stale parked-ball
+  coordinates at game over" note is accepted as documented behaviour — no code change.
+
