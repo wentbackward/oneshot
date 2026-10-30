@@ -243,6 +243,7 @@ var SFX_POWERUP_CATCH = { wave: WAVE_SQUARE, freq: 660, dur: 0.12 };
 var SFX_GAME_OVER     = { wave: WAVE_SINE,   freq: 110, dur: 0.50 };
 var SFX_PEAK = 0.5;                    // every envelope peaks here; the bus scales it
 var SFX_DECAY_FLOOR = 0.001;           // decay target: exp ramps cannot reach exact 0
+var SFX_EXP_EPS = 1e-4;                // exp-ramp guard: start and target stay positive
 var SFX_NOISE_BUFFER_SECONDS = 0.25;   // shared noise source length
 var audioCtx = null;                   // AudioContext, built on the first gesture
 var MASTER_BUS = null;                 // the one gain node wired to destination
@@ -252,12 +253,12 @@ var noiseBuffer = null;                // white noise, built once, reused per hi
 // Silently no-ops when the platform has no Web Audio.
 function ensureAudio() {
   if (audioCtx) {
-    if (audioCtx.state === "suspended") audioCtx.resume();
+    if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
     return;
   }
   if (typeof AudioContext === "undefined") return; // silent, no error
   audioCtx = new AudioContext();
-  if (audioCtx.state === "suspended") audioCtx.resume();
+  if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
   MASTER_BUS = audioCtx.createGain();
   MASTER_BUS.gain.value = MASTER_GAIN;
   MASTER_BUS.connect(audioCtx.destination);
@@ -271,7 +272,10 @@ function ensureAudio() {
 // recipe frequency for noise — feeds a freshly shaped envelope gain,
 // which connects to the single MASTER_BUS. The envelope peaks at
 // SFX_PEAK, then decays to SFX_DECAY_FLOOR at the recipe duration,
-// so the node's audio is bounded.
+// so the node's audio is bounded. Both ramp values are clamped to
+// SFX_EXP_EPS (exp ramps must stay positive); the start is set at the
+// schedule time, so a console zeroed SFX_PEAK/SFX_DECAY_FLOOR can
+// never make the scheduler throw.
 function scheduleSound(recipe) {
   if (!audioCtx) return; // audio not enabled yet: silent no-op
   var t0 = audioCtx.currentTime;
@@ -292,8 +296,9 @@ function scheduleSound(recipe) {
     input.frequency.value = recipe.freq;
   }
   var env = audioCtx.createGain();
-  env.gain.setValueAtTime(SFX_PEAK, t0);
-  env.gain.exponentialRampToValueAtTime(SFX_DECAY_FLOOR, t0 + recipe.dur);
+  env.gain.setValueAtTime(Math.max(SFX_PEAK, SFX_EXP_EPS), t0);
+  env.gain.exponentialRampToValueAtTime(
+    Math.max(SFX_DECAY_FLOOR, SFX_EXP_EPS), t0 + recipe.dur);
   input.connect(env);
   env.connect(MASTER_BUS);
   if (input.start) { // oscillator path (buffer sources started above)
