@@ -385,6 +385,7 @@ check("without an AudioContext stub the full game loop runs silently with no exc
   g.key("keydown", "ArrowRight"); // keydown gesture, same platform
   g.tick(30);
   bouncePaddle(g); // paddle bounce: silent no-op
+  g.q("random = () => 1; 1"); // no unplanned capsule before the forced catch
   killBrick(g, 0, 3); // brick break: silent no-op
   catchCapsule(g, 4, 5); // power-up catch: silent no-op
   toGameOver(g); // game over: silent no-op
@@ -594,10 +595,13 @@ check("every envelope gain connects to the one master bus gain, and the bus is t
   const g = boot(960, 600, { audio: true });
   start(g);
   bouncePaddle(g);
+  g.q("random = () => 1; 1"); // the intermediate kill must not release a capsule
   killBrick(g, 2, 4);
   catchCapsule(g, 3, 4);
   const envs = envelopes(g);
-  assert(envs.length === 3, `three events must yield three envelopes, got ${envs.length}`);
+  // Four scheduled sounds for three visible events: the catch fixture
+  // also destroys a brick, so two breaks land on the graph.
+  assert(envs.length === 4, `the fixture must yield four envelopes, got ${envs.length}`);
   const bus = busGains(g);
   assert(bus.length === 1,
     `exactly one gain node may be wired to destination (the bus), got ${bus.length}`);
@@ -623,11 +627,14 @@ check("reassigning MASTER_GAIN = 0 silences every subsequently scheduled envelop
   g.q("MASTER_GAIN = 0");
   const n0 = soundParts(g);
   bouncePaddle(g);
+  g.q("random = () => 1; 1"); // the intermediate kill must not release a capsule
   killBrick(g, 0, 0);
   catchCapsule(g, 4, 9);
   assert(soundParts(g) - n0 > 0, "setup: the post-mute events must still schedule sounds");
   const post = envelopes(g).slice(1);
-  assert(post.length === 3, `three post-mute events must yield three envelopes, got ${post.length}`);
+  // Four post-mute sounds: bounce, break, break, catch — the catch
+  // fixture also destroys a brick.
+  assert(post.length === 4, `the post-mute events must yield four envelopes, got ${post.length}`);
   for (const e of post) {
     assert(e.events.every(([v]) => v === 0),
       `a post-mute envelope must be silent: every automation value is 0, got ${JSON.stringify(e.events)}`);
