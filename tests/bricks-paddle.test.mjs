@@ -170,7 +170,7 @@ function boot(width = 960, height = 600) {
     lives: () => q("typeof lives === 'undefined' ? NaN : lives"),
     paddleX: () => q("typeof paddle === 'undefined' ? NaN : paddle.x"),
     ball: () =>
-      q("typeof ball === 'undefined' ? null : ({ x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, attached: ball.attached })"),
+      q("typeof balls === 'undefined' ? null : ({ x: balls[0].x, y: balls[0].y, vx: balls[0].vx, vy: balls[0].vy, attached: balls[0].attached })"),
     serveY: () =>
       q("canvas.height - PADDLE_BOTTOM_GAP - PADDLE_HEIGHT - BALL_RADIUS"),
     lifeIcons: () => els.lives.children.length,
@@ -201,8 +201,8 @@ function boot(width = 960, height = 600) {
     // Teleport a flying ball past the bottom edge; one tick drops it.
     dropBall() {
       q(
-        "ball.attached = false; ball.vx = 0; ball.vy = 300;\n" +
-          "ball.x = paddle.x; ball.y = canvas.height + 50;"
+        "balls[0].attached = false; balls[0].vx = 0; balls[0].vy = 300;\n" +
+          "balls[0].x = paddle.x; balls[0].y = canvas.height + 50;"
       );
       tick(1);
     },
@@ -224,10 +224,10 @@ const start = (g) => {
 function incomingHit(g, rel) {
   g.q(
     "paddle.x = canvas.width / 2;\n" +
-      "ball.attached = false;\n" +
-      "ball.x = paddle.x + (BASE_PADDLE_W / 2) * " + rel + ";\n" +
-      "ball.y = (canvas.height - PADDLE_BOTTOM_GAP - PADDLE_HEIGHT) - BALL_RADIUS - 5;\n" +
-      "ball.vx = 0; ball.vy = 400;"
+      "balls[0].attached = false;\n" +
+      "balls[0].x = paddle.x + (BASE_PADDLE_W / 2) * " + rel + ";\n" +
+      "balls[0].y = (canvas.height - PADDLE_BOTTOM_GAP - PADDLE_HEIGHT) - BALL_RADIUS - 5;\n" +
+      "balls[0].vx = 0; balls[0].vy = 400;"
   );
 }
 
@@ -524,7 +524,7 @@ function wallReflection(place, axis, expectSign) {
   const g = boot(960, 600);
   start(g);
   g.q(place);
-  const s0 = g.q("Math.hypot(ball.vx, ball.vy)");
+  const s0 = g.q("Math.hypot(balls[0].vx, balls[0].vy)");
   g.tick(1);
   const b = g.ball();
   assert(b[`${axis}`] * expectSign > 0,
@@ -536,7 +536,7 @@ function wallReflection(place, axis, expectSign) {
 
 check("the ball reflects off the right wall in the field, preserving speed within 1%", () => {
   const g = wallReflection(
-    "ball.attached = false; ball.x = canvas.width - BALL_RADIUS - 3; ball.y = 500; ball.vx = 300; ball.vy = 120;",
+    "balls[0].attached = false; balls[0].x = canvas.width - BALL_RADIUS - 3; balls[0].y = 500; balls[0].vx = 300; balls[0].vy = 120;",
     "vx", -1);
   assert(g.ball().x <= g.q("canvas.width - BALL_RADIUS") + 1e-6,
     `the ball must not pass the right edge, x=${g.ball().x}`);
@@ -544,7 +544,7 @@ check("the ball reflects off the right wall in the field, preserving speed withi
 
 check("the ball reflects off the left wall in the field, preserving speed within 1%", () => {
   const g = wallReflection(
-    "ball.attached = false; ball.x = BALL_RADIUS + 3; ball.y = 500; ball.vx = -300; ball.vy = 120;",
+    "balls[0].attached = false; balls[0].x = BALL_RADIUS + 3; balls[0].y = 500; balls[0].vx = -300; balls[0].vy = 120;",
     "vx", 1);
   assert(g.ball().x >= g.q("BALL_RADIUS") - 1e-6,
     `the ball must not pass the left edge, x=${g.ball().x}`);
@@ -552,7 +552,7 @@ check("the ball reflects off the left wall in the field, preserving speed within
 
 check("the ball reflects off the top wall in the field, preserving speed within 1%", () => {
   const g = wallReflection(
-    "ball.attached = false; ball.x = 700; ball.y = BALL_RADIUS + 3; ball.vx = 100; ball.vy = -300;",
+    "balls[0].attached = false; balls[0].x = 700; balls[0].y = BALL_RADIUS + 3; balls[0].vx = 100; balls[0].vy = -300;",
     "vy", 1);
   assert(g.ball().y >= g.q("BALL_RADIUS") - 1e-6,
     `the ball must not pass the top edge, y=${g.ball().y}`);
@@ -563,7 +563,7 @@ check("soak: over 600 seeded frames the ball never leaves the field and its spee
   start(g);
   const W = g.q("canvas.width");
   const R = g.q("BALL_RADIUS");
-  g.q("ball.attached = false; ball.x = 340; ball.y = 250; ball.vx = 500; ball.vy = -310;");
+  g.q("balls[0].attached = false; balls[0].x = 340; balls[0].y = 250; balls[0].vx = 500; balls[0].vy = -310;");
   // The wall-bounce soak predates the brick grid (ticket #22); keep
   // it isolated by deactivating the brick field for this fixture only
   // (nothing live can be destroyed, so no win can trigger either).
@@ -576,7 +576,7 @@ check("soak: over 600 seeded frames the ball never leaves the field and its spee
   let touchedTop = false;
   let touchedRight = false;
   for (let f = 0; f < 600; f += 1) {
-    g.q("paddle.x = ball.x;"); // omniscient catcher: the ball never falls
+    g.q("paddle.x = balls[0].x;"); // omniscient catcher: the ball never falls
     g.tick(1);
     const b = g.ball();
     assert(b.x >= R - 1e-6 && b.x <= W - R + 1e-6,

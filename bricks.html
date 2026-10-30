@@ -144,9 +144,12 @@
 // bounces (position-dependent angle, speed-preserving), a fixed-pool
 // brick grid the ball breaks for colour-valued points, level
 // progression on a cleared board (faster serve per level, capped),
-// and the lose-a-life / game-over / restart flow, and the power-up
-// drop / catch framework with the expand paddle effect. Audio is a
-// later campaign-2 ticket.
+// the lose-a-life / game-over / restart flow, and the power-up drop /
+// catch framework with the expand paddle, extra ball (a fixed ball
+// pool capped at MAX_BALLS — a life is lost only when the last live
+// ball falls) and sticky paddle (a timed window during which paddle
+// contact catches a ball that a click re-launches) effects. Audio is
+// a later campaign-2 ticket.
 // ================================================================
 
 // ---- Tunables (var: addressable as globals, e.g. from the console) ----
@@ -163,6 +166,7 @@ var PADDLE_BOTTOM_GAP = 24;       // clear space between paddle and bottom edge
 var PADDLE_SPEED = 720;           // keyboard travel speed, px/s
 // Ball
 var BALL_RADIUS = 8;
+var MAX_BALLS = 5;              // live-ball cap; the ball pool is sized to this
 var BALL_SERVE_SPEED = 480;       // level-1 launch speed on click/tap, px/s
 var LEVEL_SPEED_GROWTH = 1.15;    // per-level serve-speed multiplier (PRD section 4)
 var MAX_BALL_SPEED = 1500;        // ceiling the per-level growth caps at, px/s
@@ -197,14 +201,19 @@ var CAPSULE_POOL_SIZE = 4;         // fixed pre-allocated pool of concurrent cap
 // entry here, and a case in applyCapsule() — the catch handler itself
 // never changes.
 var KIND_EXPAND = 0;
-var CAPSULE_KINDS = [KIND_EXPAND];
+var KIND_EXTRA = 1;
+var KIND_STICKY = 2;
+var CAPSULE_KINDS = [KIND_EXPAND, KIND_EXTRA, KIND_STICKY];
 var COLOR_CAPSULE_EXPAND = "#ffd23f";
+var COLOR_CAPSULE_EXTRA = "#63d4ff";
+var COLOR_CAPSULE_STICKY = "#d05ce3";
 // Exhaustive kind-to-colour table, indexed by kind: every enumerated
 // kind has exactly one row. A new kind adds a row here and an entry
 // in CAPSULE_KINDS — never a branch in the draw pass.
-var CAPSULE_COLORS = [COLOR_CAPSULE_EXPAND];
+var CAPSULE_COLORS = [COLOR_CAPSULE_EXPAND, COLOR_CAPSULE_EXTRA, COLOR_CAPSULE_STICKY];
 var PADDLE_EXPAND_FACTOR = 1.6;         // widened width = BASE_PADDLE_W * factor
 var PADDLE_EXPAND_DURATION_S = 6;       // simulated seconds of widen
+var STICKY_DURATION_S = 6;              // simulated seconds the paddle still catches
 
 // ---- Palette (the page accent lives in the CSS --accent property;
 // a canvas-drawn mirror is added with the canvas-text gameplay tickets) ----
@@ -247,8 +256,17 @@ var capsules = [];
 for (var i = 0; i < CAPSULE_POOL_SIZE; i += 1) {
   capsules.push({ active: false, kind: KIND_EXPAND, x: 0, y: 0 });
 }
-// One ball per run (a pool arrives with #26's extra-ball power-up).
-var ball = { x: 0, y: 0, vx: 0, vy: 0, attached: true };
+// Ball pool: allocated once at MAX_BALLS and mutated in place; a
+// free slot is activated per extra-ball catch, never grown.
+// Slot 0 is the run's serve ball; a sticky catch rides any slot at
+// its contact offset (attachOff).
+var balls = [];
+for (var i = 0; i < MAX_BALLS; i += 1) {
+  balls.push({ active: false, attached: false, attachOff: 0, x: 0, y: 0, vx: 0, vy: 0 });
+}
+var stickyUntil = -1;              // simTime at which the sticky catch expires;
+                                   // absolute clock, so a mid-run re-serve
+                                   // inside the window leaves it armed
 // Brick pool: allocated once at this size and reused in place for
 // every level, so the grid never allocates on a level spawn.
 var bricks = [];
@@ -431,6 +449,12 @@ function applyCapsule(kind) {
     paddleW = BASE_PADDLE_W * PADDLE_EXPAND_FACTOR;
     expandUntil = simTime + PADDLE_EXPAND_DURATION_S;
     clampPaddle();
+  } else if (kind === KIND_EXTRA) {
+    spawnExtraBall();
+  } else if (kind === KIND_STICKY) {
+    // (Re)arm the catch window: the expiry is set to now + the full
+    // duration, never added to whatever the previous arm had left.
+    stickyUntil = simTime + STICKY_DURATION_S;
   }
 }
 function updatePowerups(dt) {
@@ -451,102 +475,156 @@ function updatePowerups(dt) {
   }
 }
 
-// ---- Ball ----
-// A click/tap detaches an attached ball straight up at the
-// (level-grown) serve speed.
-function launchBall() {
-  if (gameState !== "playing" || !ball.attached) return;
-  ball.attached = false;
-  ball.vx = 0;
-  ball.vy = -serveSpeed;
+// ---- Balls (fixed pool, tickets #21/#26) ----
+function liveBallCount() {
+  var n = 0;
+  for (var i = 0; i < balls.length; i += 1) if (balls[i].active) n += 1;
+  return n;
 }
-canvas.addEventListener("click", launchBall);
-canvas.addEventListener("touchend", launchBall);
-
-function updateBall(dt) {
-  var pt = paddleTop();
-  if (ball.attached) {
-    // Rides the paddle; all motion is paddle-driven while attached.
-    ball.x = paddle.x;
-    ball.y = pt - BALL_RADIUS;
-    return;
+// An extra-ball catch spawns at the paddle centre and joins active
+// play immediately: straight up at the (level-grown) serve speed.
+// The pool is the named MAX_BALLS cap — a catch beyond it is a no-op.
+function spawnExtraBall() {
+  var free = null;
+  for (var i = 0; i < balls.length; i += 1) {
+    if (balls[i].active) continue;
+    free = balls[i];
+    break;
   }
-  var prevBottom = ball.y + BALL_RADIUS;
-  // Integrate in sub-steps of at most one ball radius, so a fast
-  // ball can never skip a brick face inside a clamped frame.
-  var travel = Math.hypot(ball.vx, ball.vy) * dt;
-  var steps = Math.max(1, Math.ceil(travel / BALL_RADIUS));
-  var sdt = dt / steps;
-  var bricked = false;
-  for (var s = 0; s < steps; s += 1) {
-    ball.x += ball.vx * sdt;
-    ball.y += ball.vy * sdt;
-    bounceWalls();
-    if (collideBricks()) {
-      bricked = true;
-      // The gap is narrower than the ball: pinning to a brick face
-      // can land the ball inside the seam neighbour. Drain the
-      // residual overlap now so the frame ends clear of the grid.
-      while (collideBricks()) { /* resolved */ }
-      break;
-    }
-  }
-  if (bricked) return; // reflected by a brick (or re-served on a win)
-  // Paddle: sweep test across the top face (no tunnelling even on a
-  // clamped frame). The outgoing angle derives from the hit offset;
-  // the incoming speed is preserved.
-  if (
-    ball.vy > 0 &&
-    prevBottom <= pt &&
-    ball.y + BALL_RADIUS >= pt &&
-    Math.abs(ball.x - paddle.x) <= paddleW / 2 + BALL_RADIUS
-  ) {
-    var rel = (ball.x - paddle.x) / (paddleW / 2);
+  if (!free) return;
+  free.active = true;
+  free.attached = false;
+  free.attachOff = 0;
+  free.x = paddle.x;
+  free.y = paddleTop() - BALL_RADIUS;
+  free.vx = 0;
+  free.vy = -serveSpeed;
+}
+// A click/tap launches EVERY attached ball at the (level-grown)
+// serve speed, each inheriting the position-dependent paddle-angle
+// logic for its own offset from the paddle centre.
+function launchAttachedBalls() {
+  if (gameState !== "playing") return;
+  for (var i = 0; i < balls.length; i += 1) {
+    var b = balls[i];
+    if (!b.active || !b.attached) continue;
+    var rel = (b.x - paddle.x) / (paddleW / 2);
     if (rel > 1) rel = 1;
     else if (rel < -1) rel = -1;
-    var speed = Math.hypot(ball.vx, ball.vy);
-    var angle = rel * MAX_PADDLE_BOUNCE_ANGLE;
-    ball.vx = speed * Math.sin(angle);
-    ball.vy = -speed * Math.cos(angle);
-    ball.y = pt - BALL_RADIUS; // push out above the paddle
+    b.attached = false;
+    b.vx = serveSpeed * Math.sin(rel * MAX_PADDLE_BOUNCE_ANGLE);
+    b.vy = -serveSpeed * Math.cos(rel * MAX_PADDLE_BOUNCE_ANGLE);
   }
-  // Dropped below the bottom edge: one life, fresh serve or game over.
-  if (ball.y - BALL_RADIUS > canvas.height) loseLife();
+}
+canvas.addEventListener("click", launchAttachedBalls);
+canvas.addEventListener("touchend", launchAttachedBalls);
+
+function updateBalls(dt) {
+  var pt = paddleTop();
+  for (var i = 0; i < balls.length; i += 1) {
+    var b = balls[i];
+    if (!b.active) continue;
+    if (b.attached) {
+      // Rides the paddle at its catch offset; all motion is
+      // paddle-driven while attached.
+      b.x = paddle.x + b.attachOff;
+      b.y = pt - BALL_RADIUS;
+      continue;
+    }
+    var prevBottom = b.y + BALL_RADIUS;
+    // Integrate in sub-steps of at most one ball radius, so a fast
+    // ball can never skip a brick face inside a clamped frame.
+    var travel = Math.hypot(b.vx, b.vy) * dt;
+    var steps = Math.max(1, Math.ceil(travel / BALL_RADIUS));
+    var sdt = dt / steps;
+    var bricked = false;
+    for (var s = 0; s < steps; s += 1) {
+      b.x += b.vx * sdt;
+      b.y += b.vy * sdt;
+      bounceWalls(b);
+      if (collideBricks(b)) {
+        bricked = true;
+        // The gap is narrower than the ball: pinning to a brick face
+        // can land the ball inside the seam neighbour. Drain the
+        // residual overlap now so the frame ends clear of the grid.
+        while (collideBricks(b)) { /* resolved */ }
+        break;
+      }
+    }
+    if (bricked) continue; // reflected by a brick (or re-served on a win)
+    // Paddle: sweep test across the top face (no tunnelling even on a
+    // clamped frame). While the sticky window is live the contact
+    // catches; otherwise the outgoing angle derives from the hit
+    // offset and the incoming speed is preserved.
+    if (
+      b.vy > 0 &&
+      prevBottom <= pt &&
+      b.y + BALL_RADIUS >= pt &&
+      Math.abs(b.x - paddle.x) <= paddleW / 2 + BALL_RADIUS
+    ) {
+      if (simTime < stickyUntil) {
+        b.attached = true;
+        var catchOff = b.x - paddle.x;
+        if (catchOff > paddleW / 2) catchOff = paddleW / 2;
+        else if (catchOff < -paddleW / 2) catchOff = -paddleW / 2;
+        b.attachOff = catchOff;
+        b.vx = 0;
+        b.vy = 0;
+        b.x = paddle.x + catchOff;
+        b.y = pt - BALL_RADIUS;
+      } else {
+        var rel = (b.x - paddle.x) / (paddleW / 2);
+        if (rel > 1) rel = 1;
+        else if (rel < -1) rel = -1;
+        var speed = Math.hypot(b.vx, b.vy);
+        var angle = rel * MAX_PADDLE_BOUNCE_ANGLE;
+        b.vx = speed * Math.sin(angle);
+        b.vy = -speed * Math.cos(angle);
+        b.y = pt - BALL_RADIUS; // push out above the paddle
+      }
+    }
+    // Dropped below the bottom edge: only the last live ball costs a
+    // life; the others are simply gone and the run carries on.
+    if (b.y - BALL_RADIUS > canvas.height) {
+      b.active = false;
+      if (liveBallCount() === 0) loseLife();
+    }
+  }
 }
 // Walls: mirror the velocity component, pin to the inner edge. The
 // bottom is open — that is how a life is lost.
-function bounceWalls() {
-  if (ball.x - BALL_RADIUS < 0) {
-    ball.x = BALL_RADIUS;
-    ball.vx = Math.abs(ball.vx);
-  } else if (ball.x + BALL_RADIUS > canvas.width) {
-    ball.x = canvas.width - BALL_RADIUS;
-    ball.vx = -Math.abs(ball.vx);
+function bounceWalls(b) {
+  if (b.x - BALL_RADIUS < 0) {
+    b.x = BALL_RADIUS;
+    b.vx = Math.abs(b.vx);
+  } else if (b.x + BALL_RADIUS > canvas.width) {
+    b.x = canvas.width - BALL_RADIUS;
+    b.vx = -Math.abs(b.vx);
   }
-  if (ball.y - BALL_RADIUS < 0) {
-    ball.y = BALL_RADIUS;
-    ball.vy = Math.abs(ball.vy);
+  if (b.y - BALL_RADIUS < 0) {
+    b.y = BALL_RADIUS;
+    b.vy = Math.abs(b.vy);
   }
 }
 // Circle vs brick overlap resolved along the shallowest axis; the
 // sign-based flip preserves the incoming speed exactly. One brick
 // per call (the first contact in pool order); the sub-step loop
 // drains follow-on seam overlaps after a hit.
-function collideBricks() {
+function collideBricks(b) {
   for (var i = 0; i < bricks.length; i += 1) {
-    var b = bricks[i];
-    if (!b.active) continue;
-    var cx = b.x + b.w / 2;
-    var cy = b.y + b.h / 2;
-    var ovx = b.w / 2 + BALL_RADIUS - Math.abs(ball.x - cx);
-    var ovy = b.h / 2 + BALL_RADIUS - Math.abs(ball.y - cy);
+    var k = bricks[i];
+    if (!k.active) continue;
+    var cx = k.x + k.w / 2;
+    var cy = k.y + k.h / 2;
+    var ovx = k.w / 2 + BALL_RADIUS - Math.abs(b.x - cx);
+    var ovy = k.h / 2 + BALL_RADIUS - Math.abs(b.y - cy);
     if (ovx <= 0 || ovy <= 0) continue;
     if (ovx < ovy) {
-      ball.vx = ball.x < cx ? -Math.abs(ball.vx) : Math.abs(ball.vx);
-      ball.x = ball.x < cx ? b.x - BALL_RADIUS : b.x + b.w + BALL_RADIUS;
+      b.vx = b.x < cx ? -Math.abs(b.vx) : Math.abs(b.vx);
+      b.x = b.x < cx ? k.x - BALL_RADIUS : k.x + k.w + BALL_RADIUS;
     } else {
-      ball.vy = ball.y < cy ? -Math.abs(ball.vy) : Math.abs(ball.vy);
-      ball.y = ball.y < cy ? b.y - BALL_RADIUS : b.y + b.h + BALL_RADIUS;
+      b.vy = b.y < cy ? -Math.abs(b.vy) : Math.abs(b.vy);
+      b.y = b.y < cy ? k.y - BALL_RADIUS : k.y + k.h + BALL_RADIUS;
     }
     destroyBrick(i);
     return true;
@@ -582,6 +660,7 @@ function beginRun() {
   simTime = 0;
   paddleW = BASE_PADDLE_W;
   expandUntil = -1;
+  stickyUntil = -1;
   for (var i = 0; i < capsules.length; i += 1) capsules[i].active = false;
   spawnLevel();
   serveBall();
@@ -592,14 +671,30 @@ btnStart.addEventListener("click", startGame);
 btnRestart.addEventListener("click", restartRun);
 
 // ---- Lives / game over ----
-// A fresh serve parks a rested ball on the paddle centre.
+// A fresh serve always parks ONE resting ball at the paddle centre:
+// every slot is drained and slot 0 rides the paddle, so an extra ball
+// never carries across a serve. The sticky WINDOW does: it is a fixed
+// sim-time span anchored at the moment the capsule was caught, and a serve does
+// not disarm it — a window still armed when the serve lands stays
+// armed until stickyUntil (the run-level reset in beginRun() is the
+// one place sticky state is cleared).
 function serveBall() {
-  ball.attached = true;
-  ball.vx = 0;
-  ball.vy = 0;
-  ball.x = paddle.x;
-  ball.y = paddleTop() - BALL_RADIUS;
+  for (var i = 0; i < balls.length; i += 1) {
+    balls[i].active = false;
+    balls[i].attached = false;
+    balls[i].attachOff = 0;
+    balls[i].vx = 0;
+    balls[i].vy = 0;
+  }
+  var b0 = balls[0];
+  b0.active = true;
+  b0.attached = true;
+  b0.x = paddle.x;
+  b0.y = paddleTop() - BALL_RADIUS;
 }
+// A life was lost: fresh serve, or game over when none remain. The
+// ball-drop path is the in-play caller and decides (via the live-
+// ball count) whether the dropped ball was the last one in play.
 function loseLife() {
   lives -= 1;
   renderLives();
@@ -657,7 +752,7 @@ function syncScore() {
 function update(dt) {
   simTime += dt;
   updatePaddle(dt);
-  updateBall(dt);
+  updateBalls(dt);
   updatePowerups(dt);
 }
 function draw() {
@@ -669,7 +764,7 @@ function draw() {
   // undrawn, so the game-over screen shows a tidy board.
   if (gameState === "playing") drawPowerups();
   drawPaddle();
-  drawBall();
+  drawBalls();
 }
 function drawBricks() {
   for (var i = 0; i < bricks.length; i += 1) {
@@ -691,11 +786,15 @@ function drawPaddle() {
   ctx.fillStyle = COLOR_PADDLE;
   ctx.fillRect(paddle.x - paddleW / 2, paddleTop(), paddleW, PADDLE_HEIGHT);
 }
-function drawBall() {
+function drawBalls() {
   ctx.fillStyle = COLOR_BALL;
-  ctx.beginPath();
-  ctx.arc(ball.x, ball.y, BALL_RADIUS, 0, 2 * Math.PI);
-  ctx.fill();
+  for (var i = 0; i < balls.length; i += 1) {
+    var b = balls[i];
+    if (!b.active) continue;
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, BALL_RADIUS, 0, 2 * Math.PI);
+    ctx.fill();
+  }
 }
 
 // ---- Boot ----
