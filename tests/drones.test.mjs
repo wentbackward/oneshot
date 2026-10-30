@@ -168,6 +168,10 @@ check("DRONE_BASE, DRONE_GROWTH and SCORE_PER_DRONE are named constants; SCORE_P
 
 check("drones spawn at the screen edges and the field never exceeds the drone roster", () => {
   const g = boot(960, 600);
+  // Invariant this spawn/cap wait relies on: at 960x600 the ship rests
+  // at the centre (480,300) and no point of any edge band lies within
+  // SPAWN_SAFE_RADIUS (200) of it (closest is 300 px at a side
+  // midpoint), so the safe-radius rejection can never stall the build.
   // Rock-free world with a flat roster of three drones on every wave.
   g.q("ASTEROID_BASE = 0; ASTEROID_GROWTH = 0; DRONE_BASE = 3; DRONE_GROWTH = 0");
   g.tick(); // bootstrap frame: spawner builds the wave roster immediately
@@ -319,7 +323,8 @@ check("a drone held overlapping during the INVULN_MS window costs nothing until 
   const g = boot();
   quietField(g);
   placeDrone(g, 480, 276.5, Math.PI / 2);
-  g.tick(); // hit #1 at t ~= 0; invulnerable for the default 1500 ms
+  g.tick(); // first frame runs with dt = 0, so the hit lands at gameTime = 0;
+            // the ship is then invulnerable for the default 1500 ms
   assertClose(g.hp(), 2, 0, "first impact drops hp to 2");
   g.q("DRONE_SPEED = 5"); // crawl: the second drone stays in the overlap band the whole test
   placeDrone(g, 480, 318.5, -Math.PI / 2);

@@ -106,8 +106,12 @@ function boot(width = 960, height = 600) {
   return {
     tick,
     key,
+    fire: (type) => {
+      for (const cb of listeners[type] ?? []) cb({});
+    },
     q,
     keydownFlag,
+    ctxCalls,
     activeSlots: () => q("[...laserPool.slots].filter((s) => s.active)"),
     activeCount: () =>
       q("laserPool.slots.reduce((n, s) => n + (s.active ? 1 : 0), 0)"),
@@ -226,6 +230,71 @@ check("pool exhaustion never allocates: firing waits for a free slot", () => {
   const n = g.activeCount();
   assertClose(n, g.q("LASER_POOL_SIZE"), 0, "saturated pool holds exactly LASER_POOL_SIZE lasers, no overflow objects");
   assertClose(g.q("laserPool.slots.length"), size0, 0, "exhausted pool does not grow or crash");
+});
+
+// ================================================================
+// #2-1 (should-fix): losing focus clears the pressed-keys set — a
+// movement key held while the tab loses focus (alt-tab) must not
+// keep pushing the ship once focus returns
+// ================================================================
+check("window blur clears the pressed-keys set: a held W after an alt-tab leaves the ship stationary", () => {
+  const g = boot();
+  g.q("ASTEROID_BASE = 0; ASTEROID_GROWTH = 0; DRONE_BASE = 0; DRONE_GROWTH = 0"); // empty field: thrust is the only input
+  g.key("KeyW", true);
+  for (let i = 0; i < 30; i++) g.tick(); // ~0.5 s of thrust (this suite's tick(ms) is ONE frame of length ms)
+  assert(g.q("ship.vy") < -1, "precondition: held W gives the ship real upward speed");
+  g.fire("blur"); // focus loss (alt-tab): held keys no longer reach the game
+  assert(g.q("keys.size") === 0, "blur must clear the pressed-keys set");
+  // Friction snaps the ship to rest; afterwards it must stay put.
+  let rest = null;
+  for (let i = 0; i < 120; i++) {
+    g.tick();
+    if (g.q("ship.vx") === 0 && g.q("ship.vy") === 0) {
+      rest = g.q("({ x: ship.x, y: ship.y })");
+      break;
+    }
+  }
+  assert(rest, "friction must bring the ship to rest once the keys are cleared");
+  for (let i = 0; i < 120; i++) g.tick(); // 2 s with no reachable input
+  const p = g.q("({ x: ship.x, y: ship.y })");
+  assert(p.x === rest.x && p.y === rest.y,
+    `ship must remain stationary after the held key was dropped (drifted to ${p.x},${p.y} from ${rest.x},${rest.y} — ghost thrust)`);
+});
+
+// ================================================================
+// #3-2 (should-fix): tryFire finds a free slot with a plain indexed
+// loop — no .find closure allocated per shot
+// ================================================================
+check("tryFire scans the laser pool by index (no per-shot closure allocation)", () => {
+  assert(!gameSource.includes("laserPool.slots.find"),
+    "tryFire must not locate a free slot with .find (a closure per shot in the hot path)");
+  // And the scan must still find a free slot: sustained fire keeps working.
+  const g = boot(100000, 100000);
+  g.key("Space", true);
+  for (let i = 0; i < 60; i++) g.tick();
+  assert(g.activeCount() >= 5, `indexed scan must still recycle slots (fired ${g.activeCount()} lasers in 1 s)`);
+});
+
+// ================================================================
+// #3-3 (should-fix): render() skips the laser beginPath/stroke when
+// no lasers are active (an empty path is pure waste at 60 fps)
+// ================================================================
+check("render begins no laser path with an empty pool, and exactly one batched path with lasers live", () => {
+  const g = boot(960, 600);
+  g.q("ASTEROID_BASE = 0; ASTEROID_GROWTH = 0; DRONE_BASE = 0; DRONE_GROWTH = 0"); // only the ship draws
+  g.tick(); // bootstrap frame (dt = 0)
+  g.ctxCalls.length = 0;
+  g.tick();
+  const emptyPaths = g.ctxCalls.filter((c) => c === "beginPath").length;
+  assert(emptyPaths === 1,
+    `with no active lasers only the ship path may be begun, got ${emptyPaths} beginPath calls`);
+  // One active laser -> exactly one more (batched) path.
+  g.q("laserPool.slots[0].active = true; laserPool.slots[0].x = 480; laserPool.slots[0].y = 100; laserPool.slots[0].dx = 0; laserPool.slots[0].dy = -1;");
+  g.ctxCalls.length = 0;
+  g.tick();
+  const livePaths = g.ctxCalls.filter((c) => c === "beginPath").length;
+  assert(livePaths === 2,
+    `one active laser must add exactly one batched path, got ${livePaths} beginPath calls`);
 });
 
 // ---------- summary ----------

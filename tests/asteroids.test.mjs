@@ -189,13 +189,29 @@ check("active asteroid count builds up to the wave roster and follows reassignme
 // ================================================================
 check("every naturally spawned asteroid starts at least SPAWN_SAFE_RADIUS (200) px from the ship", () => {
   const g = boot(480, 360); // ship (240,180); corners ~300 px away -> room to live
-  // Pool slots are recycled in place, so we cannot memoise on slot identity
-  // alone: detect each inactive->active transition every frame instead,
-  // which catches new-wave rosters as well as first activations.
+  g.q("INVULN_MS = 1e9"); // the parked ship must survive the whole soak: rocks
+                          // shatter on impact, the simulation keeps running
+  // Under the wave regime destroyed hazards are never replaced, so a
+  // passive run samples only the initial roster. clearField() every 5 s
+  // instead: each clear ends the wave, steps the number up and forces a
+  // fresh roster to spawn, so the sample keeps growing across waves.
+  // Pool slots are recycled in place, so we cannot memoise on slot
+  // identity alone: detect each inactive->active transition every frame
+  // instead, which catches new-wave rosters as well as first activations.
+  // Pinned RNG (review #14-A): the sample-count floor below must be
+  // bit-for-bit reproducible across runs, not merely probabilistic.
+  g.q(`random = ${mulberry32Source(7)}`);
   let prevActive = new Set();
   let spawns = 0;
-  for (let i = 0; i < 4800; i++) { // 80 s of drift, wraps and new-wave rosters
+  for (let i = 0; i < 4800; i++) { // 80 s of drift, wraps and rebuilt rosters
     g.tick();
+    if (i > 0 && i % 300 === 0) {
+      g.clearField(); // force fresh rosters every 5 s
+      // Drones too: with the invulnerable ship, checkShipHits never runs, so
+      // a chaser parked in the hull overlap would live (and block wave
+      // completion) for ever.
+      g.q("drones.slots.forEach((d) => (d.active = false))");
+    }
     const act = g.activeAsteroids();
     const nowActive = new Set(act);
     for (const a of act) {
@@ -209,7 +225,11 @@ check("every naturally spawned asteroid starts at least SPAWN_SAFE_RADIUS (200) 
     for (const a of prevActive) if (!nowActive.has(a)) prevActive.delete(a);
     for (const a of nowActive) if (!prevActive.has(a)) prevActive.add(a);
   }
-  assert(spawns > 0, "the field must actually respawn asteroids over the run");
+  // 16 rebuilt rosters of 6+2*(N-1) rocks each: the sample must be far
+  // larger than the initial wave's 6 spawns. (Under the pinned seed the
+  // soak deterministically yields 297 spawns; 100 is a floor, not a
+  // prediction.)
+  assert(spawns >= 100, `the soak must sample many spawn distances across waves, got ${spawns}`);
 });
 
 // ================================================================
@@ -272,15 +292,19 @@ check("spawned asteroids enter monotonically through their spawn edge (no wrap-t
 // forever and silently eat a pool slot.
 check("outward-pointing spawn candidates are re-aimed into the field", () => {
   const g = boot(960, 600);
-  // Seeded: top edge at x = 0; direction to centre tilts ~57° off the
-  // inward normal, and the seeded jitter rotates the heading a further
-  // ~46° the wrong way -> raw velocity points up and away from the field.
-  const rands = [0.01, 0.5, 0, 0.1];
+  // Seeded: top edge at x = 0; direction to centre tilts ~33° off the
+  // inward normal, and the seeded jitter (~60°) rotates the heading a
+  // further ~60° the wrong way -> raw velocity points up and away from
+  // the field, but deep enough that the re-aim mirror leaves a solid
+  // inward component (~45 px/s > ASTEROID_INWARD_MIN).
+  const rands = [0.01, 0.5, 0, 0.8, 0.9, 0.85, 0.8, 0.95, 0.8, 0.85, 0.9, 0.0, 0.5];
   g.q(`random = (() => { const r = [${rands}]; let i = 0; return () => r[i++ % r.length]; })()`);
   assert(g.q("spawnAsteroid()"), "corner candidate still spawns");
   const a = g.activeAsteroids()[0];
   assert(a.x === 0 && a.y < 0, "fixture is the top-edge corner candidate");
   assert(a.vy > 0, "spawn velocity must point into the field (downward from the top edge)");
+  assert(a.vy >= g.q("ASTEROID_INWARD_MIN") - 1e-9,
+    `re-aimed inward component must clear the entry floor, got ${a.vy}`);
   let prev = a.y;
   for (let i = 0; i < 900 && a.y <= 0; i++) {
     g.tick();
@@ -288,6 +312,64 @@ check("outward-pointing spawn candidates are re-aimed into the field", () => {
     prev = a.y;
   }
   assert(a.y > 0, "re-aimed rock must eventually cross into the field");
+});
+
+// ================================================================
+// #4-2 (should-fix): a candidate whose INWARD velocity component sits
+// below the named floor ASTEROID_INWARD_MIN is rejected within the
+// existing bounded retry, so entry time stays bounded even for
+// near-tangent corner drifts
+// ================================================================
+check("candidates whose inward component falls below ASTEROID_INWARD_MIN are rejected within the retry budget", () => {
+  const g = boot(960, 600);
+  assert(typeof g.q("ASTEROID_INWARD_MIN") === "number" && g.q("ASTEROID_INWARD_MIN") > 0,
+    "ASTEROID_INWARD_MIN must be a named positive floor");
+  const before = g.count();
+  // Seeded so every one of the 13-element cycle reproduces the same
+  // top-edge corner candidate at (0, -17) whose post-mirror inward vy
+  // is only ~1.6 px/s (< 20): with the floor in force all retries are
+  // rejected and the spawn is abandoned.
+  const rands = [0.01, 0.5, 0, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.2135, 0.5];
+  g.q(`random = (() => { const r = [${rands}]; let i = 0; return () => r[i++ % r.length]; })()`);
+  assert(g.q("spawnAsteroid()") === false,
+    "a shallow-inward candidate must be rejected, not spawned with an unbounded entry time");
+  assert(g.count() === before, "rejected candidates must not change the field");
+});
+
+// ================================================================
+// #4-3 (should-fix): the former dual-role ASTEROID_MAX_SPAWNS is split
+// into a per-candidate retry budget and a per-frame spawn budget
+// ================================================================
+check("per-candidate retry budget and per-frame spawn budget are two named constants", () => {
+  const g = boot();
+  for (const name of ["ASTEROID_CANDIDATE_RETRIES", "ASTEROID_SPAWNS_PER_FRAME"]) {
+    assert(typeof g.q(name) === "number" && g.q(name) > 0,
+      `${name} must be a named positive constant`);
+  }
+  assert(g.q("typeof ASTEROID_MAX_SPAWNS === 'undefined'") === true,
+    "the old dual-role ASTEROID_MAX_SPAWNS must be gone");
+});
+
+// ================================================================
+// #4-1 (should-fix): positive-wrap coverage — a SETTLED rock (entry =
+// -1) fully past the right edge must re-enter at the opposite edge on
+// the very next tick
+// ================================================================
+check("a settled rock fully past the right edge re-enters at the opposite edge on the next tick", () => {
+  const g = boot(960, 600);
+  g.q("ASTEROID_BASE = 0; ASTEROID_GROWTH = 0; DRONE_BASE = 0; DRONE_GROWTH = 0"); // only our fixture exists
+  const w = 960;
+  const r = 20;
+  g.q(`(() => { const s = asteroids.slots.find((a) => !a.active);
+    s.active = true; s.x = ${w} + ${r} + 5; s.y = 300; s.r = ${r};
+    s.vx = 0; s.vy = 0; s.entry = -1; s.rot = 0; s.spin = 0;
+    s.shape.length = 6; return true; })()`);
+  g.tick(); // bootstrap frame (dt = 0): the wrap decision still runs
+  const a = g.activeAsteroids()[0];
+  assertClose(a.x, w + r + 5 - (w + 2 * r), 1e-9,
+    "positive wrap: x -= w + 2r must re-enter the field at the left edge");
+  assertClose(a.x, 5 - r, 1e-9, "the re-entry lands just inside the opposite edge band");
+  assertClose(a.y, 300, 1e-9, "the positive wrap must not disturb the other axis");
 });
 
 // ================================================================

@@ -11,6 +11,7 @@
       height: 100%;
       overflow: hidden;
       background: #05070f;
+      font-family: monospace; /* retro face for the page itself too */
     }
     #game {
       display: block;
@@ -49,8 +50,10 @@
     const ASTEROID_SPEED_MIN = 40;   // px/s, slowest drift
     const ASTEROID_SPEED_MAX = 160;  // px/s, fastest drift
     const ASTEROID_SPAWN_EVERY = 0.25; // s between respawn attempts while below this wave's roster
-    const ASTEROID_MAX_SPAWNS = 8;   // spawn attempts per frame (bounds the rejection loop)
+    const ASTEROID_CANDIDATE_RETRIES = 8; // spawnAsteroid: candidate attempts per single spawn
+    const ASTEROID_SPAWNS_PER_FRAME = 8;  // spawnAsteroids: spawn rounds per frame
     const ASTEROID_MIN_GAP = 40;     // px, extra spacing between live asteroids
+    const ASTEROID_INWARD_MIN = 20;  // px/s, smallest inward velocity component accepted at spawn (bounds entry time)
     const ASTEROID_VERTS = 8;        // points per irregular polygon outline
     const ASTEROID_POOL_SIZE = 48;   // pre-allocated asteroid slots, recycled (never reallocated)
     var DRONE_BASE = 0;              // drones in wave 1; wave N fields DRONE_BASE + DRONE_GROWTH * (N - 1)
@@ -114,8 +117,10 @@
     };
     const keys = new Set();
     let gameTime = 0; // seconds of accumulated simulation time
-    let score = 0;    // HUD score, one SCORE_PER_ASTEROID per laser kill
-    let hp = PLAYER_MAX_HP;          // current hull; one impact costs exactly 1
+    let score = 0;    // HUD score: one SCORE_PER_ASTEROID per rock kill, one SCORE_PER_DRONE per drone kill
+    let hp = PLAYER_MAX_HP;          // current hull; one impact costs exactly 1. Snapshotted from
+                                     // PLAYER_MAX_HP at load and again in startGame — the knob is
+                                     // read at (re)start, not live (see docs/DECISIONS.md)
     let shipDead = false;            // hp reached 0: ship removed, all input ignored
     let invulnUntil = Number.NEGATIVE_INFINITY; // sim time until which a hit costs nothing
     let wave = 1;                     // current wave number (shown in the HUD)
@@ -141,6 +146,7 @@
     // bottom, 2 left, 3 right); -1 once its centre is inside the field.
     // Wrap-around is suspended on that axis until then, so the fully
     // off-screen spawn offset can never trigger an instant teleport.
+
     // Pre-allocated particle pool: impact bursts mutate existing slots
     // in place, so rapid-fire combat never creates new objects.
     const particlePool = { slots: [] };
@@ -191,7 +197,7 @@
       // starts from the start screen; Enter or R restarts from game
       // over. Neither acts in any other state (a play-run is never
       // reset by stray presses).
-      if (e.code === "Enter" && gameState === "start") { startGame(); return; }
+      if ((e.code === "Enter" || e.code === "NumpadEnter") && gameState === "start") { startGame(); return; }
       if ((e.code === "Enter" || e.code === "KeyR") && gameState === "gameover") { startGame(); return; }
       if (gameState !== "playing") return; // menu screens: nothing else acts
       if (!KEY_CODES.includes(e.code)) return;
@@ -200,6 +206,10 @@
     });
     window.addEventListener("keyup", (e) => {
       keys.delete(e.code);
+    });
+    window.addEventListener("blur", () => {
+      keys.clear(); // focus lost (alt-tab, window switch): the held keys no longer
+                    // reach us, and their keyups are lost — drop them all
     });
 
     // ================================================================
@@ -210,6 +220,8 @@
     // live entities by construction.
     // ================================================================
     function startGame() {
+      keys.clear(); // a movement key held at the moment of death (keyup lost to
+                    // a focus blip) would otherwise ghost-thrust the fresh run
       for (const s of laserPool.slots) s.active = false;
       for (const a of asteroids.slots) a.active = false;
       for (const d of drones.slots) d.active = false;
@@ -241,7 +253,11 @@
     function tryFire() {
       if (!keys.has("Space")) return;
       if (gameTime - lastFireAt < LASER_COOLDOWN_MS / 1000) return;
-      const slot = laserPool.slots.find((s) => !s.active);
+      // Plain indexed scan: no .find closure allocated per shot.
+      let slot = null;
+      for (let i = 0; i < laserPool.slots.length; i++) {
+        if (!laserPool.slots[i].active) { slot = laserPool.slots[i]; break; }
+      }
       if (!slot) return; // pool exhausted — wait for a free slot, never allocate
       const dx = Math.cos(ship.heading);
       const dy = Math.sin(ship.heading);
@@ -258,14 +274,14 @@
     function updateLasers(dt) {
       const w = canvas.width;
       const h = canvas.height;
-      const m = LASER_LENGTH; // recycle only once fully off-screen
+      const CULL_MARGIN = LASER_LENGTH; // px — recycle only once fully off-screen
       for (let i = 0; i < laserPool.slots.length; i++) {
         const s = laserPool.slots[i];
         if (!s.active) continue;
         s.x += s.dx * LASER_SPEED * dt;
         s.y += s.dy * LASER_SPEED * dt;
         s.dt = dt; // last step, so hit tests can reconstruct the sweep segment
-        if (s.x < -m || s.x > w + m || s.y < -m || s.y > h + m) s.active = false;
+        if (s.x < -CULL_MARGIN || s.x > w + CULL_MARGIN || s.y < -CULL_MARGIN || s.y > h + CULL_MARGIN) s.active = false;
       }
     }
 
@@ -284,7 +300,7 @@
       const slot = asteroids.slots.find((a) => !a.active);
       if (!slot) return false; // pool exhausted — skip the spawn, never allocate
 
-      for (let attempt = 0; attempt < ASTEROID_MAX_SPAWNS; attempt++) {
+      for (let attempt = 0; attempt < ASTEROID_CANDIDATE_RETRIES; attempt++) {
         const u = random(); // which edge: ¼ of the roll per side (0 top, 1 bottom, 2 left, 3 right)
         const edge = u < 0.25 ? 0 : u < 0.5 ? 1 : u < 0.75 ? 2 : 3;
         const r = ASTEROID_MIN_R + (ASTEROID_MAX_R - ASTEROID_MIN_R) * random();
@@ -335,6 +351,11 @@
         else if (edge === 1 && slot.vy >= 0) slot.vy = -slot.vy;
         else if (edge === 2 && slot.vx <= 0) slot.vx = -slot.vx;
         else if (edge === 3 && slot.vx >= 0) slot.vx = -slot.vx;
+        // After the mirror the inward component is non-negative, but a
+        // near-tangent drift could take an unbounded long to enter: reject
+        // candidates below the named floor and retry.
+        const inward = edge === 0 ? slot.vy : edge === 1 ? -slot.vy : edge === 2 ? slot.vx : -slot.vx;
+        if (inward < ASTEROID_INWARD_MIN) continue;
 
         slot.active = true;
         slot.x = x;
@@ -345,7 +366,9 @@
         slot.spin = (random() - 0.5) * 0.8; // slow, varied tumble (rad/s)
         return true;
       }
-      return false; // field too crowded near the ship to be safe — try again later
+      return false; // every candidate was rejected: too close to the ship
+                    // to be safe, or its inward component fell below
+                    // ASTEROID_INWARD_MIN — try again later
     }
 
     let lastSpawnAt = Number.NEGATIVE_INFINITY; // sim time of the last spawn attempt
@@ -356,7 +379,7 @@
       let count = 0;
       for (const a of asteroids.slots) if (a.active) count++;
       const cap = waveAsteroidCap(wave); // this wave's asteroid roster, clamped to the pool
-      let budget = ASTEROID_MAX_SPAWNS;
+      let budget = ASTEROID_SPAWNS_PER_FRAME;
       while (count < cap && budget-- > 0) {
         if (spawnAsteroid()) { count++; waveBuilt++; }
         else break;
@@ -483,21 +506,28 @@
       if (shipDead) return;
       if (gameTime < invulnUntil) return; // immune: ignore every hazard
       // Rocks first, then drones; one damage event per frame, even if
-      // several hazards overlap. Each impact destroys its hazard.
+      // several hazards overlap. The impact pipeline itself lives in
+      // applyHullImpact so rock and drone hits can never diverge.
       for (const a of asteroids.slots) {
         if (!a.active) continue;
         if (Math.hypot(a.x - ship.x, a.y - ship.y) > a.r + SHIP_RADIUS) continue;
-        a.active = false; // the impact shatters the rock
-        hitShip((ship.x + a.x) / 2, (ship.y + a.y) / 2); // mid-point of the overlap
+        applyHullImpact(a);
         return; // one impact per frame, even if several rocks overlap
       }
       for (const d of drones.slots) {
         if (!d.active) continue;
         if (Math.hypot(d.x - ship.x, d.y - ship.y) > DRONE_RADIUS + SHIP_RADIUS) continue;
-        d.active = false; // the impact destroys the drone
-        hitShip((ship.x + d.x) / 2, (ship.y + d.y) / 2); // mid-point of the overlap
+        applyHullImpact(d);
         return;
       }
+    }
+
+    // The one hull-impact pipeline (rocks and drones alike): the hazard
+    // is destroyed at the point of contact, then exactly 1 hp is taken
+    // at the overlap midpoint (burst, invulnerability, game-over there).
+    function applyHullImpact(hazard) {
+      hazard.active = false; // the impact shatters the rock / destroys the drone
+      hitShip((ship.x + hazard.x) / 2, (ship.y + hazard.y) / 2); // mid-point of the overlap
     }
 
     // ================================================================
@@ -599,7 +629,7 @@
       const frames = Math.max(1, Math.ceil(audioCtx.sampleRate * SFX_NOISE_S));
       noiseBuffer = audioCtx.createBuffer(1, frames, audioCtx.sampleRate);
       const data = noiseBuffer.getChannelData(0);
-      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+      for (let i = 0; i < data.length; i++) data[i] = random() * 2 - 1; // the injectable random, like every other random value
     }
 
     // The shoot: one short square-wave blip with a falling pitch.
@@ -693,6 +723,9 @@
           wave += 1; // exactly one step per wave
           waveBuilt = 0;
         }
+        // Intentional: the advance frame returns WITHOUT building the new
+        // roster — the build starts one frame later. Do not "fix" this
+        // fall-through (review #7-3).
         return;
       }
       const total = waveTotal(wave);
@@ -841,17 +874,24 @@
       }
 
       // Lasers: one batched path so a full pool costs a single stroke.
-      ctx.strokeStyle = UI_ACCENT;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      const half = LASER_LENGTH / 2;
+      // With nothing active there is no path to draw — skip it entirely.
+      let anyLaser = false;
       for (let i = 0; i < laserPool.slots.length; i++) {
-        const s = laserPool.slots[i];
-        if (!s.active) continue;
-        ctx.moveTo(s.x - s.dx * half, s.y - s.dy * half);
-        ctx.lineTo(s.x + s.dx * half, s.y + s.dy * half);
+        if (laserPool.slots[i].active) { anyLaser = true; break; }
       }
-      ctx.stroke();
+      if (anyLaser) {
+        ctx.strokeStyle = UI_ACCENT;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        const half = LASER_LENGTH / 2;
+        for (let i = 0; i < laserPool.slots.length; i++) {
+          const s = laserPool.slots[i];
+          if (!s.active) continue;
+          ctx.moveTo(s.x - s.dx * half, s.y - s.dy * half);
+          ctx.lineTo(s.x + s.dx * half, s.y + s.dy * half);
+        }
+        ctx.stroke();
+      }
 
       // Particles: 4 px amber fragments fading over their short life.
       ctx.fillStyle = "#fbbf24";

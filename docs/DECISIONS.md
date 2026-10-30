@@ -2,10 +2,13 @@
 
 ## 2025-10-29 — Ticket #2: scaffold, rAF loop, controllable ship
 
-- **Tuning constants declared with `var`, not `const`.** The ticket's acceptance
-  criterion requires reassigning `TURN_SPEED` from the browser console and
-  observing the effect; a top-level `const` binding rejects reassignment.
-  Alternatives: a frozen `TUNING` object (rejected — the criterion names bare
+- **Tuning constants declared with `var`, not `const`/`let`.** The ticket's acceptance
+  criterion requires reassigning `TURN_SPEED` from the browser console; a top-level `const`
+  binding rejects reassignment, and a script-level `let` — though reassignable from the
+  console — is a lexical global, not a property of `window`. The real benefit of `var`
+  over `let` is that it exposes the binding as a `window` property, so each knob is
+  stably addressable as `window.THRUST` & co. (corrected per review #2-2; see the
+  Ticket #14 entry). Alternatives: a frozen `TUNING` object (rejected — the criterion names bare
   globals `THRUST`/`FRICTION`/`TURN_SPEED`), or a `window.tune()` API
   (rejected — extra surface the PRD does not ask for).
 - **Friction applied framerate-independently: `v *= FRICTION^(dt * 60)`, plus a
@@ -389,7 +392,7 @@
   so the start-screen Enter gesture warms the audio for the first shot.
   Before the first gesture — and in engines without `AudioContext` —
   every generator is a silent no-op (a `typeof` guard, which is what the
-  five other vm suites rely on to keep running unchanged). Alternatives:
+  six other vm suites rely on to keep running unchanged). Alternatives:
   create-on-first-shot (dead air on the opening blip; the criterion
   says "first keydown") or create-on-load (violates the autoplay-policy
   criterion outright).
@@ -419,3 +422,55 @@
   off the line mid-flight; same hermetic-knob precedent as
   `suppressSpawns` in the other suites. New gate grep: `MASTER_GAIN`
   (rides the console-retunable-knob convention).
+
+## 2026-10-29 — Ticket #14: apply accumulated reviewer should-fixes
+
+- **Corrected the Ticket #2 `var` justification (review #2-2):** the
+  original entry justified `var` purely by `const`'s reassignment
+  refusal; the real benefit of `var` over `let` is that top-level
+  `var` exposes the binding as a `window` property (script-scope
+  `let`/`const` are lexical globals, absent from the global object).
+  The #2 entry was edited in place.
+- **`ASTEROID_INWARD_MIN` = 20 px/s (review #4-2):** after the
+  re-aim mirror a near-tangent corner drift can still enter the field
+  almost arbitrarily slowly, so entry time was unbounded in the worst
+  case; candidates whose inward component falls below the floor are
+  rejected inside the existing 8-candidate retry budget. Floor sized
+  so the 960×600 diagonal (~1130 px) is crossed in well under a
+  minute. Alternatives: rescale the drift speed after re-aiming (would
+  distort the tuned speed distribution) or widen the ±60° jitter
+  (changes spawn character).
+- **`ASTEROID_MAX_SPAWNS` split into `ASTEROID_CANDIDATE_RETRIES` /
+  `ASTEROID_SPAWNS_PER_FRAME` (review #4-3)**, both defaulting to 8 so
+  behaviour is unchanged; names describe the role rather than carry
+  the old one. `DRONE_MAX_SPAWNS` keeps the analogous dual role — the
+  review only asked for the asteroid side.
+- **`hp` documented as a (re)start-time snapshot of `PLAYER_MAX_HP`
+  (review #5-2)** instead of deriving max HP lazily: `startGame()`
+  already re-reads the knob, so a console retune takes effect from the
+  next (re)start — the load-time initializer now says so, and the
+  behaviour matches every other `var` knob that is read where the run
+  begins. Alternative: store only the deficit against a live max
+  (more machinery for an imperceptible gain).
+- **NumpadEnter scoped to the start screen (review #8-3),** per the
+  ticket wording; game-over restart stays Enter/R. Alternative: accept
+  it everywhere (broadening scope the review did not ask for).
+- **Review #9-2 (suite count):** `tests/sfx.test.mjs` and this log
+  said "the other five vm suites"; there are six siblings (lasers,
+  asteroids, ship-damage, drones, screens, waves) — both records
+  corrected.
+
+## 2026-10-29 — Ticket #14 review round 1: reproducible soak and honest abort comment
+
+- **Safe-radius soak pinned to `mulberry32Source(7)` (review #14-A):** the
+  `spawns >= 100` floor was previously probabilistic (Node's entropy-seeded
+  `Math.random` gave 295/296/270 across three measured runs). Seed 7 was
+  probed to deterministically yield 297 spawns — ~3× the floor. Alternatives:
+  a different seed (all of 1–17 probed land at 269–304, none marginal) or
+  asserting a tighter count (over-pins against future spawn-logic tweaks;
+  the floor is a sample-size guard, not a prediction).
+- **`spawnAsteroid` abort comment lists both rejection causes
+  (review #14-B):** safe-radius crowding *and* the `ASTEROID_INWARD_MIN`
+  inward-component floor. The analogous `spawnDrone` comment was left
+  untouched — drones have no inward floor, so their comment remains
+  complete.

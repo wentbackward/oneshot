@@ -232,6 +232,29 @@ check("R on the start screen does not start the game (Enter only)", () => {
 });
 
 // ================================================================
+// #8-3 (should-fix): NumpadEnter is accepted on the start screen as
+// well as Enter (numeric-keyboard players must not be locked out)
+// ================================================================
+check("NumpadEnter starts play from the start screen just like Enter", () => {
+  const g = boot();
+  g.press("NumpadEnter");
+  assert(g.state() === "playing", `NumpadEnter must start the game, state is ${g.state()}`);
+  assertClose(g.wave(), 1, 0, "NumpadEnter must start a fresh wave-1 game");
+});
+
+check("NumpadEnter during live play is a no-op (never resets a run)", () => {
+  const g = boot();
+  g.press("Enter");
+  suppressSpawns(g);
+  g.q("score = 100; wave = 3;");
+  g.press("NumpadEnter");
+  g.tick(10);
+  assert(g.state() === "playing", `NumpadEnter during play must not change the screen, state is ${g.state()}`);
+  assertClose(g.score(), 100, 0, "NumpadEnter during play must not reset the score");
+  assertClose(g.wave(), 3, 0, "NumpadEnter during play must not reset the wave");
+});
+
+// ================================================================
 // Criterion 2: pressing Enter starts play from wave 1, HP
 // PLAYER_MAX_HP, score 0
 // ================================================================
@@ -344,6 +367,29 @@ check("R on game over restarts just as cleanly", () => {
 });
 
 // ================================================================
+// #8-1 (should-fix): startGame() clears the held-key set — a
+// movement key still held at the moment of death (its keyup lost to
+// a focus blip) must not produce ghost thrust in the fresh run
+// ================================================================
+check("a movement key still held at the moment of death cannot ghost-thrust the fresh run", () => {
+  const g = boot();
+  g.press("Enter");
+  suppressSpawns(g);
+  g.press("KeyD"); // held — and its keyup never arrives (lost to a focus blip)
+  killShip(g, 3);
+  assert(g.state() === "gameover", "precondition: the ship is dead and the overlay is up");
+  g.press("Enter"); // restart while KeyD is still logically held
+  assert(g.state() === "playing", "restart must work");
+  assert(g.q("keys.size") === 0, "startGame must clear the held-key set");
+  const h0 = g.q("ship.heading");
+  g.tick(30);
+  assertClose(g.q("ship.heading"), h0, 1e-9,
+    "a key held at the moment of death must produce no ghost rotation in the fresh run");
+  assertClose(g.q("ship.vx"), 0, 0, "…and no ghost velocity");
+  assertClose(g.q("ship.vy"), 0, 0, "…or ghost drift");
+});
+
+// ================================================================
 // Edge: R and Enter during live play are no-ops — they must not
 // reset a run in progress
 // ================================================================
@@ -394,6 +440,12 @@ check("every HUD/overlay glyph is drawn monospace in the single accent colour", 
 
 check("index.html declares the retro monospace UI (gate grep) with a single UI accent constant", () => {
   assert(/monospace/i.test(html), "index.html must declare a monospace face for its UI text");
+  // #8-2 (should-fix): the ticket wording asks for the retro styling
+  // in the STYLE block itself — assert font-family there, not just in
+  // the canvas-drawn UI constants below.
+  const style = html.match(/<style>([\s\S]*?)<\/style>/);
+  assert(style && /font-family:\s*monospace/i.test(style[1]),
+    "the <style> block must declare font-family: monospace for the retro page styling");
   const g = boot();
   assert(g.q("UI_FONT") === "monospace", `UI_FONT must be exactly "monospace", got ${JSON.stringify(g.q("UI_FONT"))}`);
 });
