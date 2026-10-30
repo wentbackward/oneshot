@@ -281,6 +281,49 @@ check("keyboard: a held key presses the paddle to the canvas edge and no further
 });
 
 // ================================================================
+// Review fix: releasing one of two held same-direction keys must
+// keep the paddle moving (per-direction held-key counters)
+// ================================================================
+check("releasing one of two held same-direction keys keeps the paddle moving; releasing all stops it", () => {
+  for (const [a, b, sign] of [["ArrowLeft", "KeyA", -1], ["ArrowRight", "KeyD", 1]]) {
+    const g = boot(960, 600);
+    start(g);
+    g.key("keydown", a);
+    g.key("keydown", b);
+    g.tick(3);
+    const x1 = g.paddleX();
+    g.key("keyup", a); // first of the two same-direction keys released
+    g.tick(3);
+    const x2 = g.paddleX();
+    assert(
+      (x2 - x1) * sign > 0,
+      `${a}+${b} held: releasing ${a} must keep the paddle moving ${sign < 0 ? "left" : "right"} ` +
+      `(${x1} -> ${x2}), it stopped`
+    );
+    g.key("keyup", b);
+    g.tick(5);
+    assert(g.paddleX() === x2,
+      `releasing all held keys must stop the paddle (moved from ${x2} to ${g.paddleX()})`);
+  }
+});
+
+check("auto-repeat keydowns of one held key do not change the paddle speed", () => {
+  const g = boot(960, 600);
+  start(g);
+  g.key("keydown", "ArrowLeft");
+  g.tick(3);
+  const x1 = g.paddleX();
+  g.key("keydown", "ArrowLeft"); // browser auto-repeat re-dispatches
+  g.key("keydown", "ArrowLeft");
+  g.tick(3);
+  const x2 = g.paddleX();
+  const distRepeat = x1 - x2; // distance in the 3 frames after repeats
+  const distRef = (g.q("PADDLE_SPEED") / 60) * 3; // 3 frames at 60 fps
+  assertClose(distRepeat, distRef, distRef * 0.01,
+    `auto-repeat must not alter the travel per 3 frames: got ${distRepeat}, want ${distRef}`);
+});
+
+// ================================================================
 // Criterion: pointer — mousemove / touchmove set the paddle x to the
 // cursor's transformed x (within 1 px, including the responsive scale)
 // ================================================================
