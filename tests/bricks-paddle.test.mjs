@@ -177,6 +177,9 @@ function boot(width = 960, height = 600) {
     key(type, code) {
       fireWin(type, { code, preventDefault() {} });
     },
+    blur() {
+      fireWin("blur", { type: "blur" });
+    },
     mouseMove(clientX) {
       canvas.dispatch("mousemove", { clientX });
     },
@@ -281,6 +284,22 @@ check("keyboard: a held key presses the paddle to the canvas edge and no further
   assertClose(right.paddleX(), half(right), 1e-9,
     `the left-held paddle must clamp to the left edge, got ${right.paddleX()}`);
   right.key("keyup", "ArrowLeft");
+});
+
+// ================================================================
+// Review lock-in: a blurred window drops its keyups, so the held-key
+// sets must be cleared with it — the paddle cannot glide on ghosts.
+// ================================================================
+check("a window blur clears the held keys so the paddle cannot glide on ghosts", () => {
+  const g = boot(960, 600);
+  start(g);
+  g.key("keydown", "ArrowLeft");
+  g.tick(3);
+  const x1 = g.paddleX();
+  g.blur(); // focus left: the keyup for ArrowLeft never arrives
+  g.tick(5);
+  assert(g.paddleX() === x1,
+    `blur must clear the held keys; the paddle glided from ${x1} to ${g.paddleX()}`);
 });
 
 // ================================================================
@@ -652,6 +671,31 @@ check("the game-over overlay is hidden on boot and throughout play", () => {
   g.tick(20);
   assert(g.els["screen-gameover"].style.display === "none",
     `the game-over overlay must stay hidden while playing`);
+});
+
+// ================================================================
+// Review round 2: Start Game is gated on the start screen, for
+// symmetry with the Try Again gate on the game-over screen.
+// ================================================================
+check("a Start Game click only works from the start screen (symmetry with the gated restart)", () => {
+  const g = boot(960, 600);
+  start(g);
+  g.q("score = 7;");
+  g.els["btn-start"].click();
+  assert(g.state() === "playing" && g.q("score") === 7,
+    `a stray Start click mid-run must be a no-op, state=${g.state()} score=${g.q("score")}`);
+  g.dropBall();
+  g.dropBall();
+  g.dropBall();
+  assert(g.state() === "gameover", "setup must end on game over");
+  g.els["btn-start"].click();
+  g.els["btn-start"].click();
+  assert(g.state() === "gameover",
+    `Start clicks on the game-over screen must not restart the run, state=${g.state()}`);
+  assert(g.lives() === 0, `Start clicks on game over must not touch the lives, lives=${g.lives()}`);
+  g.els["btn-restart"].click();
+  assert(g.state() === "playing" && g.lives() === 3,
+    `Try Again must still be the working restart path, state=${g.state()} lives=${g.lives()}`);
 });
 
 check("a stray Try Again click during a live run is a no-op", () => {
