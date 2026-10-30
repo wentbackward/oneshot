@@ -198,6 +198,9 @@ check("every naturally spawned asteroid starts at least SPAWN_SAFE_RADIUS (200) 
   // Pool slots are recycled in place, so we cannot memoise on slot
   // identity alone: detect each inactive->active transition every frame
   // instead, which catches new-wave rosters as well as first activations.
+  // Pinned RNG (review #14-A): the sample-count floor below must be
+  // bit-for-bit reproducible across runs, not merely probabilistic.
+  g.q(`random = ${mulberry32Source(7)}`);
   let prevActive = new Set();
   let spawns = 0;
   for (let i = 0; i < 4800; i++) { // 80 s of drift, wraps and rebuilt rosters
@@ -223,7 +226,9 @@ check("every naturally spawned asteroid starts at least SPAWN_SAFE_RADIUS (200) 
     for (const a of nowActive) if (!prevActive.has(a)) prevActive.add(a);
   }
   // 16 rebuilt rosters of 6+2*(N-1) rocks each: the sample must be far
-  // larger than the initial wave's 6 spawns.
+  // larger than the initial wave's 6 spawns. (Under the pinned seed the
+  // soak deterministically yields 297 spawns; 100 is a floor, not a
+  // prediction.)
   assert(spawns >= 100, `the soak must sample many spawn distances across waves, got ${spawns}`);
 });
 
