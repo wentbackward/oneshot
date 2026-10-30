@@ -505,7 +505,9 @@
   resize synchronously in the event (rejected — mid-frame backing-store
   swaps can hitch, and the burst case wastes relayouts).
 - **High-score persistence syncs `score → highScore → localStorage`
-  inside the frame loop, writing on every rise.** The per-rise write is
+  inside the frame loop, writing on every rise.** Per-frame order is
+  resize → `update(dt)` → `syncScore` → `draw`, so a record overtaken
+  mid-frame persists on the very frame it happens. The per-rise write is
   by design: #23's criteria require the suite to assert the `setItem` call
   the moment the live score overtakes the stored high score, so the write
   is the observable contract, not an optimisation to defer to a run-end
