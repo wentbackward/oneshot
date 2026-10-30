@@ -520,3 +520,54 @@
   gameplay entry point for the later paddle/ball/bricks tickets, so their
   diffs touch the loop once instead of restructuring it. The LIVES HUD
   cell shows "–" until the lives ticket wires it.
+
+## 2026-10-30 — Ticket #21: paddle control, ball launch, bounces, lives, game over
+
+- **Single mutable `ball` object (no pool) and a single `paddle.x` scalar.** #21 is a
+  one-ball run; the extra-ball power-up (#25) will promote this to a pooled model. Paddle
+  geometry is derived per-frame from the (resizable) canvas height (`paddleTop()`), so a
+  viewport relayout can never strand the paddle or orphan a serve position. Alternatives:
+  a pre-built ball pool now (rejected — dead surface until #25), fixed-pixel paddle y
+  (rejected — breaks under the responsive rescale).
+- **The paddle bounce is a sweep across the top face: the collision fires when the ball's
+  bottom crosses `paddleTop` between frames (previous bottom captured before
+  integration), not a per-frame overlap band.** A band test either tunnels on clamped or
+  fast frames or double-fires on slow ones; the crossing test is exact at any speed and
+  costs one captured scalar. The outgoing angle is
+  `clamp(hitOffset / halfWidth) * MAX_PADDLE_BOUNCE_ANGLE` (60° at the rim, PRD §4),
+  applied to the *incoming* speed, so every reflection preserves speed exactly and the
+  ball always leaves with `vy < 0` (cos 60° = 0.5 keeps a strong upward component — the
+  ball can never squirt sideways off the rim). Alternatives: fixed 45° rebound (fails
+  the position-dependence criterion), renormalising to a base speed per bounce (a hidden
+  retune every hit; the criteria measure preservation, not resetting).
+- **The serve is straight up at `BALL_SERVE_SPEED` (480 px/s), detached by a canvas
+  click or tap (`click` + `touchend`; the tap's synthetic `click` is absorbed by the
+  `attached` flag).** The PRD is silent on serve angle; straight up is the most
+  predictable baseline and makes "launched upward at the named serve speed" exactly
+  testable. Alternatives: small random angle (untestable, worse serve feel),
+  paddle-offset serve (that mechanic is what the paddle bounce already does).
+- **Pointer tracking is not state-gated: `mousemove`/`touchmove` set the paddle x in any
+  state; launch is gated to `"playing"` and to `attached`.** Hovering before Start lets
+  the player aim the serve position — free, since no sim runs — and the `touchmove`
+  handler passes `{ passive: false }` so its `preventDefault` keeps the page from
+  scrolling mid-drag. Keyboard movement stays confined to `update`, which the loop only
+  calls in `"playing"`, so "stops on release" falls out with no extra state; a window
+  `blur` clears both held-key flags so a key released off-window cannot leave the paddle
+  gliding. Alternatives: gate the pointer to playing (loses serve-aiming), buffer pointer
+  events until play (extra state, no player-visible benefit).
+- **Restart and first start share one `beginRun()` reset path (score, level, lives,
+  serve, icons, HUD); `restartRun` additionally requires `gameState === "gameover"`, so a
+  stray `btn-restart` click mid-run is a no-op.** "No live ball or bricks from the
+  previous run" is read as: after restart the only ball is the fresh *attached* serve,
+  at rest on the paddle centre — nothing in flight carries over (no bricks exist yet).
+  At game over the dropped ball is parked (attached, zero velocity) rather than deleted,
+  so the frozen field behind the overlay draws cleanly. Alternatives: a separate restart
+  reset function (drift risk — the #8 single-reset-path precedent argues against),
+  deleting the ball object (needs recreation machinery for no behaviour).
+- **`#lives` renders one small paddle-bar `<span class="life-icon">` per remaining life,
+  rebuilt (clear + append) only when a life changes — never in the frame loop.** Icons
+  show `PLAYER_LIVES` from boot, advertising the run's stake on the start screen, and the
+  node holds exactly `lives` children at all times (checked through the stubbed document:
+  `createElement`/`appendChild`/`firstChild`). Alternative: per-icon show/hide over a
+  fixed trio (keeps stale nodes alive; a rebuild on the rare life event is trivially
+  exact and cheaper to reason about).
