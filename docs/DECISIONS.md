@@ -797,3 +797,30 @@
   structurally impossible at these values. Alternatives: the
   ball-style sweep test (rejected — no tunneling risk at capsule
   speeds).
+
+## 2026-10-30 — Ticket #25 review round 1: fold-ins
+
+- **The right-rim edge clamp is locked by a new test rather than new
+  code.** `applyCapsule(KIND_EXPAND)` already re-runs `clampPaddle()`
+  the instant the widen lands, so a paddle parked at the right rim
+  snaps to exactly `canvas.width - paddleW/2` and the per-frame
+  clamp keeps it locked while the key is held. The new test locks
+  that exact value (and the hold-at-rim frames); the code needed no
+  change. Alternatives: a dedicated widen-path clamp (rejected —
+  duplicates the single existing clamp, two sources of truth).
+- **Capsule colour is looked up in an exhaustive `CAPSULE_COLORS`
+  table (indexed by kind) instead of a ternary with a `COLOR_BALL`
+  fallback.** The old `: COLOR_BALL` arm was a speculative branch for
+  a kind that does not exist; the table makes "one row per kind" the
+  only extension point, so the draw pass stays branch-free as kinds
+  grow. A test asserts every enumerated kind has a row and no row is
+  left over. Alternatives: keep the ternary (review rejected it), or
+  a per-kind switch (same future-facing-branch problem).
+- **`drawPowerups()` now runs only while `gameState === "playing"`.**
+  Update is already frozen outside playing, so an airborne capsule
+  would otherwise render suspended over the game-over board; gating
+  the draw hides it while leaving bricks, paddle and ball as a tidy
+  frozen field. Alternatives: deactivate capsules in
+  `enterGameOver()` (destroys in-flight state the restart path does
+  not guarantee), or draw them dimmed (extra palette state for no
+  player-visible benefit).
