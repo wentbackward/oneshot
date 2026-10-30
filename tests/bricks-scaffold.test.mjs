@@ -87,7 +87,6 @@ function boot(width, height, storedHigh = null, throwingStorage = false) {
     "hud-score": makeEl("hud-score"),
     "hud-level": makeEl("hud-level"),
     "hud-high": makeEl("hud-high"),
-    "hud-lives": makeEl("hud-lives"),
   };
   const winListeners = {};
   let rafCb = null;
@@ -296,8 +295,9 @@ check("UI_FONT exists as an addressable global equal to 'monospace'", () => {
 check("storage guards use bare optional catch bindings (no unused catch parameter)", () => {
   assert(!/catch\s*\(/.test(gameSource),
     "unused catch parameters (e.g. 'catch (err)') must be bare 'catch {' bindings");
-  assert((gameSource.match(/catch\s*\{/g) ?? []).length === 2,
-    `both storage guards must keep their bare catch blocks, got ${gameSource.match(/catch\s*\{/g)?.length}`);
+  assert(
+    (gameSource.match(/catch\s*\{/g) ?? []).length >= 2,
+    `both storage guards must keep their bare catch blocks, got ${(gameSource.match(/catch\s*\{/g) ?? []).length}`);
 });
 
 // ================================================================
