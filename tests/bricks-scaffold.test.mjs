@@ -144,6 +144,7 @@ function boot(width, height, storedHigh = null, throwingStorage = false) {
     win: sandbox.window,
     q,
     tick,
+    frameAt: (ms) => rafCb(ms),
     resize,
     state: () => q("typeof gameState === 'undefined' ? 'undefined' : gameState"),
     storedHigh: () => storedHigh,
@@ -286,6 +287,54 @@ check("UI_FONT exists as an addressable global equal to 'monospace'", () => {
   const g = boot(960, 600);
   assert(g.q("typeof UI_FONT === 'undefined' ? null : UI_FONT") === "monospace",
     `UI_FONT must be "monospace", got ${JSON.stringify(g.q("UI_FONT"))}`);
+});
+
+// ================================================================
+// Review round 2: storage guards use optional catch bindings
+// (no unused catch parameter)
+// ================================================================
+check("storage guards use bare optional catch bindings (no unused catch parameter)", () => {
+  assert(!/catch\s*\(/.test(gameSource),
+    "unused catch parameters (e.g. 'catch (err)') must be bare 'catch {' bindings");
+  assert((gameSource.match(/catch\s*\{/g) ?? []).length === 2,
+    `both storage guards must keep their bare catch blocks, got ${gameSource.match(/catch\s*\{/g)?.length}`);
+});
+
+// ================================================================
+// Review round 2: a record overtakes inside update(dt) must persist
+// on the SAME frame (syncScore runs after update)
+// ================================================================
+check("a record overtaken inside update(dt) persists to localStorage on the same frame", () => {
+  const g = boot(960, 600, "100");
+  g.els["btn-start"].click();
+  // Stand in for the real gameplay update: it scores past the stored
+  // high score mid-frame.
+  g.q("update = function (dt) { score = 250; }");
+  g.tick(1);
+  assert(g.q("highScore") === 250, `highScore must rise in-frame, got ${g.q("highScore")}`);
+  assert(g.storedHigh() === "250",
+    `the overtake made inside update must be written on the same frame, got ${JSON.stringify(g.storedHigh())}`);
+});
+
+// ================================================================
+// Review round 2: dt is floored at 0 (timestamp rewind) alongside
+// the existing MAX_FRAME_SECONDS clamp
+// ================================================================
+check("a backwards rAF timestamp yields a zeroed dt, and huge gaps stay clamped to MAX_FRAME_SECONDS", () => {
+  const g = boot(960, 600);
+  g.els["btn-start"].click();
+  g.q("dts = []; update = function (dt) { dts.push(dt); }");
+  g.frameAt(16.7);   // first frame: dt 0 (no previous timestamp)
+  g.frameAt(33.4);   // nominal frame
+  g.frameAt(10);     // timestamp rewind: naive dt would be negative
+  g.frameAt(10_000); // giant gap: naive dt ~10 seconds
+  const dts = g.q("dts.slice()");
+  assert(dts.length === 4, `four frames must reach update, got ${dts.length}`);
+  assert(dts.every((dt) => dt >= 0), `every dt must be >= 0 (floored), got ${JSON.stringify(dts)}`);
+  assert(dts.every((dt) => dt <= g.q("MAX_FRAME_SECONDS") + 1e-9),
+    `every dt must stay clamped to MAX_FRAME_SECONDS, got ${JSON.stringify(dts)}`);
+  assert(dts[2] === 0, `the rewound frame must receive dt 0, got ${dts[2]}`);
+  assert(g.state() === "playing", `the loop must survive the anomalies, state is ${g.state()}`);
 });
 
 // ================================================================
