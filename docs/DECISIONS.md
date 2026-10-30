@@ -474,3 +474,49 @@
   inward-component floor. The analogous `spawnDrone` comment was left
   untouched — drones have no inward floor, so their comment remains
   complete.
+
+## 2026-10-30 — Ticket #28: bricks.html scaffold, responsive canvas, start screen
+
+- **`setScreen` is not generalized beyond the start overlay yet**
+  (deferred per review round 1, item 4). A single-overlay helper is the
+  smallest thing the ticket's criteria need; it becomes a real screen
+  router when #21's game-over overlay and #24's pause screen introduce
+  the second and third states, so generalizing now would be speculative
+  surface. The scaffold keeps its `"start" | "playing"` state comment as
+  the extension point.
+- **Tunables declared with `var` (`CANVAS_SCALE`, `UI_FONT`).**
+  Campaign-1 precedent (tickets #2/#3): the acceptance criterion requires
+  them vm-queryable as globals, which `const` bindings are not; `var`
+  also exposes them on `window` for console tuning. Alternatives: a frozen
+  `TUNING` object (rejected — the criterion names bare globals),
+  `const` (rejected — not global-object properties).
+- **Canvas covers the full viewport; HUD and overlays are fixed-position
+  layers on top of it.** The criterion measures `canvas.width/height`
+  against the *viewport*, so a canvas that excluded a HUD bar could not
+  satisfy it; overlaying the PRD §3 top bar costs nothing and keeps a
+  single, unambiguous sizing contract (CSS 100vw×100vh, internal
+  resolution `round(viewport × CANVAS_SCALE)` with `CANVAS_SCALE = 2`,
+  so aspect distortion is zero). Alternative: flex-column layout with the
+  canvas shrinking under the bar (rejected — violates the criterion's
+  viewport equality and complicates later gameplay coordinates).
+- **Resize is deferred to the next frame via a `resizePending` flag**
+  (the criterion explicitly asks for "rescales on the next frame"), which
+  also collapses resize-event bursts into one relayout. Alternative:
+  resize synchronously in the event (rejected — mid-frame backing-store
+  swaps can hitch, and the burst case wastes relayouts).
+- **High-score persistence syncs `score → highScore → localStorage`
+  inside the frame loop, writing on every rise.** Per-frame order is
+  resize → `update(dt)` → `syncScore` → `draw`, so a record overtaken
+  mid-frame persists on the very frame it happens. The per-rise write is
+  by design: #23's criteria require the suite to assert the `setItem` call
+  the moment the live score overtakes the stored high score, so the write
+  is the observable contract, not an optimisation to defer to a run-end
+  hook. Corrupt/unparseable stored values degrade to 0, and a blocked
+  `localStorage` (throwing accessors) is caught so the game still runs
+  (locked in by the throwing-storage boot tests). (Amended per #28 review
+  round 1, items 1 and 3: the original entry's "~1 write per session"
+  traffic rationale misdescribed the per-rise behaviour.)
+- **`update(dt)` is an empty, documented hook** — the fixed per-frame
+  gameplay entry point for the later paddle/ball/bricks tickets, so their
+  diffs touch the loop once instead of restructuring it. The LIVES HUD
+  cell shows "–" until the lives ticket wires it.

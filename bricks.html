@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Brick Breaker</title>
+<style>
+  /* ================= Retro arcade shell ================= */
+  :root {
+    --bg: #0b0f14;
+    --accent: #5cf2b0;
+    --ink: #9fb4c7;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden; /* single-screen: the page never scrolls */
+  }
+  body {
+    background: var(--bg);
+    color: var(--accent);
+    font-family: monospace;
+  }
+  /* Full-viewport playground; internal resolution is set from JS. */
+  #game {
+    position: fixed;
+    inset: 0;
+    display: block;
+    width: 100vw;
+    height: 100vh;
+  }
+  /* Top bar HUD (PRD section 3). Overlay styling, no scroll impact. */
+  #hud {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 2;
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    font-size: 14px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    pointer-events: none;
+    user-select: none;
+  }
+  #hud b {
+    font-weight: normal;
+    color: var(--ink);
+  }
+  /* Absolute-positioned game-state overlays (PRD section 3). */
+  .screen {
+    position: fixed;
+    inset: 0;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.25rem;
+    background: rgba(3, 6, 10, 0.6);
+    text-align: center;
+  }
+  .screen h1 {
+    margin: 0;
+    font-size: clamp(2rem, 8vw, 4rem);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+  }
+  .screen p {
+    margin: 0;
+    font-size: 0.9rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink);
+  }
+  #btn-start {
+    font-family: inherit;
+    font-size: 1rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: transparent;
+    border: 1px solid var(--accent);
+    padding: 0.7em 1.6em;
+    cursor: pointer;
+  }
+  #btn-start:hover {
+    background: rgba(92, 242, 176, 0.12);
+  }
+</style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <header id="hud">
+    <span>Score <b id="hud-score">0</b></span>
+    <span>Level <b id="hud-level">1</b></span>
+    <span>High <b id="hud-high">0</b></span>
+    <span>Lives <b id="hud-lives">&ndash;</b></span>
+  </header>
+
+  <section class="screen" id="screen-start">
+    <h1>Brick Breaker</h1>
+    <p>Clear the wall &middot; Keep the ball up</p>
+    <button id="btn-start" type="button">Start Game</button>
+  </section>
+
+<script>
+"use strict";
+// ================================================================
+// BRICK BREAKER — campaign 2 scaffold (ticket #28)
+//
+// Single-file shell: responsive full-viewport canvas with an
+// internal-resolution scale factor, a requestAnimationFrame loop
+// with a clamped frame delta, and a start-screen overlay with a
+// Start CTA. Paddle, ball, bricks, power-ups, audio and the
+// remaining game states are later campaign-2 tickets.
+// ================================================================
+
+// ---- Tunables (var: addressable as globals, e.g. from the console) ----
+var CANVAS_SCALE = 2;             // canvas pixels per viewport pixel
+var UI_FONT = "monospace";        // retro face for canvas UI text
+var MAX_FRAME_SECONDS = 1 / 30;   // dt clamp: no teleports after tab switches
+var HIGH_SCORE_KEY = "brickbreaker.highScore";
+
+// ---- Palette (the page accent lives in the CSS --accent property;
+// a canvas-drawn mirror is added with the canvas-text gameplay tickets) ----
+var COLOR_BG = "#0b0f14";
+
+// ---- DOM handles ----
+var canvas = document.getElementById("game");
+var ctx = canvas.getContext("2d");
+var screenStart = document.getElementById("screen-start");
+var btnStart = document.getElementById("btn-start");
+var hudScore = document.getElementById("hud-score");
+var hudLevel = document.getElementById("hud-level");
+var hudHigh = document.getElementById("hud-high");
+
+// ---- State ----
+var gameState = "start"; // "start" | "playing" (pause/game over: later tickets)
+var score = 0;
+var level = 1;
+var highScore = loadHighScore();
+var resizePending = false;
+var lastFrameTime = null;
+
+// ---- High score (localStorage persistence, PRD section 4) ----
+function loadHighScore() {
+  try {
+    var value = parseInt(localStorage.getItem(HIGH_SCORE_KEY), 10);
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  } catch {
+    return 0; // storage unavailable or blocked: play on
+  }
+}
+function saveHighScore() {
+  try {
+    localStorage.setItem(HIGH_SCORE_KEY, String(highScore));
+  } catch {
+    // Non-persistent storage (e.g. blocked): the session still works.
+  }
+}
+
+// ---- Responsive canvas ----
+// Internal resolution tracks the viewport times CANVAS_SCALE; the
+// CSS side is fixed at 100vw x 100vh, so aspect distortion is zero.
+function resizeCanvas() {
+  canvas.width = Math.round(window.innerWidth * CANVAS_SCALE);
+  canvas.height = Math.round(window.innerHeight * CANVAS_SCALE);
+}
+window.addEventListener("resize", function () {
+  resizePending = true; // defer the actual rescale to the next frame
+});
+
+// ---- HUD (write-through only when a value changed) ----
+function setText(el, value) {
+  var text = String(value);
+  if (el.textContent !== text) el.textContent = text;
+}
+function syncHud() {
+  setText(hudScore, score);
+  setText(hudLevel, level);
+  setText(hudHigh, highScore);
+}
+
+// ---- Flow ----
+function setScreen(which) {
+  screenStart.style.display = which === "start" ? "flex" : "none";
+}
+function startGame() {
+  if (gameState === "playing") return; // repeat clicks never reset a run
+  gameState = "playing";
+  score = 0;
+  level = 1;
+  setScreen("playing");
+  syncHud();
+}
+btnStart.addEventListener("click", startGame);
+
+// ---- Frame loop ----
+// Per-frame order: resize -> update(dt) -> syncScore -> draw, so a
+// record overtaken inside update persists on the same frame it happens.
+function frame(time) {
+  var dt = lastFrameTime === null
+    ? 0
+    : Math.min(Math.max(0, (time - lastFrameTime) / 1000), MAX_FRAME_SECONDS);
+  lastFrameTime = time;
+  if (resizePending) {
+    resizePending = false;
+    resizeCanvas();
+  }
+  if (gameState === "playing") update(dt);
+  syncScore();
+  draw();
+  requestAnimationFrame(frame);
+}
+// Promote the live score to the persisted high score when it rises.
+function syncScore() {
+  if (score > highScore) {
+    highScore = score;
+    saveHighScore();
+  }
+}
+function update(dt) {
+  // Paddle, ball and bricks land in later campaign-2 tickets; this
+  // hook is their fixed per-frame entry point (dt is already clamped).
+}
+function draw() {
+  ctx.fillStyle = COLOR_BG;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
+
+// ---- Boot ----
+resizeCanvas();
+setScreen("start");
+syncHud();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
