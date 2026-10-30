@@ -52,6 +52,20 @@
     font-weight: normal;
     color: var(--ink);
   }
+  /* Life icons in the top bar (PRD section 3): one small paddle bar
+     per remaining life, appended/removed by the game on every change. */
+  #lives {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+  .life-icon {
+    display: inline-block;
+    width: 12px;
+    height: 5px;
+    border-radius: 2px;
+    background: var(--accent);
+  }
   /* Absolute-positioned game-state overlays (PRD section 3). */
   .screen {
     position: fixed;
@@ -101,7 +115,7 @@
     <span>Score <b id="hud-score">0</b></span>
     <span>Level <b id="hud-level">1</b></span>
     <span>High <b id="hud-high">0</b></span>
-    <span>Lives <b id="hud-lives">&ndash;</b></span>
+    <span>Lives <span id="lives"></span></span>
   </header>
 
   <section class="screen" id="screen-start">
@@ -110,16 +124,24 @@
     <button id="btn-start" type="button">Start Game</button>
   </section>
 
+  <section class="screen" id="screen-gameover">
+    <h1>Game Over</h1>
+    <p id="gameover-final">Final score 0</p>
+    <button id="btn-restart" type="button">Try Again</button>
+  </section>
+
 <script>
 "use strict";
 // ================================================================
-// BRICK BREAKER — campaign 2 scaffold (ticket #28)
+// BRICK BREAKER — campaign 2: shell, paddle, ball, lives, game over
 //
-// Single-file shell: responsive full-viewport canvas with an
-// internal-resolution scale factor, a requestAnimationFrame loop
-// with a clamped frame delta, and a start-screen overlay with a
-// Start CTA. Paddle, ball, bricks, power-ups, audio and the
-// remaining game states are later campaign-2 tickets.
+// Single file: responsive full-viewport canvas with an internal-
+// resolution scale factor, a requestAnimationFrame loop with a
+// clamped frame delta, start / game-over overlay screens, keyboard
+// and pointer paddle control, a served ball with wall and paddle
+// bounces (position-dependent angle, speed-preserving), and the
+// lose-a-life / game-over / restart flow. Bricks, power-ups and
+// audio are later campaign-2 tickets.
 // ================================================================
 
 // ---- Tunables (var: addressable as globals, e.g. from the console) ----
@@ -127,27 +149,53 @@ var CANVAS_SCALE = 2;             // canvas pixels per viewport pixel
 var UI_FONT = "monospace";        // retro face for canvas UI text
 var MAX_FRAME_SECONDS = 1 / 30;   // dt clamp: no teleports after tab switches
 var HIGH_SCORE_KEY = "brickbreaker.highScore";
+var PLAYER_LIVES = 3;             // lives per run (PRD section 2 loss rule)
+// Paddle (internal canvas px, so values scale with CANVAS_SCALE)
+var PADDLE_WIDTH = 120;
+var PADDLE_HEIGHT = 14;
+var PADDLE_BOTTOM_GAP = 24;       // clear space between paddle and bottom edge
+var PADDLE_SPEED = 720;           // keyboard travel speed, px/s
+// Ball
+var BALL_RADIUS = 8;
+var BALL_SERVE_SPEED = 480;       // launch speed on click/tap, px/s
+var MAX_PADDLE_BOUNCE_ANGLE = Math.PI / 3;  // 60 deg from vertical at the rim
 
 // ---- Palette (the page accent lives in the CSS --accent property;
 // a canvas-drawn mirror is added with the canvas-text gameplay tickets) ----
 var COLOR_BG = "#0b0f14";
+var COLOR_PADDLE = "#5cf2b0";
+var COLOR_BALL = "#e8ecf1";
 
 // ---- DOM handles ----
 var canvas = document.getElementById("game");
 var ctx = canvas.getContext("2d");
 var screenStart = document.getElementById("screen-start");
+var screenOver = document.getElementById("screen-gameover");
 var btnStart = document.getElementById("btn-start");
+var btnRestart = document.getElementById("btn-restart");
+var gameoverFinal = document.getElementById("gameover-final");
 var hudScore = document.getElementById("hud-score");
 var hudLevel = document.getElementById("hud-level");
 var hudHigh = document.getElementById("hud-high");
+var livesEl = document.getElementById("lives");
 
 // ---- State ----
-var gameState = "start"; // "start" | "playing" (pause/game over: later tickets)
+var gameState = "start"; // "start" | "playing" | "gameover"
 var score = 0;
 var level = 1;
 var highScore = loadHighScore();
+var lives = PLAYER_LIVES;         // (re)start-time snapshot of PLAYER_LIVES
 var resizePending = false;
 var lastFrameTime = null;
+// Paddle position is its centre x; the top-edge y derives from the
+// (resizable) canvas height so a relayout never strands the paddle.
+var paddle = { x: 0 };
+// One ball per run (a pool arrives with #25's extra-ball power-up).
+var ball = { x: 0, y: 0, vx: 0, vy: 0, attached: true };
+// Held keys per direction: one set entry per distinct held code.
+// Auto-repeat keydowns re-add the same code (idempotent), so the
+// set size mirrors the fingers on the deck, not the re-dispatches.
+var keys = { left: new Set(), right: new Set() };
 
 // ---- High score (localStorage persistence, PRD section 4) ----
 function loadHighScore() {
@@ -188,19 +236,182 @@ function syncHud() {
   setText(hudHigh, highScore);
 }
 
+// ---- Paddle (input + kinematics) ----
+function paddleTop() {
+  return canvas.height - PADDLE_BOTTOM_GAP - PADDLE_HEIGHT;
+}
+function clampPaddle() {
+  var half = PADDLE_WIDTH / 2;
+  if (paddle.x < half) paddle.x = half;
+  if (paddle.x > canvas.width - half) paddle.x = canvas.width - half;
+}
+function updatePaddle(dt) {
+  // update() only runs in "playing", so releasing a key stops the
+  // paddle automatically; both key and pointer write the same x.
+  var dir = (keys.right.size > 0 ? 1 : 0) - (keys.left.size > 0 ? 1 : 0);
+  if (dir !== 0) paddle.x += dir * PADDLE_SPEED * dt;
+  clampPaddle();
+}
+function onKeyDown(e) {
+  if (e.code === "ArrowLeft" || e.code === "KeyA") {
+    keys.left.add(e.code);
+    e.preventDefault();
+  } else if (e.code === "ArrowRight" || e.code === "KeyD") {
+    keys.right.add(e.code);
+    e.preventDefault();
+  }
+}
+function onKeyUp(e) {
+  if (e.code === "ArrowLeft" || e.code === "KeyA") keys.left.delete(e.code);
+  else if (e.code === "ArrowRight" || e.code === "KeyD") keys.right.delete(e.code);
+}
+// A blurred window drops its keyups; clear the held sets with it so
+// the paddle cannot keep gliding on ghost keys.
+function onBlur() {
+  keys.left.clear();
+  keys.right.clear();
+}
+window.addEventListener("keydown", onKeyDown);
+window.addEventListener("keyup", onKeyUp);
+window.addEventListener("blur", onBlur);
+// The canvas CSS footprint equals the viewport, so the client-x
+// transform to internal px folds in the responsive CANVAS_SCALE.
+function setPaddleX(clientX) {
+  paddle.x = (clientX / window.innerWidth) * canvas.width;
+  clampPaddle();
+}
+canvas.addEventListener("mousemove", function (e) {
+  setPaddleX(e.clientX);
+});
+canvas.addEventListener("touchmove", function (e) {
+  if (e.touches && e.touches.length > 0) setPaddleX(e.touches[0].clientX);
+  e.preventDefault(); // keep the page from scrolling while dragging
+}, { passive: false });
+
+// ---- Ball ----
+// A click/tap detaches an attached ball straight up at the serve speed.
+function launchBall() {
+  if (gameState !== "playing" || !ball.attached) return;
+  ball.attached = false;
+  ball.vx = 0;
+  ball.vy = -BALL_SERVE_SPEED;
+}
+canvas.addEventListener("click", launchBall);
+canvas.addEventListener("touchend", launchBall);
+
+function updateBall(dt) {
+  var pt = paddleTop();
+  if (ball.attached) {
+    // Rides the paddle; all motion is paddle-driven while attached.
+    ball.x = paddle.x;
+    ball.y = pt - BALL_RADIUS;
+    return;
+  }
+  var prevBottom = ball.y + BALL_RADIUS;
+  ball.x += ball.vx * dt;
+  ball.y += ball.vy * dt;
+  // Walls: mirror the velocity component, pin to the inner edge.
+  if (ball.x - BALL_RADIUS < 0) {
+    ball.x = BALL_RADIUS;
+    ball.vx = Math.abs(ball.vx);
+  } else if (ball.x + BALL_RADIUS > canvas.width) {
+    ball.x = canvas.width - BALL_RADIUS;
+    ball.vx = -Math.abs(ball.vx);
+  }
+  if (ball.y - BALL_RADIUS < 0) {
+    ball.y = BALL_RADIUS;
+    ball.vy = Math.abs(ball.vy);
+  }
+  // Paddle: sweep test across the top face (no tunnelling even on a
+  // clamped frame). The outgoing angle derives from the hit offset;
+  // the incoming speed is preserved.
+  if (
+    ball.vy > 0 &&
+    prevBottom <= pt &&
+    ball.y + BALL_RADIUS >= pt &&
+    Math.abs(ball.x - paddle.x) <= PADDLE_WIDTH / 2 + BALL_RADIUS
+  ) {
+    var rel = (ball.x - paddle.x) / (PADDLE_WIDTH / 2);
+    if (rel > 1) rel = 1;
+    else if (rel < -1) rel = -1;
+    var speed = Math.hypot(ball.vx, ball.vy);
+    var angle = rel * MAX_PADDLE_BOUNCE_ANGLE;
+    ball.vx = speed * Math.sin(angle);
+    ball.vy = -speed * Math.cos(angle);
+    ball.y = pt - BALL_RADIUS; // push out above the paddle
+  }
+  // Dropped below the bottom edge: one life, fresh serve or game over.
+  if (ball.y - BALL_RADIUS > canvas.height) loseLife();
+}
+
 // ---- Flow ----
 function setScreen(which) {
   screenStart.style.display = which === "start" ? "flex" : "none";
+  screenOver.style.display = which === "gameover" ? "flex" : "none";
 }
 function startGame() {
-  if (gameState === "playing") return; // repeat clicks never reset a run
+  if (gameState !== "start") return; // the button only lives on the start screen
   gameState = "playing";
+  setScreen("playing");
+  beginRun();
+}
+function restartRun() {
+  if (gameState !== "gameover") return; // the button only lives on that screen
+  gameState = "playing";
+  setScreen("playing");
+  beginRun();
+}
+// One reset path shared by first start and restart: zero live
+// entities by construction (fresh attached serve; no bricks yet).
+function beginRun() {
   score = 0;
   level = 1;
-  setScreen("playing");
+  lives = PLAYER_LIVES;
+  serveBall();
+  renderLives();
   syncHud();
 }
 btnStart.addEventListener("click", startGame);
+btnRestart.addEventListener("click", restartRun);
+
+// ---- Lives / game over ----
+// A fresh serve parks a rested ball on the paddle centre.
+function serveBall() {
+  ball.attached = true;
+  ball.vx = 0;
+  ball.vy = 0;
+  ball.x = paddle.x;
+  ball.y = paddleTop() - BALL_RADIUS;
+}
+function loseLife() {
+  lives -= 1;
+  renderLives();
+  if (lives <= 0) {
+    lives = 0;
+    enterGameOver();
+  } else {
+    serveBall();
+  }
+}
+function enterGameOver() {
+  gameState = "gameover";
+  // Re-serve: the frozen field behind the overlay shows the ball at
+  // rest on the paddle; no live ball carries over.
+  serveBall();
+  gameoverFinal.textContent = "Final score " + score;
+  setScreen("gameover");
+  syncHud();
+}
+// The #lives node holds exactly one icon span per remaining life;
+// it is rebuilt only when a life is gained or lost.
+function renderLives() {
+  while (livesEl.firstChild) livesEl.removeChild(livesEl.firstChild);
+  for (var i = 0; i < lives; i += 1) {
+    var icon = document.createElement("span");
+    icon.className = "life-icon";
+    livesEl.appendChild(icon);
+  }
+}
 
 // ---- Frame loop ----
 // Per-frame order: resize -> update(dt) -> syncScore -> draw, so a
@@ -227,17 +438,33 @@ function syncScore() {
   }
 }
 function update(dt) {
-  // Paddle, ball and bricks land in later campaign-2 tickets; this
-  // hook is their fixed per-frame entry point (dt is already clamped).
+  updatePaddle(dt);
+  updateBall(dt);
 }
 function draw() {
   ctx.fillStyle = COLOR_BG;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
+  if (gameState === "start") return;
+  drawPaddle();
+  drawBall();
+}
+function drawPaddle() {
+  ctx.fillStyle = COLOR_PADDLE;
+  ctx.fillRect(paddle.x - PADDLE_WIDTH / 2, paddleTop(), PADDLE_WIDTH, PADDLE_HEIGHT);
+}
+function drawBall() {
+  ctx.fillStyle = COLOR_BALL;
+  ctx.beginPath();
+  ctx.arc(ball.x, ball.y, BALL_RADIUS, 0, 2 * Math.PI);
+  ctx.fill();
 }
 
 // ---- Boot ----
 resizeCanvas();
+paddle.x = canvas.width / 2;
+serveBall();
 setScreen("start");
+renderLives();
 syncHud();
 requestAnimationFrame(frame);
 </script>

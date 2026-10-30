@@ -40,12 +40,15 @@ function assert(cond, msg) {
   if (!cond) throw new Error(msg);
 }
 
-// A DOM element stub: records style writes, text, and listeners.
+// A DOM element stub: records style writes, text, listeners and
+// child nodes (lives icons are appended/removed by the game).
 function makeEl(id) {
-  return {
+  const el = {
     id,
     style: {},
     textContent: "",
+    className: "",
+    children: [],
     listeners: {},
     addEventListener(type, cb) {
       (this.listeners[type] ??= []).push(cb);
@@ -53,7 +56,21 @@ function makeEl(id) {
     click() {
       for (const cb of this.listeners["click"] ?? []) cb({ type: "click" });
     },
+    appendChild(child) {
+      el.children.push(child);
+      return child;
+    },
+    removeChild(child) {
+      const i = el.children.indexOf(child);
+      if (i >= 0) el.children.splice(i, 1);
+      return child;
+    },
   };
+  Object.defineProperty(el, "firstChild", {
+    enumerable: true,
+    get: () => (el.children.length > 0 ? el.children[0] : null),
+  });
+  return el;
 }
 
 // A canvas 2d context stub: every method is a no-op, every property
@@ -79,14 +96,29 @@ function makeCtx() {
 // throwingStorage replaces the stub with one whose accessors throw
 // (blocked / quota-exhausted storage).
 function boot(width, height, storedHigh = null, throwingStorage = false) {
-  const canvas = { width: 0, height: 0, getContext: () => makeCtx() };
+  const canvas = {
+    width: 0,
+    height: 0,
+    listeners: {},
+    getContext: () => makeCtx(),
+    addEventListener(type, cb) {
+      (this.listeners[type] ??= []).push(cb);
+    },
+    dispatch(type, ev) {
+      for (const cb of this.listeners[type] ?? []) cb(ev);
+    },
+  };
   const els = {
     "game": canvas,
     "screen-start": makeEl("screen-start"),
     "btn-start": makeEl("btn-start"),
+    "screen-gameover": makeEl("screen-gameover"),
+    "btn-restart": makeEl("btn-restart"),
+    "gameover-final": makeEl("gameover-final"),
     "hud-score": makeEl("hud-score"),
     "hud-level": makeEl("hud-level"),
     "hud-high": makeEl("hud-high"),
+    "lives": makeEl("lives"),
   };
   const winListeners = {};
   let rafCb = null;
@@ -116,6 +148,7 @@ function boot(width, height, storedHigh = null, throwingStorage = false) {
     },
     document: {
       getElementById: (id) => els[id] ?? null,
+      createElement: (tag) => makeEl(tag),
     },
     requestAnimationFrame: (cb) => {
       rafCb = cb;

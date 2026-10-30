@@ -520,3 +520,129 @@
   gameplay entry point for the later paddle/ball/bricks tickets, so their
   diffs touch the loop once instead of restructuring it. The LIVES HUD
   cell shows "–" until the lives ticket wires it.
+
+## 2026-10-30 — Ticket #21: paddle control, ball launch, bounces, lives, game over
+
+- **Single mutable `ball` object (no pool) and a single `paddle.x` scalar.** #21 is a
+  one-ball run; the extra-ball power-up (#25) will promote this to a pooled model. Paddle
+  geometry is derived per-frame from the (resizable) canvas height (`paddleTop()`), so a
+  viewport relayout can never strand the paddle or orphan a serve position. Alternatives:
+  a pre-built ball pool now (rejected — dead surface until #25), fixed-pixel paddle y
+  (rejected — breaks under the responsive rescale).
+- **The paddle bounce is a sweep across the top face: the collision fires when the ball's
+  bottom crosses `paddleTop` between frames (previous bottom captured before
+  integration), not a per-frame overlap band.** A band test either tunnels on clamped or
+  fast frames or double-fires on slow ones; the crossing test is exact at any speed and
+  costs one captured scalar. The outgoing angle is
+  `clamp(hitOffset / halfWidth) * MAX_PADDLE_BOUNCE_ANGLE` (60° at the rim, PRD §4),
+  applied to the *incoming* speed, so every reflection preserves speed exactly and the
+  ball always leaves with `vy < 0` (cos 60° = 0.5 keeps a strong upward component — the
+  ball can never squirt sideways off the rim). Alternatives: fixed 45° rebound (fails
+  the position-dependence criterion), renormalising to a base speed per bounce (a hidden
+  retune every hit; the criteria measure preservation, not resetting).
+- **The serve is straight up at `BALL_SERVE_SPEED` (480 px/s), detached by a canvas
+  click or tap (`click` + `touchend`; the tap's synthetic `click` is absorbed by the
+  `attached` flag).** The PRD is silent on serve angle; straight up is the most
+  predictable baseline and makes "launched upward at the named serve speed" exactly
+  testable. Alternatives: small random angle (untestable, worse serve feel),
+  paddle-offset serve (that mechanic is what the paddle bounce already does).
+- **Pointer listeners are state-ungated: `mousemove`/`touchmove` set the
+  paddle x in any state; launch is gated to `"playing"` and to `attached`.**
+  In a real browser the full-viewport start overlay occludes the canvas, so
+  no pointer input reaches the listeners before start — the ungating is a
+  script-layer property (which the tests exercise by dispatching events
+  directly), not a serve-aiming feature. The `touchmove`
+  handler passes `{ passive: false }` so its `preventDefault` keeps the page from
+  scrolling mid-drag. Keyboard movement stays confined to `update`, which the loop only
+  calls in `"playing"`, so "stops on release" falls out with no extra state; a window
+  `blur` clears both held-key sets so a key released off-window cannot leave the paddle
+  gliding. Alternatives: gate the pointer to playing (rejected — invisible in
+  a real browser, since the overlay occludes anyway, and it adds state), buffer pointer
+  events until play (extra state, no player-visible benefit).
+- **Restart and first start share one `beginRun()` reset path (score, level, lives,
+  serve, icons, HUD); `restartRun` additionally requires `gameState === "gameover"`, so a
+  stray `btn-restart` click mid-run is a no-op.** "No live ball or bricks from the
+  previous run" is read as: after restart the only ball is the fresh *attached* serve,
+  at rest on the paddle centre — nothing in flight carries over (no bricks exist yet).
+  At game over the ball is re-served through the same `serveBall()`
+  as after each lost life (attached, at rest on the paddle centre) rather
+  than deleted, so the frozen field behind the overlay shows the ball
+  riding the paddle. Alternatives: a separate restart
+  reset function (drift risk — the #8 single-reset-path precedent argues against),
+  deleting the ball object (needs recreation machinery for no behaviour).
+- **`#lives` renders one small paddle-bar `<span class="life-icon">` per remaining life,
+  rebuilt (clear + append) only when a life changes — never in the frame loop.** Icons
+  show `PLAYER_LIVES` from boot, advertising the run's stake on the start screen, and the
+  node holds exactly `lives` children at all times (checked through the stubbed document:
+  `createElement`/`appendChild`/`firstChild`). Alternative: per-icon show/hide over a
+  fixed trio (keeps stale nodes alive; a rebuild on the rare life event is trivially
+  exact and cheaper to reason about).
+
+## 2026-10-30 — Ticket #21 review round 1: per-direction held keys, true-quarter fixture
+
+- **Held keys are tracked as one `Set` of key codes per direction (`keys.left` /
+  `keys.right`), not booleans (review should-fix 1).** With booleans, holding
+  `ArrowLeft` + `KeyA` and releasing one stopped the paddle although the other was
+  still held. The review suggested counters; a set of *distinct* held codes is the
+  repeat-safe form of that counter — browser auto-repeat re-dispatches the same
+  `keydown`, which would inflate a naive per-event counter, whereas `add(code)` is
+  idempotent, so set size mirrors the fingers on the deck, not the re-dispatches.
+  `onBlur` clears both sets (same ghost-key protection as before). The travel speed is
+  sign-based (`size > 0`), so two held same-direction keys never double the speed
+  (locked in by the new auto-repeat travel test). Alternatives: raw per-event
+  counters with `e.repeat` filtering (depends on the event property, which the vm
+  stubs would also have to fake), per-code boolean map + reduction (same result,
+  more code than a set).
+- **The `incomingHit` test fixture's parameter is now the game's own normalised
+  offset — a fraction of the paddle *half* width (review should-fix 2).** The old
+  fixture multiplied by the full `PADDLE_WIDTH`, so its "left quarter" (`rel = -0.5`)
+  actually sat on the left **rim** (`rel = -1`). Call sites now pass `±0.75`, i.e.
+  the quarter centres at offset `∓0.375·PADDLE_WIDTH`, and the left-quarter test
+  additionally asserts the pre-bounce x equals `paddle.x - PADDLE_WIDTH * 0.375` so
+  label and placement cannot drift apart again. The reviewed "stale parked-ball
+  coordinates at game over" note is accepted as documented behaviour — no code change.
+
+
+## 2026-10-30 — Ticket #21 review round 2: symmetric start gate, blur lock-in, honest palette comment
+
+- **`startGame` is gated on `gameState === "start"`, mirroring `restartRun`'s
+  `gameState === "gameover"` gate (review round 2, item 3).** The former
+  `!== "playing"` gate also admitted game over, so two buttons could both
+  restart a run; now each screen owns exactly one transition and stray clicks
+  in every other state are no-ops (locked in by the new symmetry test, which
+  also confirms Try Again remains the working restart path). The old
+  "repeat clicks never reset a run" guarantee still holds — start is a
+  no-op mid-run too. Alternative: keep the `playing`-only gate (rejected —
+  asymmetric, the review asked for symmetry).
+- **A short `blur` test locks in the held-key clearing (review round 2,
+  item 2).** Ghost-key protection existed (`onBlur` clears both held-key
+  sets) but had no dedicated regression test; the test holds `ArrowLeft`,
+  fires a window `blur` without the keyup, and asserts the paddle stops.
+- **The palette header comment reverts to the scaffold-era honest phrasing
+  — "a canvas-drawn mirror is added with the canvas-text gameplay tickets"
+  (review round 2, item 1).** The #21 rewrite ("keeps one colour doing the
+  entire UI") overclaimed: no canvas UI text exists yet, and `COLOR_PADDLE`
+  is an entity colour, not a UI mirror.
+
+## 2026-10-30 — Ticket #21 review round 3: re-serve at game over, honest pointer-ungating claim
+
+- **`enterGameOver` now calls `serveBall()` instead of hand-writing the
+  parked-ball fields (review round 3, item 1).** The old parking set
+  `attached`/zero velocity but left the ball at its stale drop
+  coordinates — below the bottom edge, i.e. off-screen — so the comment
+  claiming the frozen field "draws cleanly" pointed at a ball the player
+  could not see. Re-serving through the shared `serveBall()` puts the
+  frozen field behind the overlay in exactly the canonical rest pose
+  (ball on the paddle centre) and reuses the single park/serve path.
+  Alternative: keep manual parking and add two coordinate assignments
+  (duplicates `serveBall`'s contract; the round-1 "stale parked-ball
+  coordinates" note is retired as behaviour, superseded by this fix).
+- **The pointer-ungating bullet is reworded to its honest claim and the
+  matching test renamed (review round 3, item 2).** The old bullet sold
+  "hovering before Start aims the serve position", but the full-viewport
+  start overlay occludes the canvas in a real browser, so pre-start
+  pointer input never reaches the handlers and no serve aiming exists.
+  The bullet now states the true property (listeners are state-ungated,
+  a script-layer fact exercised by direct dispatch in tests) and the
+  test is renamed to that claim. No code change: the gating question
+  was about the claim, not the listeners.
