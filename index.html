@@ -366,7 +366,9 @@
         slot.spin = (random() - 0.5) * 0.8; // slow, varied tumble (rad/s)
         return true;
       }
-      return false; // field too crowded near the ship to be safe — try again later
+      return false; // every candidate was rejected: too close to the ship
+                    // to be safe, or its inward component fell below
+                    // ASTEROID_INWARD_MIN — try again later
     }
 
     let lastSpawnAt = Number.NEGATIVE_INFINITY; // sim time of the last spawn attempt

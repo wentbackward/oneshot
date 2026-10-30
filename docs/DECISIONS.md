@@ -459,3 +459,18 @@
   said "the other five vm suites"; there are six siblings (lasers,
   asteroids, ship-damage, drones, screens, waves) — both records
   corrected.
+
+## 2026-10-29 — Ticket #14 review round 1: reproducible soak and honest abort comment
+
+- **Safe-radius soak pinned to `mulberry32Source(7)` (review #14-A):** the
+  `spawns >= 100` floor was previously probabilistic (Node's entropy-seeded
+  `Math.random` gave 295/296/270 across three measured runs). Seed 7 was
+  probed to deterministically yield 297 spawns — ~3× the floor. Alternatives:
+  a different seed (all of 1–17 probed land at 269–304, none marginal) or
+  asserting a tighter count (over-pins against future spawn-logic tweaks;
+  the floor is a sample-size guard, not a prediction).
+- **`spawnAsteroid` abort comment lists both rejection causes
+  (review #14-B):** safe-radius crowding *and* the `ASTEROID_INWARD_MIN`
+  inward-component floor. The analogous `spawnDrone` comment was left
+  untouched — drones have no inward floor, so their comment remains
+  complete.
