@@ -596,3 +596,24 @@
   label and placement cannot drift apart again. The reviewed "stale parked-ball
   coordinates at game over" note is accepted as documented behaviour — no code change.
 
+
+## 2026-10-30 — Ticket #21 review round 2: symmetric start gate, blur lock-in, honest palette comment
+
+- **`startGame` is gated on `gameState === "start"`, mirroring `restartRun`'s
+  `gameState === "gameover"` gate (review round 2, item 3).** The former
+  `!== "playing"` gate also admitted game over, so two buttons could both
+  restart a run; now each screen owns exactly one transition and stray clicks
+  in every other state are no-ops (locked in by the new symmetry test, which
+  also confirms Try Again remains the working restart path). The old
+  "repeat clicks never reset a run" guarantee still holds — start is a
+  no-op mid-run too. Alternative: keep the `playing`-only gate (rejected —
+  asymmetric, the review asked for symmetry).
+- **A short `blur` test locks in the held-key clearing (review round 2,
+  item 2).** Ghost-key protection existed (`onBlur` clears both held-key
+  sets) but had no dedicated regression test; the test holds `ArrowLeft`,
+  fires a window `blur` without the keyup, and asserts the paddle stops.
+- **The palette header comment reverts to the scaffold-era honest phrasing
+  — "a canvas-drawn mirror is added with the canvas-text gameplay tickets"
+  (review round 2, item 1).** The #21 rewrite ("keeps one colour doing the
+  entire UI") overclaimed: no canvas UI text exists yet, and `COLOR_PADDLE`
+  is an entity colour, not a UI mirror.
