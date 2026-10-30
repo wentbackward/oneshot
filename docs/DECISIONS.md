@@ -736,3 +736,23 @@
   right-wall assertion (weakens the locked-in behaviour), or change
   the sub-step wall handling to discard overshoot (defeats the point
   of sub-stepping).
+
+## 2026-10-30 — Ticket #22 review round 2: sub-step overlap drain
+
+- **After a brick hit, the sub-step loop now drains residual overlaps —
+  `while (collideBricks()) {}` before resuming/breaking — so the frame
+  always ends with the ball clear of every live brick.** Root cause:
+  `BRICK_GAP` (6 px) is narrower than the ball (16 px diameter), so the
+  x-resolution pin (ball pushed to `face ± BALL_RADIUS`) of a row-centre
+  side hit can land the ball inside the seam neighbour; the old
+  single-shot `if (collideBricks()) break` then left that overlap to be
+  popped a frame early. The drain is structurally terminating: each
+  `true` destroys exactly one brick, so at most `bricks.length`
+  iterations, and a draining win (last brick) is safe because the
+  re-served ball rides the paddle, far from the fresh grid. Locked by
+  the row-centre side-hit regression test in the grid suite.
+  Alternatives: shrink the push-out to the seam midpoint (rejected —
+  fudges the physics and still leaks partial overlaps), or widen the
+  drain to a full pre-flight check before every sub-step (rejected —
+  O(n) per sub-step with no behaviour gain; overlaps only ever appear
+  from our own push-out).
