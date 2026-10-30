@@ -11,10 +11,11 @@
 // deterministically by reassigning the game's mutable `random` hook
 // with a scripted two-value sequence (drop roll, then kind roll);
 // effects are also exercised directly through applyCapsule().
-// The two-ball life-loss fixture is fully deterministic: the brick
+// The two-ball life-loss fixtures are fully deterministic: the brick
 // field is cleared, the paddle parked at the far rim, and both balls
-// given identical small downward velocities at distinct heights, so
-// each loss lands on a known frame. No network, no external services.
+// given identical small downward velocities at known heights, so each
+// loss lands on a known frame (or, in the same-frame fixture, both
+// losses land on ONE frame). No network, no external services.
 //
 // Run: node tests/bricks-multiball.test.mjs
 // ================================================================
@@ -370,6 +371,45 @@ check("when the last live ball falls, lives decrease by exactly 1 and a fresh se
     `the last-ball loss must cost exactly one life, got ${g.lives()} (was ${startLives})`);
   assert(g.state() === "playing", `the run must continue, state=${g.state()}`);
 });
+
+// Same-frame variant of the fixture: both balls sit at the SAME height,
+// so both cross the loss line during the very same updateBalls() pass.
+// The pool-order loop deactivates ball #0 first (a ball still lives,
+// no life is spent), then ball #1 (last live ball → exactly ONE
+// loseLife() call, ONE fresh serve). No double life loss, no double
+// serve, no stale slot 0.
+function twoBallSameFrameFixture(g) {
+  start(g);
+  g.canvas.dispatch("click"); // launch the serve
+  g.q("applyCapsule(KIND_EXTRA)");
+  assert(g.liveCount() === 2, "setup: the fixture has two live balls");
+  clearBricks(g);
+  g.q(`paddle.x = 1860;
+       for (var j = 0; j < balls.length; j += 1) balls[j].attached = false;
+       balls[0].x = 100; balls[0].y = 430; balls[0].vx = 0; balls[0].vy = 120;
+       balls[1].x = 140; balls[1].y = 430; balls[1].vx = 0; balls[1].vy = 120;`);
+}
+
+check("a same-frame double drop loses exactly one life and produces exactly one fresh serve",
+  () => {
+    const g = boot(960, 600);
+    twoBallSameFrameFixture(g);
+    const startLives = g.lives();
+    g.tick(390); // frame 390: BOTH balls cross the loss line in one updateBalls() pass
+    assert(g.liveCount() === 1, `the fresh serve must leave exactly one live ball, got ${g.liveCount()}`);
+    const list = g.ballList();
+    const served = list.find((b) => b.active);
+    assert(list.filter((b) => b.active).length === 1, "exactly one slot may be active after the double drop");
+    assert(served.i === 0, "the fresh serve must occupy the slot 0 rest pose");
+    assert(served.attached, "the fresh serve must park an attached ball on the paddle");
+    assert(Math.abs(served.x - g.paddleX()) < 1e-9, "the served ball rides the paddle centre");
+    assert(Math.abs(served.y - (g.q("paddleTop()") - g.q("BALL_RADIUS"))) < 1e-9,
+      "the served ball sits on the paddle top face");
+    assert(served.vx === 0 && served.vy === 0, "the parked serve ball holds still awaiting the click");
+    assert(g.lives() === startLives - 1,
+      `the double drop must cost exactly one life in total, got ${g.lives()} (was ${startLives})`);
+    assert(g.state() === "playing", `the run must continue, state=${g.state()}`);
+  });
 
 // ================================================================
 // Criterion 3: catching a Sticky capsule activates sticky mode for
