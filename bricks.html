@@ -350,7 +350,7 @@ function setScreen(which) {
   screenOver.style.display = which === "gameover" ? "flex" : "none";
 }
 function startGame() {
-  if (gameState === "playing") return; // repeat clicks never reset a run
+  if (gameState !== "start") return; // the button only lives on the start screen
   gameState = "playing";
   setScreen("playing");
   beginRun();
