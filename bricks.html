@@ -406,7 +406,14 @@ function updateBall(dt) {
     ball.x += ball.vx * sdt;
     ball.y += ball.vy * sdt;
     bounceWalls();
-    if (collideBricks()) { bricked = true; break; }
+    if (collideBricks()) {
+      bricked = true;
+      // The gap is narrower than the ball: pinning to a brick face
+      // can land the ball inside the seam neighbour. Drain the
+      // residual overlap now so the frame ends clear of the grid.
+      while (collideBricks()) { /* resolved */ }
+      break;
+    }
   }
   if (bricked) return; // reflected by a brick (or re-served on a win)
   // Paddle: sweep test across the top face (no tunnelling even on a
@@ -446,9 +453,9 @@ function bounceWalls() {
   }
 }
 // Circle vs brick overlap resolved along the shallowest axis; the
-// sign-based flip preserves the incoming speed exactly. At most one
-// brick is hit per sub-step (the first contact), matching how a real
-// ball meets the wall.
+// sign-based flip preserves the incoming speed exactly. One brick
+// per call (the first contact in pool order); the sub-step loop
+// drains follow-on seam overlaps after a hit.
 function collideBricks() {
   for (var i = 0; i < bricks.length; i += 1) {
     var b = bricks[i];
