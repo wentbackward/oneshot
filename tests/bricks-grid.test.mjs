@@ -1,0 +1,512 @@
+#!/usr/bin/env node
+// ================================================================
+// Unit tests — bricks.html brick grid, ball collision, scoring,
+// levels and win condition (ticket #22)
+//
+// Same harness style as tests/bricks-paddle.test.mjs: runs the
+// REAL <script> from bricks.html in a sandboxed vm context with
+// stubbed window/document/canvas/DOM elements that record event
+// listeners. Frames are driven through the captured
+// requestAnimationFrame callback. Brick clears use the game's own
+// destroyBrick() (console-style direct access, as the ticket's
+// acceptance criteria prescribe); the tunnelling fixture reassigns
+// the ball's velocity console-style and runs a single clamped frame.
+// No network, no external services.
+//
+// Run: node tests/bricks-grid.test.mjs
+// ================================================================
+import { readFileSync } from "node:fs";
+import vm from "node:vm";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+
+const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+const html = readFileSync(path.join(root, "bricks.html"), "utf8");
+const match = html.match(/<script>([\s\S]*?)<\/script>/);
+if (!match) throw new Error("no <script> block found in bricks.html");
+const gameSource = match[1];
+
+// ---------- tiny test harness ----------
+let passed = 0;
+let failed = 0;
+function check(name, fn) {
+  try {
+    fn();
+    passed += 1;
+    console.log(`ok   - ${name}`);
+  } catch (err) {
+    failed += 1;
+    console.error(`FAIL - ${name}\n       ${err.message}`);
+  }
+}
+function assert(cond, msg) {
+  if (!cond) throw new Error(msg);
+}
+function assertClose(actual, expected, tol, msg) {
+  const diff = Math.abs(actual - expected);
+  if (!Number.isFinite(diff) || diff > tol) {
+    throw new Error(`${msg} (got ${actual}, want ${expected} ± ${tol})`);
+  }
+}
+
+// A DOM element stub: records style writes, text, listeners and
+// child nodes.
+function makeEl(id) {
+  const el = {
+    id,
+    style: {},
+    textContent: "",
+    className: "",
+    children: [],
+    listeners: {},
+    addEventListener(type, cb) {
+      (this.listeners[type] ??= []).push(cb);
+    },
+    click() {
+      for (const cb of this.listeners["click"] ?? []) cb({ type: "click" });
+    },
+    appendChild(child) {
+      el.children.push(child);
+      return child;
+    },
+    removeChild(child) {
+      const i = el.children.indexOf(child);
+      if (i >= 0) el.children.splice(i, 1);
+      return child;
+    },
+  };
+  Object.defineProperty(el, "firstChild", {
+    enumerable: true,
+    get: () => (el.children.length > 0 ? el.children[0] : null),
+  });
+  return el;
+}
+
+// A canvas 2d context stub: every method is a no-op, every property
+// set is allowed.
+function makeCtx() {
+  const noop = () => {};
+  return new Proxy(
+    {},
+    {
+      get(_t, prop) {
+        if (prop === Symbol.toPrimitive) return undefined;
+        return noop;
+      },
+      set() {
+        return true;
+      },
+    }
+  );
+}
+
+// Boot a fresh copy of the game on a width×height viewport.
+function boot(width = 960, height = 600) {
+  const canvas = {
+    width: 0,
+    height: 0,
+    listeners: {},
+    getContext: () => makeCtx(),
+    addEventListener(type, cb) {
+      (this.listeners[type] ??= []).push(cb);
+    },
+    dispatch(type, ev) {
+      for (const cb of this.listeners[type] ?? []) cb(ev);
+    },
+  };
+  const els = {
+    game: canvas,
+    "screen-start": makeEl("screen-start"),
+    "btn-start": makeEl("btn-start"),
+    "screen-gameover": makeEl("screen-gameover"),
+    "btn-restart": makeEl("btn-restart"),
+    "gameover-final": makeEl("gameover-final"),
+    "hud-score": makeEl("hud-score"),
+    "hud-level": makeEl("hud-level"),
+    "hud-high": makeEl("hud-high"),
+    lives: makeEl("lives"),
+  };
+  const winListeners = {};
+  let rafCb = null;
+  let rafId = 0;
+  const sandbox = {
+    localStorage: { getItem: () => null, setItem: () => {} },
+    window: {
+      innerWidth: width,
+      innerHeight: height,
+      addEventListener: (type, cb) => {
+        (winListeners[type] ??= []).push(cb);
+      },
+    },
+    document: {
+      getElementById: (id) => els[id] ?? null,
+      createElement: (tag) => makeEl(tag),
+    },
+    requestAnimationFrame: (cb) => {
+      rafCb = cb;
+      return ++rafId;
+    },
+  };
+  const context = vm.createContext(sandbox);
+  vm.runInContext(gameSource, context);
+
+  let nowMs = 0;
+  const FRAME_MS = 1000 / 60;
+  function tick(n = 1) {
+    for (let i = 0; i < n; i += 1) {
+      nowMs += FRAME_MS;
+      rafCb(nowMs);
+    }
+  }
+  const fireWin = (type, ev) => {
+    for (const cb of winListeners[type] ?? []) cb(ev);
+  };
+  const q = (expr) => vm.runInContext(expr, context);
+  return {
+    els,
+    canvas,
+    win: sandbox.window,
+    q,
+    tick,
+    state: () => q("typeof gameState === 'undefined' ? 'undefined' : gameState"),
+    lives: () => q("typeof lives === 'undefined' ? NaN : lives"),
+    level: () => q("typeof level === 'undefined' ? NaN : level"),
+    score: () => q("typeof score === 'undefined' ? NaN : score"),
+    paddleX: () => q("typeof paddle === 'undefined' ? NaN : paddle.x"),
+    ball: () =>
+      q("typeof ball === 'undefined' ? null : ({ x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, attached: ball.attached })"),
+    serveY: () => q("canvas.height - PADDLE_BOTTOM_GAP - PADDLE_HEIGHT - BALL_RADIUS"),
+    // Brick field accessors
+    poolLen: () => q("typeof bricks === 'undefined' ? -1 : bricks.length"),
+    bricksLeft: () => q("typeof bricksLeft === 'undefined' ? -1 : bricksLeft"),
+    activeCount: () =>
+      q("typeof bricks === 'undefined' ? -1 : bricks.reduce((n, b) => n + (b.active ? 1 : 0), 0)"),
+    grid: () => q("typeof BRICK_ROWS === 'undefined' ? -1 : BRICK_ROWS * BRICK_COLS"),
+    brickAt(row, col) {
+      return q(`(() => {
+        const t = bricks[row * BRICK_COLS + col];
+        return { active: t.active, tier: t.tier, x: t.x, y: t.y, w: t.w, h: t.h };
+      })()`);
+    },
+    canvasClick() {
+      canvas.dispatch("click", { type: "click" });
+    },
+    canvasTap() {
+      canvas.dispatch("touchend", { type: "touchend", preventDefault() {} });
+    },
+  };
+}
+
+const start = (g) => {
+  g.els["btn-start"].click();
+  g.tick(1);
+};
+
+// Destroy every active brick except the last one, returning the
+// surviving brick's pool index (the win must be triggered by the
+// caller, on exactly one final kill).
+function clearAllButLast(g) {
+  return g.q(`(function () {
+    var i;
+    for (i = 0; i < bricks.length && bricksLeft > 1; i += 1) {
+      if (bricks[i].active) destroyBrick(i);
+    }
+    for (i = 0; i < bricks.length; i += 1) if (bricks[i].active) return i;
+    return -1;
+  })()`);
+}
+
+function winLevel(g) {
+  const last = clearAllButLast(g);
+  if (last < 0) throw new Error("setup: no surviving brick to finish the level");
+  g.q(`destroyBrick(${last})`);
+}
+
+// Park a fresh ball just below the brick's underside, rising
+// straight at 300 px/s, and tick until the strike lands. Only the
+// bottom row has open space beneath it, so callers target that row.
+function strikeBrick(g, row, col) {
+  const b = g.brickAt(row, col);
+  g.q(`ball.attached = false;
+       ball.x = ${b.x + b.w / 2};
+       ball.y = ${b.y + b.h} + BALL_RADIUS + 9;
+       ball.vx = 0; ball.vy = -300;`);
+  for (let f = 0; f < 8 && g.activeCount() === g.grid(); f += 1) g.tick(1);
+  return g.brickAt(row, col);
+}
+
+// ================================================================
+// Criterion 1: on entering "playing" a grid of BRICK_ROWS ×
+// BRICK_COLS bricks is spawned in a fixed-size pool (constant pool
+// length across levels), ≥ 3 colours mapped to named per-colour
+// point constants; initial count equals BRICK_ROWS * BRICK_COLS
+// ================================================================
+check("entering 'playing' spawns the full grid: initial active count equals BRICK_ROWS * BRICK_COLS", () => {
+  const g = boot(960, 600);
+  assert(g.activeCount() === 0,
+    `no bricks may be active before the run starts, active=${g.activeCount()}`);
+  start(g);
+  const grid = g.grid();
+  assert(grid > 0, `the grid dimensions must be positive, got ${grid}`);
+  assert(g.poolLen() === grid,
+    `the pool must hold exactly BRICK_ROWS*BRICK_COLS (${grid}) slots, got ${g.poolLen()}`);
+  assert(g.activeCount() === grid,
+    `every grid cell must be occupied, active=${g.activeCount()} want ${grid}`);
+  assert(g.bricksLeft() === grid,
+    `the live-brick counter must agree with the grid, bricksLeft=${g.bricksLeft()}`);
+});
+
+check("the brick pool is fixed-size: its length never changes across level transitions", () => {
+  const g = boot(960, 600);
+  start(g);
+  const len0 = g.poolLen();
+  assert(len0 === g.grid(), `setup: pool equals the grid, got ${len0}`);
+  winLevel(g); // level 2
+  assert(g.poolLen() === len0,
+    `the pool must not grow or shrink at the level-2 spawn, ${len0} -> ${g.poolLen()}`);
+  winLevel(g); // level 3
+  assert(g.poolLen() === len0,
+    `the pool must still hold ${len0} slots at level 3, got ${g.poolLen()}`);
+  assert(g.activeCount() === g.grid(),
+    `the level-3 grid must refill the same pool, active=${g.activeCount()}`);
+});
+
+check("at least three brick colours map to named per-colour point constants", () => {
+  const g = boot(960, 600);
+  start(g);
+  const tiers = g.q("BRICK_TIERS.map((t) => ({ color: t.color, points: t.points }))");
+  assert(tiers.length >= 3, `the grid must use at least three colours, got ${tiers.length}`);
+  assert(new Set(tiers.map((t) => t.color)).size === tiers.length,
+    "tier colours must be distinct");
+  for (const [colorName, pointsName] of [
+    ["COLOR_BRICK_A", "POINTS_BRICK_A"],
+    ["COLOR_BRICK_B", "POINTS_BRICK_B"],
+    ["COLOR_BRICK_C", "POINTS_BRICK_C"],
+  ]) {
+    const color = g.q(colorName);
+    const points = g.q(pointsName);
+    assert(Number.isInteger(points) && points > 0,
+      `${pointsName} must be a positive integer, got ${points}`);
+    const tier = tiers.find((t) => t.color === color);
+    assert(tier, `${colorName} (${color}) must back one of the grid tiers`);
+    assert(tier.points === points,
+      `${colorName} must map to ${pointsName} (${points}), its tier says ${tier.points}`);
+  }
+  const badTier = g.q("bricks.some((b) => b.tier < 0 || b.tier >= BRICK_TIERS.length)");
+  assert(!badTier, "every brick must carry a valid tier index");
+});
+
+// ================================================================
+// Criterion 2: one hit destroys the brick, adds exactly that
+// colour's point value to the score, reflects the ball, and the
+// top-bar score element mirrors the exact value
+// ================================================================
+check("a ball striking a brick destroys it in one hit and reflects", () => {
+  const g = boot(960, 600);
+  start(g);
+  const before = g.activeCount();
+  const b = strikeBrick(g, 4, 2);
+  assert(b.active === false, "the struck brick must be destroyed");
+  assert(g.activeCount() === before - 1,
+    `exactly one brick may be destroyed, active=${g.activeCount()} want ${before - 1}`);
+  const n = g.ball();
+  assert(n.attached === false, "the ball must still be in flight after the bounce");
+  assert(n.vy > 0, `the ball must reflect back down off the brick's underside, vy=${n.vy}`);
+  assert(g.brickAt(4, 1).active && g.brickAt(4, 3).active,
+    "neighbour bricks must survive the strike");
+});
+
+check("destroying a brick adds exactly that colour's point value and mirrors it in the top-bar score element", () => {
+  const g = boot(960, 600);
+  start(g);
+  const tier = g.brickAt(4, 5).tier;
+  const points = g.q(`BRICK_TIERS[${tier}].points`);
+  assert(g.score() === 0, "setup: score starts at 0");
+  strikeBrick(g, 4, 5);
+  assert(g.score() === points,
+    `the score must rise by exactly the struck colour's value (${points}), got ${g.score()}`);
+  assert(g.els["hud-score"].textContent === String(points),
+    `#hud-score must read ${points}, got ${JSON.stringify(g.els["hud-score"].textContent)}`);
+});
+
+check("score accrues exactly per colour across the grid and the HUD mirrors the running total", () => {
+  const g = boot(960, 600);
+  start(g);
+  const pts = (row, col) => g.q(`BRICK_TIERS[bricks[${row * BRICK_COLS + col}].tier].points`);
+  // One physics strike (tier B, bottom row), then two direct kills
+  // of different tiers through the same destroyBrick path.
+  strikeBrick(g, 4, 5);
+  const s1 = pts(4, 5);
+  g.q("destroyBrick(0)");           // top row, another tier
+  g.q("destroyBrick(2 * BRICK_COLS + 9)"); // mid row, the third tier
+  const tiersSeen = new Set([g.q(`BRICK_TIERS[bricks[0].tier]`),
+                             g.q(`BRICK_TIERS[bricks[${2 * BRICK_COLS + 9}].tier]`)]);
+  assert(tiersSeen.size === 2, "setup: the direct kills must hit different tiers than each other");
+  const want = s1 + pts(0, 0) + pts(2, 9);
+  assert(g.score() === want,
+    `the running total must be exactly the sum of the struck colours (${want}), got ${g.score()}`);
+  assert(g.els["hud-score"].textContent === String(want),
+    `#hud-score must mirror ${want}, got ${JSON.stringify(g.els["hud-score"].textContent)}`);
+  assert(g.activeCount() === g.grid() - 3,
+    `exactly three bricks may be gone, active=${g.activeCount()}`);
+});
+
+// ================================================================
+// Criterion 3: no tunnelling — a deterministic fixture at the
+// top-level maximum speed; one clamped frame displaces the ball
+// farther than the whole brick band, yet the brick is still
+// destroyed and the ball reflected. A naive one-step-integration
+// implementation skips the target row entirely and fails this.
+// ================================================================
+check("tunnelling: a ball at the top-level max speed that skips a brick row in one clamped frame still destroys the brick and reflects", () => {
+  const g = boot(960, 600);
+  start(g);
+  const TOP_LEVEL = 10; // level whose serve speed reaches the cap
+  const cap = g.q("MAX_BALL_SPEED");
+  const topSpeed = Math.min(
+    g.q("BALL_SERVE_SPEED") * Math.pow(g.q("LEVEL_SPEED_GROWTH"), TOP_LEVEL - 1),
+    cap
+  );
+  assert(topSpeed === cap,
+    `the level-${TOP_LEVEL} speed must be the per-level maximum (the cap ${cap}), got ${topSpeed}`);
+
+  const SEED_ROW = g.q("BRICK_ROWS") - 1; // seed: bottom row, col 5
+  const SEED_COL = 5;
+  const b = g.brickAt(SEED_ROW, SEED_COL);
+  const r = g.q("BALL_RADIUS");
+  const frame = g.q("MAX_FRAME_SECONDS");
+  const travel = topSpeed * frame;
+  assert(travel > b.h + 2 * r,
+    `the fixture must truly skip the whole brick band in one clamped frame (travel ${travel}px > ${b.h + 2 * r}px)`);
+
+  // Console-style fixture: ball tangent to the brick's underside,
+  // velocity reassigned to the negative maximum per-level speed.
+  g.q(`ball.attached = false;
+       ball.x = ${b.x + b.w / 2};
+       ball.y = ${b.y + b.h} + BALL_RADIUS;
+       ball.vx = 0; ball.vy = -${topSpeed};`);
+  g.q(`update(${frame})`);
+
+  assert(g.brickAt(SEED_ROW, SEED_COL).active === false,
+    `the seed brick (row ${SEED_ROW}, col ${SEED_COL}) must be destroyed within the single clamped frame`);
+  const n = g.ball();
+  assert(n.vy > 0, `the ball must reflect off the brick, vy=${n.vy}`);
+  assert(g.activeCount() === g.grid() - 1,
+    `exactly one brick may be destroyed by the tunnelling pass, active=${g.activeCount()}`);
+});
+
+// ================================================================
+// Criterion 4: destroying every breakable brick increments the
+// level by exactly 1, serves a fresh ball on the paddle, spawns
+// the next level's layout, and multiplies the serve speed by the
+// named LEVEL_SPEED_GROWTH (> 1) — level 2 = level 1 × growth,
+// exactly
+// ================================================================
+check("destroying every breakable brick raises the level by exactly 1 and still credits the last brick", () => {
+  const g = boot(960, 600);
+  start(g);
+  assert(g.level() === 1, "setup: level 1");
+  const last = clearAllButLast(g);
+  assert(last >= 0, "setup: exactly one brick must survive");
+  const lvl = g.level();
+  const scoreBefore = g.score();
+  const pts = g.q(`BRICK_TIERS[bricks[${last}].tier].points`);
+  g.q(`destroyBrick(${last})`);
+  assert(g.level() === lvl + 1, `level must rise by exactly 1, ${lvl} -> ${g.level()}`);
+  assert(g.score() === scoreBefore + pts,
+    `the winning brick must still credit its points, ${scoreBefore} -> ${g.score()}`);
+  assert(g.state() === "playing", "the run continues after a win, state=playing");
+});
+
+check("a level win serves a fresh ball attached to the paddle", () => {
+  const g = boot(960, 600);
+  start(g);
+  winLevel(g);
+  const n = g.ball();
+  assert(n.attached === true, `the post-win ball must be served attached, got ${JSON.stringify(n)}`);
+  assert(n.vx === 0 && n.vy === 0, `the fresh ball must be at rest, got vx=${n.vx} vy=${n.vy}`);
+  assert(n.x === g.paddleX(), `the fresh ball must ride the paddle centre, x=${n.x} vs ${g.paddleX()}`);
+  assertClose(n.y, g.serveY(), 1e-9, `the fresh ball must rest on the paddle top, y=${n.y}`);
+  g.tick(5);
+  assert(g.lives() === 3, `a win must not cost a life, lives=${g.lives()}`);
+  assert(g.state() === "playing", `the frozen-state regression: still playing, state=${g.state()}`);
+});
+
+check("a level win spawns the next level's layout into the same fixed pool", () => {
+  const g = boot(960, 600);
+  start(g);
+  const tierBefore = g.brickAt(0, 0).tier;
+  winLevel(g);
+  assert(g.activeCount() === g.grid(),
+    `the new level must refill the grid, active=${g.activeCount()}`);
+  const tierAfter = g.brickAt(0, 0).tier;
+  assert(tierAfter !== tierBefore,
+    `the next level's layout must differ (top-row tier ${tierBefore} -> ${tierAfter})`);
+  assert(g.poolLen() === g.grid(), `...without growing the pool, got ${g.poolLen()}`);
+});
+
+check("a level win multiplies the serve speed by LEVEL_SPEED_GROWTH: level 2 equals level 1 x growth, exactly", () => {
+  const g = boot(960, 600);
+  start(g);
+  assert(g.q("serveSpeed") === g.q("BALL_SERVE_SPEED"),
+    `level 1 must serve at the base speed, got ${g.q("serveSpeed")}`);
+  winLevel(g);
+  const grown = g.q("serveSpeed");
+  const want = g.q("BALL_SERVE_SPEED") * g.q("LEVEL_SPEED_GROWTH");
+  assert(grown === want,
+    `the level-2 serve speed must be exactly base x growth (${want}), got ${grown}`);
+});
+
+check("launching the level-2 ball flies at exactly level 1 speed x LEVEL_SPEED_GROWTH", () => {
+  const g = boot(960, 600);
+  start(g);
+  winLevel(g);
+  g.canvasClick();
+  const n = g.ball();
+  const want = g.q("BALL_SERVE_SPEED") * g.q("LEVEL_SPEED_GROWTH");
+  assert(n.attached === false, "the launch must detach the ball");
+  assert(n.vy < 0, `the launch must be upward, vy=${n.vy}`);
+  assert(Math.hypot(n.vx, n.vy) === want,
+    `the launch speed must be exactly ${want}, got ${Math.hypot(n.vx, n.vy)}`);
+});
+
+check("LEVEL_SPEED_GROWTH is a named var above 1; the serve speed caps at MAX_BALL_SPEED from level 10 on", () => {
+  const g = boot(960, 600);
+  start(g);
+  assert(g.q("LEVEL_SPEED_GROWTH") > 1,
+    `LEVEL_SPEED_GROWTH must exceed 1, got ${g.q("LEVEL_SPEED_GROWTH")}`);
+  const cap = g.q("MAX_BALL_SPEED");
+  let s9 = NaN;
+  for (let lv = 2; lv <= 10; lv += 1) {
+    if (lv === 10) s9 = g.q("serveSpeed"); // still under cap at level 9
+    winLevel(g);
+    assert(g.level() === lv, `advance ${lv - 1} -> ${lv}, got ${g.level()}`);
+  }
+  assert(s9 < cap, `level 9 must still be under the cap (${s9} < ${cap})`);
+  assert(g.q("serveSpeed") === cap,
+    `the level-10 serve speed must be capped exactly at ${cap}, got ${g.q("serveSpeed")}`);
+  winLevel(g); // level 11: the cap holds
+  assert(g.q("serveSpeed") === cap,
+    `beyond the cap the serve speed must hold at ${cap}, got ${g.q("serveSpeed")}`);
+});
+
+// ================================================================
+// Criterion 5: the level value is shown in the top-bar HUD and
+// matches the internal level after each win
+// ================================================================
+check("the top-bar level readout matches the internal level after each win", () => {
+  const g = boot(960, 600);
+  start(g);
+  assert(g.els["hud-level"].textContent === "1",
+    `the HUD must read 1 at run start, got ${JSON.stringify(g.els["hud-level"].textContent)}`);
+  winLevel(g);
+  assert(g.els["hud-level"].textContent === "2",
+    `the HUD must read 2 after the first win, got ${JSON.stringify(g.els["hud-level"].textContent)}`);
+  winLevel(g);
+  assert(g.els["hud-level"].textContent === String(g.level()),
+    `the HUD (${JSON.stringify(g.els["hud-level"].textContent)}) must match the internal level (${g.level()})`);
+});
+
+// ---------- summary ----------
+console.log(`\n${passed} passed, ${failed} failed`);
+process.exit(failed === 0 ? 0 : 1);
