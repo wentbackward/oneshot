@@ -84,17 +84,26 @@ function makeEl(id) {
 }
 
 // A canvas 2d context stub: every method is a no-op, every property
-// set is allowed.
-function makeCtx() {
+// set is allowed. When `fills` is given it receives one record per
+// fillRect call: { style, x, y, w, h } — enough to audit what the
+// draw pass renders.
+function makeCtx(fills) {
   const noop = () => {};
+  let style = "";
   return new Proxy(
     {},
     {
       get(_t, prop) {
         if (prop === Symbol.toPrimitive) return undefined;
+        if (prop === "fillRect" && fills) {
+          return (x, y, w, h) => {
+            fills.push({ style, x, y, w, h });
+          };
+        }
         return noop;
       },
-      set() {
+      set(_t, prop, value) {
+        if (prop === "fillStyle") style = value;
         return true;
       },
     }
@@ -107,7 +116,7 @@ function boot(width = 960, height = 600) {
     width: 0,
     height: 0,
     listeners: {},
-    getContext: () => makeCtx(),
+    getContext: () => makeCtx(fills),
     addEventListener(type, cb) {
       (this.listeners[type] ??= []).push(cb);
     },
@@ -130,6 +139,7 @@ function boot(width = 960, height = 600) {
   const winListeners = {};
   let rafCb = null;
   let rafId = 0;
+  const fills = [];
   const sandbox = {
     localStorage: { getItem: () => null, setItem: () => {} },
     window: {
@@ -163,9 +173,12 @@ function boot(width = 960, height = 600) {
   return {
     els,
     canvas,
-    win: sandbox.window,
+    winListeners,
     q,
     tick,
+    // One fillRect record per call across the lifetime of this boot:
+    // { style, x, y, w, h }.
+    fills,
     state: () => q("typeof gameState === 'undefined' ? 'undefined' : gameState"),
     lives: () => q("typeof lives === 'undefined' ? NaN : lives"),
     score: () => q("typeof score === 'undefined' ? NaN : score"),
@@ -413,6 +426,93 @@ check("a missed capsule falls past the bottom edge, deactivates, and has no furt
   g.tick(30);
   assert(g.capsActive() === 0 && g.paddleW() === g.baseW(),
     "the deactivated capsule must have no lingering effect");
+});
+
+// ================================================================
+// Review round 1 fold-ins: the edge-clamp lock, the exhaustive
+// capsule colour table, and capsule drawing limited to "playing"
+// ================================================================
+check("an expand caught with the paddle parked at the right rim locks the centre to exactly canvas.width - paddleW/2", () => {
+  const g = boot(960, 600);
+  start(g);
+  dropRolls(g).low();
+  g.q("paddle.x = canvas.width - BASE_PADDLE_W / 2"); // park at the right rim
+  g.q("maybeDropCapsule(paddle.x, paddleTop() - CAPSULE_H - 4)");
+  assert(g.capsActive() === 1, "setup: a capsule is falling on the rim-parked paddle");
+  let guard = 0;
+  while (g.capsActive() === 1 && guard < 600) {
+    g.tick(1);
+    guard += 1;
+  }
+  assert(g.capsActive() === 0, "the capsule must be caught by the rim-parked paddle");
+  assert(g.paddleW() === g.baseW() * g.q("PADDLE_EXPAND_FACTOR"), "the catch must widen the paddle");
+  const rim = g.q("canvas.width") - g.paddleW() / 2;
+  assert(g.paddleX() === rim,
+    `the widened paddle must sit at exactly canvas.width - paddleW/2 (${rim}), got ${g.paddleX()}`);
+  // The lock must hold frame after frame, even while the right key
+  // is held against the rim.
+  for (const cb of g.winListeners["keydown"]) cb({ code: "ArrowRight", preventDefault() {} });
+  for (let i = 0; i < 10; i += 1) g.tick(1);
+  assert(g.paddleX() === rim,
+    `holding the rim must keep the centre locked at ${rim}, got ${g.paddleX()}`);
+  for (const cb of g.winListeners["keyup"]) cb({ code: "ArrowRight" });
+});
+
+check("capsule colours come from an exhaustive kind-to-colour table covering every enumerated kind", () => {
+  const g = boot(960, 600);
+  start(g);
+  const table = g.q("CAPSULE_COLORS");
+  assert(Array.isArray(table), "CAPSULE_COLORS must be a named exhaustive table (array)");
+  assert(table.every((c) => typeof c === "string" && c.length > 0),
+    "each table entry must be a colour string");
+  const kinds = g.q("CAPSULE_KINDS");
+  assert(kinds.every((k) => typeof table[k] === "string"),
+    `every enumerated kind needs a table entry, kinds=${JSON.stringify(kinds)}, table=${JSON.stringify(table)}`);
+  assert(table.length === kinds.length,
+    "the table must carry no speculative row (one colour per kind, none left over)");
+  assert(table[g.q("KIND_EXPAND")] === g.q("COLOR_CAPSULE_EXPAND"),
+    "the expand kind must map to COLOR_CAPSULE_EXPAND");
+  assert(!gameSource.includes("COLOR_CAPSULE_EXPAND : COLOR_BALL"),
+    "the speculative ternary fallback must be gone from the source");
+});
+
+check("each airborne capsule is drawn in its table colour while playing", () => {
+  const g = boot(960, 600);
+  start(g);
+  const W = g.q("CAPSULE_W");
+  const H = g.q("CAPSULE_H");
+  const color = g.q("COLOR_CAPSULE_EXPAND");
+  dropRolls(g).low();
+  g.q("paddle.x = canvas.width / 2");
+  g.q("maybeDropCapsule(paddle.x, canvas.height * 0.3)");
+  assert(g.capsActive() === 1, "setup: the capsule is airborne");
+  g.tick(1);
+  const drawn = g.fills.filter((f) => f.w === W && f.h === H && f.style === color);
+  assert(drawn.length >= 1,
+    "while playing the airborne capsule must be drawn in its table colour");
+});
+
+check("capsules are not drawn outside playing: the game-over field stays tidy and frozen", () => {
+  const g = boot(960, 600);
+  start(g);
+  const W = g.q("CAPSULE_W");
+  const H = g.q("CAPSULE_H");
+  const color = g.q("COLOR_CAPSULE_EXPAND");
+  dropRolls(g).low();
+  g.q("paddle.x = canvas.width / 2");
+  g.q("maybeDropCapsule(paddle.x, canvas.height * 0.3)");
+  assert(g.capsActive() === 1, "setup: the capsule is airborne");
+  g.q("lives = 1; loseLife();");
+  assert(g.state() === "gameover", "setup: the run is over");
+  assert(g.capsActive() === 1, "setup: the capsule is still frozen in the air");
+  const before = g.fills.length;
+  g.tick(1);
+  const frame = g.fills.slice(before);
+  assert(frame.some((f) => f.style === g.q("COLOR_PADDLE")),
+    "the game-over field must still be drawn (paddle visible)");
+  const leak = frame.filter((f) => f.w === W && f.h === H && f.style === color);
+  assert(leak.length === 0,
+    `no capsule may be drawn outside playing, leaked ${leak.length}`);
 });
 
 // ---------- summary ----------
