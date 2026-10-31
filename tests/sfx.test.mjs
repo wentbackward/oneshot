@@ -381,9 +381,11 @@ check("a rejecting resume() is swallowed: the game starts, the loop keeps runnin
   g.press("KeyP"); // second gesture: the retry path calls resume() again -> rejects again
   assert(g.rec.resumeRejects.length === 2, "the retry gesture must attempt the resume again");
   g.tick(60); // the loop must keep rendering without throwing
-  // Yield to the event loop: unhandled rejections surface as a process
-  // 'unhandledRejection' event after the current task completes.
-  await new Promise((r) => setTimeout(r, 20));
+  // Pure event-loop yield (sleep-free): two chained immediates flush the
+  // pending-microtask queue and let a would-be unhandled rejection surface
+  // as a process 'unhandledRejection' event.
+  await new Promise(setImmediate);
+  await new Promise(setImmediate);
   assert(unhandled.length === seen,
     `a rejecting resume must be guarded (.catch), got unhandled rejection(s): ${unhandled.slice(seen).join("; ")}`);
 });
