@@ -223,33 +223,52 @@ check("Enter keydown (second run) detaches the serve ball upward at exactly serv
     `the launch speed must equal serveSpeed exactly, got ${Math.hypot(g.q("balls[0].vx"), g.q("balls[0].vy"))}`);
 });
 
-check("the keyboard launch is the SAME path as the click launch (bit-identical velocities, incl. paddle offset)", () => {
+check("the keyboard launch is the SAME path as the click launch (bit-identical velocities at a true interior paddle offset, rel = 2/3)", () => {
   // Two otherwise-identical runs: same viewport, same pre-launch
-  // paddle x. One launches via canvas click, one via Space; the
+  // paddle offset. One launches via canvas click, one via Space; the
   // resulting velocities must match exactly — the keyboard event
   // routes through launchAttachedBalls, it must not invent its own
-  // physics. The offset case (paddle moved off-centre) pins the
-  // inherited angle logic, not just the degenerate vertical serve.
+  // physics. The paddle sits OFFSET_PX canvas px off the serve
+  // ball's ride line, i.e. rel = OFFSET_PX / (paddleW/2) = 2/3 — a
+  // TRUE interior offset (0 < rel < 1), so the sin/cos angle math
+  // itself is pinned, not just the rel=±1 rim clamp. The offset is
+  // also checked against an independent expectation computed from
+  // the documented angle law (linear in rel, 60° from vertical at
+  // the rim), not only by comparing the two runs against each other.
+  const OFFSET_PX = 40; // 2/3 of the level-1 half-paddle (120/2 = 60)
   const mk = () => {
     const g = boot(960, 600);
     g.startRun();
-    g.q("paddle.x = 300;"); // deterministic off-centre ride
+    g.q(`paddle.x = balls[0].x - ${OFFSET_PX};`); // deterministic interior offset
     return g;
   };
   const byClick = mk();
   byClick.canvas.dispatch("click", { type: "click" });
-  const clickVel = byClick.q("[balls[0].vx, balls[0].vy]");
   const byKey = mk();
   byKey.key("keydown", "Space");
+  const REL = OFFSET_PX / byKey.q("paddleW / 2");
+  assert(REL > 0 && REL < 1,
+    `fixture sanity: the offset must be interior to the half-paddle (no rim clamp), rel=${REL}`);
+  const serveSpeed = byKey.q("serveSpeed");
+  // Independent expectation: serveSpeed * sin/cos(rel * PI/3).
+  const expectVel = [
+    serveSpeed * Math.sin(REL * (Math.PI / 3)),
+    -serveSpeed * Math.cos(REL * (Math.PI / 3)),
+  ];
+  const clickVel = byClick.q("[balls[0].vx, balls[0].vy]");
   const keyVel = byKey.q("[balls[0].vx, balls[0].vy]");
   assert(JSON.stringify(clickVel) === JSON.stringify(keyVel),
     `keyboard launch must reproduce the click launch exactly,\n  key   ${JSON.stringify(keyVel)}\n  click ${JSON.stringify(clickVel)}`);
+  assert(JSON.stringify(keyVel) === JSON.stringify(expectVel),
+    `both launches must land on the interior angle law,\n  got      ${JSON.stringify(keyVel)}\n  expected ${JSON.stringify(expectVel)}`);
   assert(byKey.q("balls[0].attached") === false, "the serve must be detached after the Space launch");
 });
 
 // ================================================================
 // Criterion 2: state gating — the identical Space keydown outside
-// "playing" leaves every ball untouched and the state unchanged
+// "playing" leaves every ball untouched and the state unchanged.
+// Full state matrix: start / gameover / paused (+ playing is the
+// launch case itself).
 // ================================================================
 check("Space keydown during 'start' leaves every ball untouched and the state unchanged", () => {
   const g = boot(960, 600);
@@ -279,6 +298,26 @@ check("Space keydown during 'gameover' leaves every ball untouched and the state
     `Space must not leave "gameover", state is ${g.state()}`);
   assert(g.q("JSON.stringify(balls)") === before,
     "Space during 'gameover' must leave the entire ball pool untouched");
+});
+
+check("Space and Enter keydown during 'paused' leave every ball untouched and the state unchanged", () => {
+  const g = boot(960, 600);
+  g.startRun();
+  g.key("keydown", "Escape"); // the real pause path: playing -> paused
+  assert(g.state() === "paused", `precondition: run must be paused, state is ${g.state()}`);
+  assert(g.q("balls[0].attached") === true, "precondition: the serve must still ride the paddle");
+  const pauseEl = g.els["screen-pause"];
+  const marked = pauseEl.styleWrites.length;
+  const before = g.q("JSON.stringify(balls)");
+  g.key("keydown", "Space");
+  g.key("keydown", "Enter");
+  g.tick(2);
+  assert(g.state() === "paused",
+    `Space/Enter must not leave "paused" (no resume), state is ${g.state()}`);
+  assert(g.q("JSON.stringify(balls)") === before,
+    "Space/Enter during 'paused' must leave the entire ball pool untouched");
+  assert(pauseEl.styleWrites.length === marked,
+    `the pause overlay must stay up, untouched, new writes=${JSON.stringify(pauseEl.styleWrites.slice(marked))}`);
 });
 
 // ================================================================
