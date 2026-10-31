@@ -11,6 +11,10 @@
 // restart are dispatched into the registered listeners. No network,
 // no external services.
 //
+// Pointer tracking is window-level (ticket #40): the harness fires
+// mousemove/touchmove at the recorded WINDOW listeners, mirroring a
+// browser that delivers cursor motion even outside the canvas.
+//
 // Run: node tests/bricks-paddle.test.mjs
 // ================================================================
 import { readFileSync } from "node:fs";
@@ -141,6 +145,9 @@ function boot(width = 960, height = 600) {
     window: {
       innerWidth: width,
       innerHeight: height,
+      // Exposed to assertions: proof of WHERE the game registered
+      // its listeners (ticket #40 requires window, not canvas).
+      listeners: winListeners,
       addEventListener: (type, cb) => {
         (winListeners[type] ??= []).push(cb);
       },
@@ -195,10 +202,16 @@ function boot(width = 960, height = 600) {
       fireWin("blur", { type: "blur" });
     },
     mouseMove(clientX) {
+      fireWin("mousemove", { clientX });
+    },
+    // A canvas-scoped event: retained so tests can prove that a
+    // mousemove delivered to the canvas alone no longer moves the
+    // paddle (ticket #40 removed the canvas listeners).
+    canvasMouseMove(clientX) {
       canvas.dispatch("mousemove", { clientX });
     },
     touchDrag(clientX) {
-      canvas.dispatch("touchmove", {
+      fireWin("touchmove", {
         touches: [{ clientX }],
         preventDefault() {},
       });
@@ -360,18 +373,78 @@ check("auto-repeat keydowns of one held key do not change the paddle speed", () 
 });
 
 // ================================================================
-// Criterion: pointer — mousemove / touchmove set the paddle x from
-// the cursor position mapped through the canvas bounding rect
-// (fixed-aspect stage, ticket #39)
+// Criterion (ticket #40): pointer tracking is window-level —
+// mousemove / touchmove register on window, not canvas, so the
+// paddle follows the cursor even when it leaves the stage; moves
+// map through the canvas bounding rect (fixed-aspect stage, #39)
+// and off-field positions clamp to the nearest edge.
 // ================================================================
-check("a dispatched mousemove over the canvas sets the paddle x to the rect-mapped cursor x (within 1 px)", () => {
+check("mousemove and touchmove listeners are registered on window, not on the canvas", () => {
+  const g = boot(960, 600);
+  assert((g.win.listeners["mousemove"] ?? []).length >= 1,
+    "window must carry a mousemove listener");
+  assert((g.win.listeners["touchmove"] ?? []).length >= 1,
+    "window must carry a touchmove listener");
+  assert(g.canvas.listeners["mousemove"] == null,
+    "the canvas must no longer carry a mousemove listener");
+  assert(g.canvas.listeners["touchmove"] == null,
+    "the canvas must no longer carry a touchmove listener");
+});
+
+check("a mousemove dispatched on window sets the paddle x to the rect-mapped cursor x (within 1 px)", () => {
   const g = boot(960, 600); // rect fills the viewport: {0, 0, 960, 600}
   start(g);
-  g.mouseMove(100);
+  g.mouseMove(100); // delivered to the window listener
   const rect = g.canvas.rect;
   const want = ((100 - rect.left) / rect.width) * g.canvas.width; // 200
   assertClose(g.paddleX(), want, 1,
-    `mousemove clientX 100 must land the paddle at ${want} px, got ${g.paddleX()}`);
+    `window mousemove clientX 100 must land the paddle at ${want} px, got ${g.paddleX()}`);
+});
+
+check("a mousemove dispatched only to the canvas no longer moves the paddle", () => {
+  const g = boot(960, 600);
+  start(g);
+  g.key("keydown", "ArrowLeft");
+  g.tick(3); // park the paddle off-centre, away from what clientX 480 maps to
+  g.key("keyup", "ArrowLeft");
+  const x = g.paddleX();
+  assert(x !== g.q("canvas.width / 2"), `sanity: the paddle must be off-centre, x=${x}`);
+  g.canvasMouseMove(480); // canvas-scoped event: no canvas listener exists
+  assert(g.paddleX() === x,
+    `a canvas-only mousemove must be ignored, paddle moved from ${x} to ${g.paddleX()}`);
+});
+
+check("off-field tracking clamps: a clientX far left of the rect pins the paddle at paddleW / 2", () => {
+  const g = boot(960, 600);
+  start(g);
+  // Letterboxed stage: a 480-wide rect centred in a wider viewport.
+  g.setRect({ left: 240, top: 0, width: 480, height: 300 });
+  g.mouseMove(-10000); // far left of the rect, in the letterbox bar
+  assert(g.paddleX() === g.q("paddleW / 2"),
+    `a far-left pointer must pin the paddle at paddleW/2, got ${g.paddleX()} vs ${g.q("paddleW / 2")}`);
+});
+
+check("off-field tracking clamps: a clientX far right of the rect pins the paddle at canvas.width - paddleW / 2", () => {
+  const g = boot(960, 600);
+  start(g);
+  g.setRect({ left: 240, top: 0, width: 480, height: 300 });
+  g.mouseMove(10000); // far right of the rect, in the letterbox bar
+  assert(g.paddleX() === g.q("canvas.width - paddleW / 2"),
+    `a far-right pointer must pin the paddle at canvas.width - paddleW/2, got ${g.paddleX()} vs ${g.q("canvas.width - paddleW / 2")}`);
+});
+
+check("cursor: none is scoped to the #game stage rule, not to a page-wide (html/body) rule", () => {
+  const css = html.match(/<style>([\s\S]*?)<\/style>/)[1];
+  const gameRule = css.match(/#game\s*\{([\s\S]*?)\}/);
+  assert(gameRule, "the stylesheet must still carry a #game rule");
+  assert(/cursor:\s*none/.test(gameRule[1]),
+    "the #game rule must hide the OS cursor (the paddle is the visible pointer)");
+  const pageRules = [...css.matchAll(/\b(?:html|body)[^{]*\{([^}]*)\}/g)].map((m) => m[1]);
+  assert(pageRules.length > 0, "sanity: html/body rules must exist in the stylesheet");
+  for (const r of pageRules) {
+    assert(!/cursor:\s*none/.test(r),
+      "no page-wide rule may hide the cursor (menus/HUD must keep a normal cursor)");
+  }
 });
 
 check("setPaddleX maps through getBoundingClientRect(), not window.innerWidth, after a viewport resize", () => {
@@ -434,7 +507,7 @@ check("a mousemove into an offset rect lands the paddle at (clientX - rect.left)
     `a pointer right of the rect must clamp the paddle to the right edge, got ${g.paddleX()}`);
 });
 
-check("a dispatched touchmove drag sets the paddle x the same way (within 1 px)", () => {
+check("a dispatched touchmove drag (window) sets the paddle x the same way (within 1 px)", () => {
   const g = boot(960, 600);
   start(g);
   g.touchDrag(300);
@@ -454,16 +527,18 @@ check("pointer positions beyond the canvas clamp the paddle inside the field", (
     `a far-right pointer must clamp the paddle to the right edge, got ${g.paddleX()}`);
 });
 
-// The canvas pointer listeners are deliberately state-ungated; this
+// The window pointer listeners are deliberately state-ungated; this
 // locks in that a mousemove dispatched while state is still "start"
-// moves the paddle. In a real browser the full-viewport start overlay
-// occludes the canvas, so such input never reaches the handlers.
-check("pointer listeners are state-ungated: a canvas mousemove dispatched during 'start' still moves the paddle", () => {
+// moves the paddle. (Before ticket #40 the canvas listeners were
+// shielded from such input by the full-viewport start overlay; the
+// window level is not shielded, which is the intended behaviour —
+// the paddle always follows the cursor.)
+check("pointer listeners are state-ungated: a window mousemove dispatched during 'start' still moves the paddle", () => {
   const g = boot(960, 600);
-  g.mouseMove(100); // state "start"; the start overlay would occlude the canvas in a browser
+  g.mouseMove(100); // state "start"; cursor is over the start overlay
   const want = (100 / 960) * g.canvas.width;
   assertClose(g.paddleX(), want, 1,
-    `the mousemove listener is state-ungated and must set the paddle x in 'start' too, got ${g.paddleX()}`);
+    `the window mousemove listener is state-ungated and must set the paddle x in 'start' too, got ${g.paddleX()}`);
 });
 
 // ================================================================
