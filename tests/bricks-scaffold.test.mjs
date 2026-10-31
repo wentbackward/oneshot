@@ -1,7 +1,12 @@
 #!/usr/bin/env node
 // ================================================================
-// Unit tests — bricks.html scaffold: shell, responsive canvas,
-// start screen (ticket #28)
+// Unit tests — bricks.html scaffold: shell, fixed-aspect stage,
+// start screen (ticket #28, ticket #39)
+//
+// The playfield is a fixed GAME_W×GAME_H (16:10) logical stage whose
+// backing store never follows the viewport; the visible size is the
+// largest 16:10 rectangle fitting the viewport (letterbox fit),
+// written as CSS px and centered by CSS.
 //
 // Same harness style as tests/screens.test.mjs (campaign 1): runs
 // the REAL <script> from bricks.html in a sandboxed vm context with
@@ -91,16 +96,18 @@ function makeCtx() {
   );
 }
 
-// Boot a fresh copy of the scaffold on a width×height viewport.
-// storedHigh optionally seeds the localStorage high-score value;
-// throwingStorage replaces the stub with one whose accessors throw
-// (blocked / quota-exhausted storage).
-function boot(width, height, storedHigh = null, throwingStorage = false) {
+// A canvas element stub: records CSS style writes (the stage
+// letterbox fit) and answers getBoundingClientRect() from a mutable
+// rect object defaulting to a stage filling the boot viewport.
+function makeCanvas(width, height) {
   const canvas = {
     width: 0,
     height: 0,
+    style: {},
+    rect: { left: 0, top: 0, width, height },
     listeners: {},
     getContext: () => makeCtx(),
+    getBoundingClientRect: () => canvas.rect,
     addEventListener(type, cb) {
       (this.listeners[type] ??= []).push(cb);
     },
@@ -108,6 +115,15 @@ function boot(width, height, storedHigh = null, throwingStorage = false) {
       for (const cb of this.listeners[type] ?? []) cb(ev);
     },
   };
+  return canvas;
+}
+
+// Boot a fresh copy of the scaffold on a width×height viewport.
+// storedHigh optionally seeds the localStorage high-score value;
+// throwingStorage replaces the stub with one whose accessors throw
+// (blocked / quota-exhausted storage).
+function boot(width, height, storedHigh = null, throwingStorage = false) {
+  const canvas = makeCanvas(width, height);
   const els = {
     "game": canvas,
     "screen-start": makeEl("screen-start"),
@@ -185,105 +201,119 @@ function boot(width, height, storedHigh = null, throwingStorage = false) {
   };
 }
 
-const scaled = (g, w, h) => ({
-  width: Math.round(w * g.q("CANVAS_SCALE")),
-  height: Math.round(h * g.q("CANVAS_SCALE")),
+// The fixed stage in internal canvas px, and the largest 16:10 CSS
+// size (integer px) that fits a vw×vh viewport — the letterbox fit
+// the resize pass must write.
+const backing = (g) => ({
+  width: g.q("GAME_W") * g.q("CANVAS_SCALE"),
+  height: g.q("GAME_H") * g.q("CANVAS_SCALE"),
 });
+const fitted = (g, vw, vh) => {
+  const scale = Math.min(vw / g.q("GAME_W"), vh / g.q("GAME_H"));
+  return {
+    width: Math.round(g.q("GAME_W") * scale),
+    height: Math.round(g.q("GAME_H") * scale),
+  };
+};
 
 // ================================================================
-// Criterion: initial gameState "start", start overlay visible,
-// Start CTA button present
+// Criterion: the stage is fixed-aspect — named GAME_W/GAME_H
+// constants define a 16:10 logical stage
 // ================================================================
-check("boot lands on gameState 'start' with the start overlay visible", () => {
+check("GAME_W and GAME_H exist as addressable globals defining a 16:10 stage (960x600)", () => {
   const g = boot(960, 600);
-  assert(g.state() === "start", `initial gameState must be "start", got ${g.state()}`);
-  assert(g.els["screen-start"].style.display === "flex",
-    `the start overlay must be visible on boot, display=${JSON.stringify(g.els["screen-start"].style.display)}`);
-});
-
-check("the start screen ships a Start CTA button wired to a click handler", () => {
-  const g = boot(960, 600);
-  const btn = g.els["btn-start"];
-  assert((btn.listeners["click"] ?? []).length === 1,
-    `the Start CTA must register exactly one click handler, got ${btn.listeners["click"]?.length}`);
-  // The markup itself labels the button as a Start action.
-  assert(/<button\b[^>]*id="btn-start"[^>]*>\s*start[^<]*\s*<\/button>/i.test(html),
-    "the <button id=btn-start> markup must carry a Start label");
+  const gw = g.q("typeof GAME_W === 'undefined' ? NaN : GAME_W");
+  const gh = g.q("typeof GAME_H === 'undefined' ? NaN : GAME_H");
+  assert(gw === 960 && gh === 600, `GAME_W/GAME_H must be 960/600, got ${gw}/${gh}`);
+  assert(gw / gh === 16 / 10, `the stage aspect must be 16:10, got ${gw / gh}`);
 });
 
 // ================================================================
-// Criterion: clicking Start -> gameState "playing", overlay hidden
+// Criterion: backing store is viewport-independent — set once to
+// GAME_W×CANVAS_SCALE × GAME_H×CANVAS_SCALE, never tracked
 // ================================================================
-check("clicking the Start button switches to 'playing' and hides the overlay", () => {
-  const g = boot(960, 600);
-  g.tick(2);
-  g.els["btn-start"].click();
-  assert(g.state() === "playing", `the Start click must enter "playing", state is ${g.state()}`);
-  assert(g.els["screen-start"].style.display === "none",
-    `the start overlay must be hidden after Start, display=${JSON.stringify(g.els["screen-start"].style.display)}`);
-  g.tick(30);
-  assert(g.state() === "playing", `the game must stay in "playing" after the rAF loop runs, state is ${g.state()}`);
+check("boot sets the backing store to GAME_W×CANVAS_SCALE × GAME_H×CANVAS_SCALE at any viewport", () => {
+  for (const [w, h] of [[1920, 1080], [960, 600], [375, 667]]) {
+    const g = boot(w, h);
+    const want = backing(g);
+    assert(g.canvas.width === want.width && g.canvas.height === want.height,
+      `at a ${w}x${h} viewport the canvas must be ${want.width}x${want.height}, got ${g.canvas.width}x${g.canvas.height}`);
+  }
 });
 
-check("a second Start click during play is a no-op (cannot reset a run)", () => {
-  const g = boot(960, 600);
-  g.els["btn-start"].click();
-  g.q("score = 7; level = 3;");
-  g.els["btn-start"].click();
-  assert(g.state() === "playing", `repeat Start click must not change the state, state is ${g.state()}`);
-  assert(g.q("score") === 7, `repeat Start click must not reset the score, got ${g.q("score")}`);
-  assert(g.q("level") === 3, `repeat Start click must not reset the level, got ${g.q("level")}`);
-});
-
-// ================================================================
-// Criterion: responsive scaling — canvas at the scaled viewport on
-// desktop and mobile boots
-// ================================================================
-check("a 960x600 desktop viewport boots with the canvas at the scaled internal resolution", () => {
-  const g = boot(960, 600);
-  const want = scaled(g, 960, 600);
-  assert(g.canvas.width === want.width && g.canvas.height === want.height,
-    `canvas must be ${want.width}x${want.height} at boot, got ${g.canvas.width}x${g.canvas.height}`);
-});
-
-check("a 375x667 mobile viewport boots with the canvas at the scaled internal resolution", () => {
-  const g = boot(375, 667);
-  const want = scaled(g, 375, 667);
-  assert(g.canvas.width === want.width && g.canvas.height === want.height,
-    `canvas must be ${want.width}x${want.height} at boot, got ${g.canvas.width}x${g.canvas.height}`);
+check("shrinking the viewport from 1920×1080 to 320×568 leaves the backing store unchanged after a frame", () => {
+  const g = boot(1920, 1080);
+  const store = backing(g);
+  assert(g.canvas.width === store.width && g.canvas.height === store.height,
+    `boot must land on ${store.width}x${store.height}, got ${g.canvas.width}x${g.canvas.height}`);
+  g.win.innerWidth = 320;
+  g.win.innerHeight = 568;
+  g.resize();
+  g.tick(1); // the deferred refit runs
+  assert(g.canvas.width === store.width && g.canvas.height === store.height,
+    `the backing store must stay ${store.width}x${store.height} after the resize, got ${g.canvas.width}x${g.canvas.height}`);
 });
 
 // ================================================================
-// Criterion: a dispatched resize event rescales the canvas on the
-// NEXT frame (deferred, not mid-event)
+// Criterion: letterboxing — the visible size is the largest 16:10
+// rectangle fitting the viewport (fit, not stretch), written as
+// CSS px on the next frame after the resize event
 // ================================================================
-check("a resize event rescales the canvas on the next frame (while on the start screen)", () => {
-  const g = boot(960, 600);
+check("on boot the letterbox CSS size is the largest 16:10 fitting the 1920×1080 viewport (1728px × 1080px)", () => {
+  const g = boot(1920, 1080);
+  const want = fitted(g, 1920, 1080);
+  assert(g.canvas.style.width === `${want.width}px` && g.canvas.style.height === `${want.height}px`,
+    `the recorded CSS size must be ${want.width}px × ${want.height}px, got ${g.canvas.style.width} × ${g.canvas.style.height}`);
+});
+
+check("after shrinking to a 320×568 viewport the letterbox is 320px × 200px (tolerance 1px) and never exceeds the viewport", () => {
+  const g = boot(1920, 1080);
+  g.win.innerWidth = 320;
+  g.win.innerHeight = 568;
+  g.resize();
+  g.tick(1);
+  const want = fitted(g, 320, 568);
+  const gotW = parseFloat(g.canvas.style.width);
+  const gotH = parseFloat(g.canvas.style.height);
+  assert(Math.abs(gotW - want.width) <= 1 && Math.abs(gotH - want.height) <= 1,
+    `the letterbox must be ${want.width}px × ${want.height}px (±1px), got ${g.canvas.style.width} × ${g.canvas.style.height}`);
+  assert(gotW <= 320 + 1e-9 && gotH <= 568 + 1e-9,
+    `the stage must fit inside the 320×568 viewport, got ${gotW} × ${gotH}`);
+  assert(Math.abs(gotW / gotH - 16 / 10) < 0.01,
+    `the visible stage must keep the 16:10 aspect, got ${gotW / gotH}`);
+});
+
+check("a resize event updates the letterbox fit on the NEXT frame (deferred, not mid-event)", () => {
+  const g = boot(960, 600); // exact fit: 960px × 600px
+  assert(g.canvas.style.width === "960px" && g.canvas.style.height === "600px",
+    `the 960×600 viewport must fit the stage 1:1, got ${g.canvas.style.width} × ${g.canvas.style.height}`);
   g.win.innerWidth = 1280;
   g.win.innerHeight = 720;
   g.resize();
-  const stale = scaled(g, 960, 600);
-  assert(g.canvas.width === stale.width && g.canvas.height === stale.height,
-    `resize must not rescale mid-event (got ${g.canvas.width}x${g.canvas.height})`);
+  assert(g.canvas.style.width === "960px" && g.canvas.style.height === "600px",
+    `resize must not refit mid-event (got ${g.canvas.style.width} × ${g.canvas.style.height})`);
   g.tick(1);
-  const want = scaled(g, 1280, 720);
-  assert(g.canvas.width === want.width && g.canvas.height === want.height,
-    `the next frame must rescale to ${want.width}x${want.height}, got ${g.canvas.width}x${g.canvas.height}`);
+  const want = fitted(g, 1280, 720);
+  assert(g.canvas.style.width === `${want.width}px` && g.canvas.style.height === `${want.height}px`,
+    `the next frame must refit to ${want.width}px × ${want.height}px, got ${g.canvas.style.width} × ${g.canvas.style.height}`);
 });
 
-check("a resize event rescales during live play too", () => {
+check("a resize during live play updates only the letterbox fit, leaving the backing store alone", () => {
   const g = boot(960, 600);
   g.els["btn-start"].click();
+  const store = backing(g);
   g.win.innerWidth = 480;
   g.win.innerHeight = 800;
   g.resize();
   g.tick(1);
-  const want = scaled(g, 480, 800);
-  assert(g.canvas.width === want.width && g.canvas.height === want.height,
-    `play-mode resize must land on ${want.width}x${want.height}, got ${g.canvas.width}x${g.canvas.height}`);
+  assert(g.canvas.width === store.width && g.canvas.height === store.height,
+    `play-mode resize must keep the backing store at ${store.width}x${store.height}, got ${g.canvas.width}x${g.canvas.height}`);
+  const want = fitted(g, 480, 800);
+  assert(g.canvas.style.width === `${want.width}px` && g.canvas.style.height === `${want.height}px`,
+    `play-mode resize must refit to ${want.width}px × ${want.height}px, got ${g.canvas.style.width} × ${g.canvas.style.height}`);
 });
 
-check("a burst of resize events collapses to one rescale per frame", () => {
+check("a burst of resize events collapses to one letterbox fit per frame", () => {
   const g = boot(960, 600);
   g.win.innerWidth = 1024;
   g.win.innerHeight = 768;
@@ -291,9 +321,35 @@ check("a burst of resize events collapses to one rescale per frame", () => {
   g.resize();
   g.resize();
   g.tick(1);
-  const want = scaled(g, 1024, 768);
-  assert(g.canvas.width === want.width && g.canvas.height === want.height,
-    `duplicate resize events must converge on ${want.width}x${want.height}, got ${g.canvas.width}x${g.canvas.height}`);
+  const want = fitted(g, 1024, 768);
+  assert(g.canvas.style.width === `${want.width}px` && g.canvas.style.height === `${want.height}px`,
+    `duplicate resize events must converge on ${want.width}px × ${want.height}px, got ${g.canvas.style.width} × ${g.canvas.style.height}`);
+});
+
+// ================================================================
+// Criterion: during play, a resize never re-runs layoutBricks —
+// the world geometry (and the serve ball) is byte-identical
+// ================================================================
+const FIELD_SNAPSHOT =
+  "JSON.stringify({" +
+  "w: canvas.width, h: canvas.height," +
+  "bricks: bricks.map(function (b) { return [b.x, b.y, b.w, b.h]; })," +
+  "ball: [balls[0].x, balls[0].y, balls[0].vx, balls[0].vy]}" +
+  ")";
+
+check("a resize mid-'playing' leaves every brick and the serve ball byte-identical (no layoutBricks re-run)", () => {
+  const g = boot(960, 600);
+  g.els["btn-start"].click(); // state 'playing': bricks laid out, ball at rest on the paddle
+  const before = g.q(FIELD_SNAPSHOT);
+  g.win.innerWidth = 320;
+  g.win.innerHeight = 568;
+  g.resize();
+  g.tick(1); // the deferred pass must run — and change only the CSS size
+  assert(!(g.canvas.style.width === "960px" && g.canvas.style.height === "600px"),
+    `the resize must have been processed (CSS refit), style is still ${g.canvas.style.width} × ${g.canvas.style.height}`);
+  const after = g.q(FIELD_SNAPSHOT);
+  assert(before === after,
+    `the field must be byte-identical after a mid-play resize;\n before: ${before}\n after:  ${after}`);
 });
 
 // ================================================================

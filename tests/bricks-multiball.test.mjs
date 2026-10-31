@@ -110,6 +110,11 @@ function boot(width = 960, height = 600) {
   const canvas = {
     width: 0,
     height: 0,
+    // Records CSS style writes (stage letterbox fit) and answers
+    // getBoundingClientRect() with a rect filling the boot viewport.
+    style: {},
+    rect: { left: 0, top: 0, width, height },
+    getBoundingClientRect: () => canvas.rect,
     listeners: {},
     getContext: () => makeCtx(),
     addEventListener(type, cb) {
