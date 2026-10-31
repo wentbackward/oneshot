@@ -27,17 +27,18 @@ if (!match) throw new Error("no <script> block found in asteroids.html");
 const gameSource = match[1];
 
 // ---------- tiny test harness ----------
+// Any unhandled Promise rejection that reaches the event loop is the defect
+// family this suite must catch (ticket #35: a rejecting audioCtx.resume()).
+// Record every one so individual checks can assert nothing escaped.
+const unhandled = [];
+process.on("unhandledRejection", (reason) => {
+  unhandled.push(String(reason && reason.message ? reason.message : reason));
+});
 let passed = 0;
 let failed = 0;
+const queued = [];
 function check(name, fn) {
-  try {
-    fn();
-    passed += 1;
-    console.log(`ok   - ${name}`);
-  } catch (err) {
-    failed += 1;
-    console.error(`FAIL - ${name}\n       ${err.message}`);
-  }
+  queued.push([name, fn]); // async-aware: run sequentially in main()
 }
 function assert(cond, msg) {
   if (!cond) throw new Error(msg);
@@ -94,7 +95,7 @@ class ANode {
     return this.stoppedAt - this.startedAt;
   }
 }
-function makeFakeAudioContextClass(rec) {
+function makeFakeAudioContextClass(rec, resumeRejects) {
   return class {
     constructor() {
       rec.instances.push(this);
@@ -105,6 +106,11 @@ function makeFakeAudioContextClass(rec) {
       this.destination = { kind: "destination" };
     }
     resume() {
+      if (resumeRejects) {
+        // Models an engine refusing to resume (blocked autoplay, etc.).
+        this.rec.resumeRejects.push(this);
+        return Promise.reject(new Error("resume() blocked (fake)"));
+      }
       this.state = "running";
       this.rec.resumes.push(this);
       return Promise.resolve();
@@ -152,10 +158,12 @@ function makeFakeAudioContextClass(rec) {
 // AudioContext is injected as the sandbox global `AudioContext`;
 // { audio: false } omits it entirely, modelling a browser without Web
 // Audio (and the vm's own missing-global reality).
-function boot({ audio = true } = {}) {
+// { resumeRejects: true } makes the fake's resume() return a REJECTING
+// Promise, modelling an engine that refuses to unlock audio (ticket #35).
+function boot({ audio = true, resumeRejects = false } = {}) {
   const width = 960;
   const height = 600;
-  const rec = { instances: [], resumes: [], nodes: [], buffers: [] };
+  const rec = { instances: [], resumes: [], resumeRejects: [], nodes: [], buffers: [] };
   let rafCallback = null;
   const listeners = {};
   const ctxTexts = [];
@@ -187,7 +195,7 @@ function boot({ audio = true } = {}) {
       return 1;
     },
   };
-  if (audio) sandbox.AudioContext = makeFakeAudioContextClass(rec);
+  if (audio) sandbox.AudioContext = makeFakeAudioContextClass(rec, resumeRejects);
   const context = vm.createContext(sandbox);
   vm.runInContext(gameSource, context);
 
@@ -356,6 +364,28 @@ check("a suspended context is resumed on the next keydown", () => {
     "the next keydown must resume a suspended context back to running");
   assert(g.rec.resumes.length >= 2, "the resume must be re-requested");
   assert(g.rec.instances.length === 1, "resuming must not construct a second context");
+});
+
+// ================================================================
+// Ticket #35: a resume() that rejects (blocked autoplay policy, an
+// engine refusing to unlock audio) must never surface as an
+// unhandled promise rejection, and must not stall the game.
+// ================================================================
+check("a rejecting resume() is swallowed: the game starts, the loop keeps running, and no unhandled rejection escapes", async () => {
+  const seen = unhandled.length;
+  const g = boot({ resumeRejects: true });
+  g.press("Enter"); // first gesture: constructs the context, attempts resume -> rejects
+  assert(g.rec.instances.length === 1, "the first keydown must still construct the context");
+  assert(g.rec.resumeRejects.length === 1, "the first gesture must attempt the resume");
+  assert(g.state() === "playing", "a rejecting resume must not block the game from starting");
+  g.press("KeyP"); // second gesture: the retry path calls resume() again -> rejects again
+  assert(g.rec.resumeRejects.length === 2, "the retry gesture must attempt the resume again");
+  g.tick(60); // the loop must keep rendering without throwing
+  // Yield to the event loop: unhandled rejections surface as a process
+  // 'unhandledRejection' event after the current task completes.
+  await new Promise((r) => setTimeout(r, 20));
+  assert(unhandled.length === seen,
+    `a rejecting resume must be guarded (.catch), got unhandled rejection(s): ${unhandled.slice(seen).join("; ")}`);
 });
 
 // ================================================================
@@ -566,5 +596,17 @@ check("MASTER_GAIN is a named, console-reassignable constant in the game source"
 });
 
 // ---------- summary ----------
-console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed === 0 ? 0 : 1);
+(async () => {
+  for (const [name, fn] of queued) {
+    try {
+      await fn();
+      passed += 1;
+      console.log(`ok   - ${name}`);
+    } catch (err) {
+      failed += 1;
+      console.error(`FAIL - ${name}\n       ${err.message}`);
+    }
+  }
+  console.log(`\n${passed} passed, ${failed} failed`);
+  process.exit(failed === 0 ? 0 : 1);
+})();
