@@ -199,6 +199,11 @@ var BALL_SERVE_SPEED = 480;       // level-1 launch speed on click/tap, px/s
 var LEVEL_SPEED_GROWTH = 1.15;    // per-level serve-speed multiplier (PRD section 4)
 var MAX_BALL_SPEED = 1500;        // ceiling the per-level growth caps at, px/s
 var MAX_PADDLE_BOUNCE_ANGLE = Math.PI / 3;  // 60 deg from vertical at the rim
+// Pin nudge: when collideBricks pins a ball flush to a brick face it
+// nudges it this far OUTSIDE, so a re-computed overlap of the pinned
+// position is strictly zero — a flush pin can never re-register as
+// (ulps-rounding-dependent) contact inside the seam drain loop.
+var BRICK_PIN_EPS = 1e-6;
 // Bricks: grid geometry (internal canvas px) over a fixed-size pool
 var BRICK_ROWS = 5;
 var BRICK_COLS = 10;
@@ -206,19 +211,38 @@ var BRICK_SIDE_MARGIN = 24;
 var BRICK_TOP_MARGIN = 64;
 var BRICK_GAP = 6;
 var BRICK_HEIGHT = 26;
-// Brick colours map to named per-colour point values (PRD section 2);
-// every brick is one-hit (ticket #22), so the colour encodes the value.
+// Brick colours map to named per-colour point values (PRD section 2)
+// and per-colour durability (ticket #42): the top tier is
+// multi-hit, the base tier is one-hit, so a colour still encodes
+// exactly one point value.
 var COLOR_BRICK_A = "#ef5d62";
 var POINTS_BRICK_A = 30;
 var COLOR_BRICK_B = "#f2a541";
 var POINTS_BRICK_B = 20;
 var COLOR_BRICK_C = "#4fc1e9";
 var POINTS_BRICK_C = 10;
+// Per-tier hit points to break (ticket #42): the top tier takes the
+// most hits, the base tier still dies in one.
+var HP_BRICK_A = 3;
+var HP_BRICK_B = 2;
+var HP_BRICK_C = 1;
 var BRICK_TIERS = [
-  { color: COLOR_BRICK_A, points: POINTS_BRICK_A },
-  { color: COLOR_BRICK_B, points: POINTS_BRICK_B },
-  { color: COLOR_BRICK_C, points: POINTS_BRICK_C }
+  { color: COLOR_BRICK_A, points: POINTS_BRICK_A, hp: HP_BRICK_A },
+  { color: COLOR_BRICK_B, points: POINTS_BRICK_B, hp: HP_BRICK_B },
+  { color: COLOR_BRICK_C, points: POINTS_BRICK_C, hp: HP_BRICK_C }
 ];
+// Damaged fill of a tier colour: a non-lethal hit dims the brick in
+// place. Channels scaled down by BRICK_DARK_FACTOR, computed once at
+// module load — the hit and draw paths never allocate.
+var BRICK_DARK_FACTOR = 0.45;
+function darkenHex(hex, factor) {
+  var chan = function (i) {
+    return Math.round(parseInt(hex.slice(i, i + 2), 16) * factor)
+      .toString(16).padStart(2, "0");
+  };
+  return "#" + chan(1) + chan(3) + chan(5);
+}
+BRICK_TIERS.forEach(function (t) { t.dark = darkenHex(t.color, BRICK_DARK_FACTOR); });
 // Power-ups (PRD section 4): capsules released by destroyed bricks
 var POWERUP_DROP_RATE = 0.25;      // chance per destroyed brick, rolled via `random`
 var CAPSULE_FALL_SPEED = 200;      // descent speed, px/s
@@ -382,10 +406,12 @@ var stickyUntil = -1;              // simTime at which the sticky catch expires;
                                    // absolute clock, so a mid-run re-serve
                                    // inside the window leaves it armed
 // Brick pool: allocated once at this size and reused in place for
-// every level, so the grid never allocates on a level spawn.
+// every level, so the grid never allocates on a level spawn. hp is
+// the per-brick durability remaining; spawnLevel() refills it from
+// the tier table (ticket #42).
 var bricks = [];
 for (var i = 0; i < BRICK_ROWS * BRICK_COLS; i += 1) {
-  bricks.push({ active: false, tier: 0, x: 0, y: 0, w: 0, h: 0 });
+  bricks.push({ active: false, tier: 0, hp: 0, x: 0, y: 0, w: 0, h: 0 });
 }
 var bricksLeft = 0;               // live bricks, kept as an O(1) win check
 // Runtime serve speed: reset to BALL_SERVE_SPEED at (re)start, grown
@@ -561,14 +587,15 @@ function spawnLevel() {
   for (var i = 0; i < bricks.length; i += 1) {
     var row = Math.floor(i / BRICK_COLS);
     bricks[i].tier = (row + shift) % BRICK_TIERS.length;
+    bricks[i].hp = BRICK_TIERS[bricks[i].tier].hp; // full durability
     bricks[i].active = true;
   }
   bricksLeft = bricks.length;
   layoutBricks();
 }
-// One kill path shared by the physics hit and console access: a
-// brick is destroyed in one hit, credits exactly its tier's points,
-// and the final brick wins the level.
+// One kill path shared by the lethal physics hit and console
+// access: a brick is destroyed outright, credits exactly its
+// tier's points, and the final brick wins the level.
 function destroyBrick(index) {
   var b = bricks[index];
   if (!b.active) return;
@@ -778,7 +805,11 @@ function bounceWalls(b) {
 // Circle vs brick overlap resolved along the shallowest axis; the
 // sign-based flip preserves the incoming speed exactly. One brick
 // per call (the first contact in pool order); the sub-step loop
-// drains follow-on seam overlaps after a hit.
+// drains follow-on seam overlaps after a hit. Multi-hit tiers
+// (ticket #42): every contact costs exactly one hp — a non-lethal
+// hit reflects the ball normally but scores nothing, drops nothing
+// and leaves bricksLeft untouched; only the lethal hit routes to
+// destroyBrick().
 function collideBricks(b) {
   for (var i = 0; i < bricks.length; i += 1) {
     var k = bricks[i];
@@ -790,12 +821,17 @@ function collideBricks(b) {
     if (ovx <= 0 || ovy <= 0) continue;
     if (ovx < ovy) {
       b.vx = b.x < cx ? -Math.abs(b.vx) : Math.abs(b.vx);
-      b.x = b.x < cx ? k.x - BALL_RADIUS : k.x + k.w + BALL_RADIUS;
+      b.x = b.x < cx
+        ? k.x - BALL_RADIUS - BRICK_PIN_EPS
+        : k.x + k.w + BALL_RADIUS + BRICK_PIN_EPS;
     } else {
       b.vy = b.y < cy ? -Math.abs(b.vy) : Math.abs(b.vy);
-      b.y = b.y < cy ? k.y - BALL_RADIUS : k.y + k.h + BALL_RADIUS;
+      b.y = b.y < cy
+        ? k.y - BALL_RADIUS - BRICK_PIN_EPS
+        : k.y + k.h + BALL_RADIUS + BRICK_PIN_EPS;
     }
-    destroyBrick(i);
+    k.hp -= 1;
+    if (k.hp <= 0) destroyBrick(i);
     return true;
   }
   return false;
@@ -975,7 +1011,10 @@ function drawBricks() {
   for (var i = 0; i < bricks.length; i += 1) {
     var b = bricks[i];
     if (!b.active) continue;
-    ctx.fillStyle = BRICK_TIERS[b.tier].color;
+    // Damaged bricks (hp below the tier's full hp) paint the dimmed
+    // variant of their tier colour; full-hp bricks — including every
+    // one-hit brick — render exactly as before.
+    ctx.fillStyle = b.hp < BRICK_TIERS[b.tier].hp ? BRICK_TIERS[b.tier].dark : BRICK_TIERS[b.tier].color;
     ctx.fillRect(b.x, b.y, b.w, b.h);
   }
 }

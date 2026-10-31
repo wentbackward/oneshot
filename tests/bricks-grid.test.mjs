@@ -412,7 +412,8 @@ check("side hit: collideBricks reflects horizontally — vx flips, vy untouched,
   const n = g.ball();
   assert(n.vx === -250, `vx must flip to exactly -250, got ${n.vx}`);
   assert(n.vy === 0, `vy must stay untouched at 0, got ${n.vy}`);
-  assert(n.x === b.x - r, `the ball must be pinned to the brick's left face, x=${n.x} want ${b.x - r}`);
+  assert(Math.abs(n.x - (b.x - r)) < 1e-5,
+    `the ball must be pinned to the brick's left face, x=${n.x} want ${b.x - r}`);
   assert(n.y === b.y + b.h / 2, `y must be unchanged, got ${n.y}`);
   const d = g.brickAt(4, 0);
   assert(d.active === true, "the first strike of a two-hit brick is non-lethal");
@@ -447,7 +448,8 @@ check("near-corner hit: collideBricks resolves the shallowest axis — exactly o
   const hit = g.q("collideBricks(balls[0])");
   assert(hit === true, "the near-corner contact must register as a hit");
   const n = g.ball();
-  assert(n.x === b.x - r, `x must be pinned to the shallow (side) face, x=${n.x} want ${b.x - r}`);
+  assert(Math.abs(n.x - (b.x - r)) < 1e-5,
+    `x must be pinned to the shallow (side) face, x=${n.x} want ${b.x - r}`);
   assert(n.y === yPlaced, `y must be unchanged on a side resolution, got ${n.y}`);
   assert(n.vx === -200 && n.vy === -250,
     `exactly one axis may flip (the shallow, horizontal one): got vx=${n.vx} vy=${n.vy}`);

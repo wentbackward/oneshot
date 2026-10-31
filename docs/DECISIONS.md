@@ -1184,3 +1184,37 @@
   silently breaks keyboard activation of CTAs), or a dedicated
   keyboard-launch branch (rejected — the ticket mandates the SAME path
   the click uses, not duplicate physics).
+
+## 2026-10-31 — Ticket #42: durability curve A=3 / B=2 / C=1; `destroyBrick()` stays the unconditional kill path
+
+- **Each `BRICK_TIERS` row gains `hp` (`HP_BRICK_A=3`, `HP_BRICK_B=2`,
+  `HP_BRICK_C=1`), stored on the brick pool entry and refilled by
+  `spawnLevel()` from the tier table. `collideBricks()` resolves the
+  overlap exactly as before, then costs one hp: `hp > 0` reflects
+  only (no score, no capsule roll, `bricksLeft` untouched); `hp`
+  reaching 0 routes to `destroyBrick()` unchanged. `destroyBrick()`
+  remains the unconditional kill path shared by the lethal hit and
+  console access, so console-driven clears and the win condition
+  behave exactly as before.** Alternatives: per-hit `damageBrick()`
+  with a separate console kill (rejected — the ticket prescribes the
+  decrement-then-destroy split and keeps the console path
+  unchanged), or equal hp across tiers (rejected — the PRD's colour
+  legend reads best when only the top tiers are visibly durable and
+  the base tier keeps the classic one-hit feel).
+
+## 2026-10-31 — Ticket #42: brick-face pins nudge `BRICK_PIN_EPS` (1e-6 px) outside the face
+
+- **When `collideBricks()` pins a ball flush to a brick face it now
+  places it `BRICK_PIN_EPS` px OUTSIDE, so a re-computed overlap of
+  the pinned position is strictly ≤ 0.** Multi-hit bricks changed the
+  seam-drain calculus: a ball pinned flush used to re-test as a
+  +ulp overlap, letting the drain loop charge a phantom second hit
+  to the brick it had just resolved (observed: one seam contact
+  costing a two-hit brick both of its hp, non-deterministically
+  across layouts). The nudge removes the whole class; the frame ends
+  with the ball exactly one micro-pixel clear of every face, which is
+  invisible at `CANVAS_SCALE`. Tests that asserted an exact pin
+  coordinate now tolerate 1e-5 px. Alternatives: an `ovx > EPS`
+  contact threshold (rejected — would blunt real shallow contacts,
+  not just the flush-pin artefact), or leaving the pins exact
+  (rejected — the phantom-hit outcome depended on ulp rounding).

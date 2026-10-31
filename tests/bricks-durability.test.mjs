@@ -341,7 +341,7 @@ check("non-lethal hit: one frame against a two-hit brick decrements hp by exactl
   const n = g.ball();
   assert(n.attached === false, "the ball must still be in flight");
   assert(n.vy > 0, `the ball must reflect back down off the brick's underside, vy=${n.vy}`);
-  assert(Math.abs(n.y - (bottom + g.q("BALL_RADIUS"))) < 1e-9,
+  assert(Math.abs(n.y - (bottom + g.q("BALL_RADIUS"))) < 1e-5,
     `the ball must be pinned to the brick's underside, y=${n.y} want ${bottom + g.q("BALL_RADIUS")}`);
   assert(g.brickAt(4, 1).active && g.brickAt(4, 3).active,
     "neighbour bricks must survive");
@@ -397,7 +397,7 @@ check("a three-hit tier-A brick takes exactly three side strikes, one score cred
     const n = g.ball();
     assert(n.vx === -250, `strike ${hit}: the side hit must reflect horizontally, vx=${n.vx}`);
     assert(n.vy === 0, `strike ${hit}: vy must stay untouched, got ${n.vy}`);
-    assert(Math.abs(n.x - (b0.x - r)) < 1e-9,
+    assert(Math.abs(n.x - (b0.x - r)) < 1e-5,
       `strike ${hit}: the ball must be pinned to the brick's left face, x=${n.x} want ${b0.x - r}`);
     if (hit < 3) {
       assert(b.active === true, `strike ${hit}: a non-lethal strike must leave the brick active`);
