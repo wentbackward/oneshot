@@ -26,3 +26,6 @@ libraries).
 - Gate checks are plain shell commands over the current campaign's `.html`
   file; if you add
   capabilities the team relies on, consider extending the checks list.
+- Browser smoke tests must be self-cleaning: close the `agent-browser`
+  session (`agent-browser close`) and stop any ephemeral HTTP server before
+  reporting — never leave a headless Chrome or server process running.
