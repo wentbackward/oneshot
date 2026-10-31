@@ -418,14 +418,17 @@ function saveHighScore() {
 // the viewport, so the world geometry is monitor-independent.
 // The visible size is the largest 16:10 rectangle fitting the
 // viewport, written as CSS px (letterbox, centered by CSS) — fit,
-// not stretch (PRD section 5 responsive scaling).
+// not stretch (PRD section 5 responsive scaling). The fit is capped
+// at the native stage size: larger monitors render the stage at most
+// 1:1 in CSS, so CANVAS_SCALE keeps the raster sharp without
+// blurring it on an upscale.
 function resizeCanvas() {
   if (canvas.width !== GAME_W * CANVAS_SCALE) canvas.width = GAME_W * CANVAS_SCALE;
   if (canvas.height !== GAME_H * CANVAS_SCALE) canvas.height = GAME_H * CANVAS_SCALE;
   fitStageCss();
 }
 function fitStageCss() {
-  var fit = Math.min(window.innerWidth / GAME_W, window.innerHeight / GAME_H);
+  var fit = Math.min(window.innerWidth / GAME_W, window.innerHeight / GAME_H, 1);
   var w = Math.round(GAME_W * fit) + "px";
   var h = Math.round(GAME_H * fit) + "px";
   if (canvas.style.width !== w) canvas.style.width = w;
@@ -493,11 +496,15 @@ window.addEventListener("blur", onBlur);
 // The canvas CSS footprint is the letterboxed stage rect, so the
 // client-x -> internal-px transform maps through the bounding rect:
 // a fraction of the visible stage width becomes a fraction of the
-// (constant) backing store width.
+// (constant) backing store width. A degenerate rect (zero width,
+// e.g. while the canvas is hidden) is ignored: dividing by it would
+// produce a NaN that poisons every later input event.
 function setPaddleX(clientX) {
   var rect = canvas.getBoundingClientRect();
-  paddle.x = ((clientX - rect.left) / rect.width) * canvas.width;
-  clampPaddle();
+  if (rect.width > 0) {
+    paddle.x = ((clientX - rect.left) / rect.width) * canvas.width;
+    clampPaddle();
+  }
 }
 canvas.addEventListener("mousemove", function (e) {
   setPaddleX(e.clientX);

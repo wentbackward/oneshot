@@ -1133,3 +1133,23 @@
   The backing-store guard means a resize storm never re-clears the
   canvas (setting `canvas.width` even to the same value resets the 2d
   context), keeping the hot path allocation- and state-free.
+
+## 2026-10-31 — Ticket #39 review round 1: zero-width rect in `setPaddleX` is ignored, not snapped
+
+- **When `getBoundingClientRect().width` is not `> 0` (canvas hidden,
+  mid-detach), `setPaddleX` skips the move entirely: the paddle keeps
+  its last valid position instead of receiving a NaN (naive division)
+  or snapping to an edge (clamping a NaN maps to the left edge).**
+  A hidden canvas receives no meaningful pointer data anyway, so the
+  latest *valid* position is the best known truth; the next event with
+  a real rect re-maps normally. Alternatives: snap to the nearest edge
+  (wrong — fabricates a move the player never made), or leave the
+  divide alone and rely on `clampPaddle` (poisons: NaN comparisons are
+  false, so the paddle stays NaN forever).
+- **The letterbox fit is capped at the native stage size (scale ≤ 1):
+  a viewport larger than 960×600 renders the stage at 960×600 CSS px,
+  never upscaled.** Paul's "optimal size irrespective of screen size"
+  reads as the stage having a definite size; upsampling a 2× raster
+  past 1:1 only blurs, and the canvas already carries the CANVAS_SCALE
+  supersample for smaller fits. Alternative: uncapped aspect-fit
+  (rejected — blurs on large monitors).
