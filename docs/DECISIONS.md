@@ -1098,3 +1098,20 @@
   is simpler and cannot strand a pause that only one of the two keys
   could close. Alternative: remember which key paused and accept
   only that one (rejected — bookkeeping for a UX nobody requested).
+
+## 2026-10-30 — Ticket #35: guard audio resume() Promises in asteroids.html
+
+- **Mirror campaign 2's bare `.catch(() => {})` on both `audioCtx.resume()` call
+  sites (first-gesture creation and the suspended-retry path in `initAudio()`),
+  and do NOT port ticket #27's exp-ramp clamps.** The defect is identical to
+  campaign 2's: a gesture handler leaking an unhandled rejection from a refused
+  `resume()`, while the rest of the silent-degradation path already assumes
+  "refused = quiet, not broken". The clamps are out of scope because the hazard
+  they fixed does not exist in campaign 1: bricks' decay floors became
+  console-reassignable `var` knobs after #27, so a bad console value (≤ 0 or NaN)
+  could reach `exponentialRampToValueAtTime` and throw `RangeError`; campaign 1's
+  decay targets are hardcoded literals (`0.001`, positive `SFX_*_TO_HZ` constants)
+  that cannot be reassigned to a non-positive or NaN value, so a clamp there would
+  be dead code. Alternatives: `await`/try-catch (requires wrapping the synchronous
+  gesture handlers in async context), or `then(undefined, …)` (less explicit;
+  ticket #27's review named `.catch` specifically).
