@@ -433,18 +433,30 @@ check("off-field tracking clamps: a clientX far right of the rect pins the paddl
     `a far-right pointer must pin the paddle at canvas.width - paddleW/2, got ${g.paddleX()} vs ${g.q("canvas.width - paddleW / 2")}`);
 });
 
-check("cursor: none is scoped to the #game stage rule, not to a page-wide (html/body) rule", () => {
+check("cursor: none sits on the single-line #game rule (gate-locked), not in a page-wide (html/body) rule", () => {
   const css = html.match(/<style>([\s\S]*?)<\/style>/)[1];
-  const gameRule = css.match(/#game\s*\{([\s\S]*?)\}/);
-  assert(gameRule, "the stylesheet must still carry a #game rule");
-  assert(/cursor:\s*none/.test(gameRule[1]),
-    "the #game rule must hide the OS cursor (the paddle is the visible pointer)");
+  // Mirrors the .devloop.json gate: the match must be ONE line carrying
+  // both the #game selector and the declaration, so a page-wide hide,
+  // a comment, or a cursor declaration buried in a multi-line rule can
+  // never satisfy the check.
+  assert(
+    css.split("\n").some((line) => /#game[\s]*\{[^}]*cursor:[\s]*none/.test(line)),
+    "a single line must carry '#game { ... cursor: none' (the gate's single-line match)"
+  );
   const pageRules = [...css.matchAll(/\b(?:html|body)[^{]*\{([^}]*)\}/g)].map((m) => m[1]);
   assert(pageRules.length > 0, "sanity: html/body rules must exist in the stylesheet");
   for (const r of pageRules) {
     assert(!/cursor:\s*none/.test(r),
       "no page-wide rule may hide the cursor (menus/HUD must keep a normal cursor)");
   }
+});
+
+check("the CTA button rule selects #btn-restart alongside #btn-start and #btn-resume (Try Again looks clickable)", () => {
+  const css = html.match(/<style>([\s\S]*?)<\/style>/)[1];
+  const rule = css.split("}").find((r) => r.includes("{") && r.split("{")[0].includes("#btn-start"));
+  assert(rule, "the stylesheet must carry a CTA button rule selecting #btn-start");
+  assert(rule.includes("#btn-restart"),
+    "the CTA rule must also select #btn-restart so the Try Again button shares the CTA look");
 });
 
 check("setPaddleX maps through getBoundingClientRect(), not window.innerWidth, after a viewport resize", () => {
