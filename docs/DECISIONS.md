@@ -1167,3 +1167,20 @@
   the canvas (rejected — the same off-stage gap the ticket closes),
   or drop `preventDefault` at window level (rejected — refresh/scroll
   gestures would fight the paddle during a drag).
+
+## 2026-10-31 — Ticket #41: launch the attached ball with Space or Enter
+
+- **Space/Enter keydown routes through the existing `launchAttachedBalls()`
+  and deliberately calls no `preventDefault()`.** The page is
+  `overflow: hidden` (single-screen, never scrolls), so Space has no
+  default action to cancel; and suppressing the Enter/Space default
+  would disable native keyboard activation of a focused CTA (e.g. Tab
+  to the pause screen's Resume button + Enter). The one behavioural
+  side effect a real browser adds — Enter/Space "clicking" a focused
+  CTA (e.g. the just-mouse-started Start button) — is already a no-op,
+  because `startGame`, `restartRun` and `resumeGame` are all
+  state-gated to their own screen. Alternatives: `preventDefault()`
+  like the arrow keys (rejected — no scrollable page to defend, and it
+  silently breaks keyboard activation of CTAs), or a dedicated
+  keyboard-launch branch (rejected — the ticket mandates the SAME path
+  the click uses, not duplicate physics).
