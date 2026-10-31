@@ -9,7 +9,7 @@
     "grep -qE 'class=\"game\"|id=\"game\"|<canvas' bricks.html",
     "grep -qi 'monospace' bricks.html",
     "[ \"$(grep -cE '(src|href)=' bricks.html)\" -eq 0 ]",
-    "grep -qE 'cursor:[[:space:]]*none' bricks.html",
+    "grep -qE '^[[:space:]]*#game[[:space:]]*\\{[^}]*cursor:[[:space:]]*none' bricks.html",
     "for f in tests/bricks-*.test.mjs; do node \"$f\" || exit 1; done"
   ],
   "heavy": { "slots": 2 },
