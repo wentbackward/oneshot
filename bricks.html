@@ -483,6 +483,18 @@ function onKeyDown(e) {
   } else if (e.code === "ArrowRight" || e.code === "KeyD") {
     keys.right.add(e.code);
     e.preventDefault();
+  } else if (e.code === "Space" || e.code === "Enter") {
+    // The keyboard twin of the canvas click/tap: routes through the
+    // same launch path (launchAttachedBalls), not a duplicate physics.
+    // State gating is that function's job — outside "playing" (and
+    // while no ball is attached) the press is a no-op. Space and
+    // Enter are not pause keys, so the pause screen stays put.
+    launchAttachedBalls();
+    // Deliberately no preventDefault: the page is overflow:hidden
+    // (nothing to scroll), and suppressing the Enter/Space default
+    // would disable native keyboard activation of a focused CTA
+    // (e.g. Tab to Resume + Enter); the resulting CTA re-clicks are
+    // all state-gated no-ops.
   }
 }
 function onKeyUp(e) {
