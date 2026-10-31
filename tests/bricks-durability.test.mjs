@@ -28,6 +28,10 @@
 //   AC5 — `node tests/bricks-*.test.mjs` exits 0 with no allocation
 //         churn: pool length and entry shape stay invariant across
 //         repeated hits; the hit path allocates no objects.
+//   REGRESSION (review round 1) — seam scrape: two same-frame
+//         contacts on an hp-2 brick charge exactly once (per-frame
+//         damage cap); BOTH bricks end the frame at hp 1, alive,
+//         and die only on a subsequent (next-frame) contact.
 //
 // Run: node tests/bricks-durability.test.mjs
 // ================================================================
@@ -559,6 +563,73 @@ check("repeated hits allocate nothing: pool length and entry field set are invar
     "collideBricks must allocate no per-hit objects");
   assert(noLit(g.q("drawBricks.toString()")),
     "drawBricks must allocate no per-hit objects");
+});
+
+// ================================================================
+// REGRESSION (review round 1): a brick must pay at most ONE hp per
+// frame. The seam-scrape fixture parks the ball overlapping the
+// left face of a brick and resolves the overlap, TWICE in a row
+// with no frame boundary between the resolutions — the exact shape
+// of the sub-step drain loop re-contacting the brick it just
+// resolved. Against hp-2 (tier B) bricks both scrape pairs must end
+// the frame with the brick standing at hp 1; only a subsequent
+// contact, in a later frame, may finish it.
+// ================================================================
+function scrape(g, row, col) {
+  sidePark(g, row, col);
+  const h = g.q("collideBricks(balls[0])");
+  return h;
+}
+
+check("seam scrape: two same-frame contacts on hp-2 bricks charge exactly once — both end the frame at hp 1, dying on a subsequent contact", () => {
+  const g = boot(960, 600);
+  start(g);
+  const grid = g.grid();
+  const r = g.q("BALL_RADIUS");
+  // Isolate two bottom-row tier-B (hp 2) bricks: a left-face park
+  // would co-overlap the left seam neighbour (ball wider than the
+  // gap), and pool order would charge THAT brick instead.
+  const mid = 4 * g.q("BRICK_COLS") + 1;
+  g.q(`destroyBrick(${mid})`);
+  const setupPoints = g.q("BRICK_TIERS[1].points");
+  assert(g.score() === setupPoints, "setup: the isolating kill credits once");
+  for (const col of [0, 2]) {
+    const b0 = g.brickAt(4, col);
+    assert(b0.tier === 1 && b0.hp === 2,
+      `setup: (4,${col}) must be the two-hit tier at hp 2`);
+    assert(scrape(g, 4, col) === true, `contact 1 on (4,${col}): must register`);
+    // The drain loop resolved the residual overlap of the SAME brick
+    // again before the frame ended:
+    assert(scrape(g, 4, col) === true, `contact 2 (same frame) on (4,${col}): must still resolve`);
+    const b = g.brickAt(4, col);
+    const n = g.ball();
+    assert(n.vx === -250, `the re-contact must reflect the ball left, vx=${n.vx}`);
+    assert(Math.abs(n.x - (b0.x - r)) < 1e-5,
+      `the re-contact must pin the ball clear of the left face, x=${n.x} want ~${b0.x - r}`);
+  }
+  // Frame end: the charge flags clear.
+  g.q("balls[0].attached = true"); // ride the paddle: inert during the frame
+  g.tick(1);
+  for (const col of [0, 2]) {
+    const b = g.brickAt(4, col);
+    assert(b.active === true,
+      `(4,${col}) must survive the double charge and END THE FRAME alive`);
+    assert(b.hp === 1,
+      `(4,${col}) must end the frame at exactly hp 1 (one charge), got ${b.hp}`);
+  }
+  assert(g.score() === setupPoints, "no same-frame pair may credit any further points");
+  assert(g.bricksLeft() === grid - 1, "bricksLeft must be untouched by the scrape");
+  // Subsequent (next-frame) contacts are the lethal ones.
+  for (const col of [0, 2]) {
+    assert(scrape(g, 4, col) === true, `follow-up contact on (4,${col}): must register`);
+    const b = g.brickAt(4, col);
+    assert(b.active === false,
+      `(4,${col}): a subsequent-frame contact must finish the hp-2 brick`);
+    assert(b.hp === 0, `(4,${col}): hp must reach exactly 0, got ${b.hp}`);
+  }
+  assert(g.score() === 3 * setupPoints,
+    `each scraped brick may credit its tier's points exactly once, got ${g.score()}`);
+  assert(g.bricksLeft() === grid - 3, `bricksLeft must fall to ${grid - 3}, got ${g.bricksLeft()}`);
 });
 
 // ---------- summary ----------
