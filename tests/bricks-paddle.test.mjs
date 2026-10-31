@@ -98,13 +98,20 @@ function makeCtx() {
   );
 }
 
-// Boot a fresh copy of the game on a width×height viewport.
+// Boot a fresh copy of the game on a width×height viewport. The
+// canvas stub records CSS style writes and answers
+// getBoundingClientRect() from a mutable rect object that defaults
+// to a stage filling the boot viewport — the harness narrows it to a
+// letterboxed fit when a test simulates a smaller viewport.
 function boot(width = 960, height = 600) {
   const canvas = {
     width: 0,
     height: 0,
+    style: {},
+    rect: { left: 0, top: 0, width, height },
     listeners: {},
     getContext: () => makeCtx(),
+    getBoundingClientRect: () => canvas.rect,
     addEventListener(type, cb) {
       (this.listeners[type] ??= []).push(cb);
     },
@@ -168,6 +175,11 @@ function boot(width = 960, height = 600) {
     win: sandbox.window,
     q,
     tick,
+    // Reposition/resize the canvas bounding rect stub (the
+    // letterboxed stage footprint the pointer mapping must use).
+    setRect(parts) {
+      Object.assign(canvas.rect, parts);
+    },
     state: () => q("typeof gameState === 'undefined' ? 'undefined' : gameState"),
     lives: () => q("typeof lives === 'undefined' ? NaN : lives"),
     paddleX: () => q("typeof paddle === 'undefined' ? NaN : paddle.x"),
@@ -348,31 +360,78 @@ check("auto-repeat keydowns of one held key do not change the paddle speed", () 
 });
 
 // ================================================================
-// Criterion: pointer — mousemove / touchmove set the paddle x to the
-// cursor's transformed x (within 1 px, including the responsive scale)
+// Criterion: pointer — mousemove / touchmove set the paddle x from
+// the cursor position mapped through the canvas bounding rect
+// (fixed-aspect stage, ticket #39)
 // ================================================================
-check("a dispatched mousemove over the canvas sets the paddle x to the transformed cursor x (within 1 px)", () => {
-  const g = boot(960, 600); // canvas is 1920 wide internally (scale 2)
+check("a dispatched mousemove over the canvas sets the paddle x to the rect-mapped cursor x (within 1 px)", () => {
+  const g = boot(960, 600); // rect fills the viewport: {0, 0, 960, 600}
   start(g);
   g.mouseMove(100);
-  const want = (100 / 960) * g.canvas.width; // 200
+  const rect = g.canvas.rect;
+  const want = ((100 - rect.left) / rect.width) * g.canvas.width; // 200
   assertClose(g.paddleX(), want, 1,
     `mousemove clientX 100 must land the paddle at ${want} px, got ${g.paddleX()}`);
 });
 
-check("mousemove honours the responsive scale after a viewport resize", () => {
+check("setPaddleX maps through getBoundingClientRect(), not window.innerWidth, after a viewport resize", () => {
   const g = boot(960, 600);
   start(g);
+  // The viewport shrank to a tall 480×800 window: the letterboxed
+  // stage is a 480×300 rect centred in the window. Pointer mapping
+  // must use that rect — and the backing store stays fixed.
   g.win.innerWidth = 480;
   g.win.innerHeight = 800;
   g.resize();
-  g.tick(1); // deferred rescale
-  assert(g.canvas.width === 960 && g.canvas.height === 1600,
-    `the canvas must rescale to 960x1600, got ${g.canvas.width}x${g.canvas.height}`);
-  g.mouseMove(50);
-  const want = (50 / 480) * g.canvas.width; // 100
+  g.tick(1);
+  // Derive the stage rect from the recorded canvas.style writes: the
+  // letterbox size the game actually wrote, centred in the viewport.
+  const w = parseFloat(g.canvas.style.width);
+  const h = parseFloat(g.canvas.style.height);
+  g.setRect({ left: (480 - w) / 2, top: (800 - h) / 2, width: w, height: h });
+  assert(g.canvas.width === g.q("GAME_W * CANVAS_SCALE") && g.canvas.height === g.q("GAME_H * CANVAS_SCALE"),
+    `the backing store must stay fixed at ${g.q("GAME_W * CANVAS_SCALE")}x${g.q("GAME_H * CANVAS_SCALE")}, got ${g.canvas.width}x${g.canvas.height}`);
+  g.mouseMove(120); // inside the rect
+  const rect = g.canvas.rect;
+  const want = ((120 - rect.left) / rect.width) * g.canvas.width; // 480
   assertClose(g.paddleX(), want, 1,
-    `post-resize mousemove clientX 50 must land the paddle at ${want} px, got ${g.paddleX()}`);
+    `post-resize mousemove clientX 120 must land the paddle at ${want} px (not (120/480)·width), got ${g.paddleX()}`);
+});
+
+check("a degenerate bounding rect (width 0) never poisons the paddle — the move is ignored and later moves still work", () => {
+  const g = boot(960, 600);
+  start(g);
+  g.mouseMove(100);
+  const before = g.paddleX();
+  assert(Number.isFinite(before), `sanity: paddle must be finite after a normal move, got ${before}`);
+  g.setRect({ left: 0, top: 0, width: 0, height: 0 }); // e.g. rect queried while hidden
+  g.mouseMove(480); // naive mapping divides by rect.width → NaN
+  assert(Number.isFinite(g.paddleX()), `a width-0 rect must not NaN the paddle, got ${g.paddleX()}`);
+  assertClose(g.paddleX(), before, 1e-9,
+    `a degenerate-rect mousemove must leave the paddle alone, got ${g.paddleX()}, want ${before}`);
+  g.setRect({ left: 0, top: 0, width: 960, height: 600 }); // viewport reappears
+  g.mouseMove(100);
+  const want = (100 / 960) * g.canvas.width;
+  assertClose(g.paddleX(), want, 1,
+    `after the rect recovers the mapping must work again, want ${want}, got ${g.paddleX()}`);
+});
+
+check("a mousemove into an offset rect lands the paddle at (clientX - rect.left) / rect.width · canvas.width (clamped)", () => {
+  const g = boot(960, 600);
+  start(g);
+  // Wide 1600×900 viewport: the letterbox is a 1440×900 rect at left 80.
+  g.setRect({ left: 80, top: 0, width: 1440, height: 900 });
+  const rect = g.canvas.rect;
+  g.mouseMove(500); // inside the rect
+  const want = ((500 - rect.left) / rect.width) * g.canvas.width; // 560
+  assertClose(g.paddleX(), want, 1,
+    `a clientX inside an offset rect must use (clientX - rect.left)/rect.width, want ${want}, got ${g.paddleX()}`);
+  g.mouseMove(rect.left - 2000); // outside the rect, far left
+  assertClose(g.paddleX(), g.q("BASE_PADDLE_W / 2"), 1e-9,
+    `a pointer left of the rect must clamp the paddle to the left edge, got ${g.paddleX()}`);
+  g.mouseMove(rect.left + rect.width + 2000); // outside the rect, far right
+  assertClose(g.paddleX(), g.q("canvas.width - BASE_PADDLE_W / 2"), 1e-9,
+    `a pointer right of the rect must clamp the paddle to the right edge, got ${g.paddleX()}`);
 });
 
 check("a dispatched touchmove drag sets the paddle x the same way (within 1 px)", () => {

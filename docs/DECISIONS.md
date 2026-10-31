@@ -1115,3 +1115,41 @@
   be dead code. Alternatives: `await`/try-catch (requires wrapping the synchronous
   gesture handlers in async context), or `then(undefined, …)` (less explicit;
   ticket #27's review named `.catch` specifically).
+
+## 2026-10-31 — Ticket #39: letterbox CSS sizes use Math.round, not Math.floor
+
+- **The stage's visible (CSS) size is computed as the largest 16:10
+  rectangle fitting the viewport and rounded with `Math.round` per axis,
+  and the backing-store assignments in the resize pass are guarded by a
+  mismatch check so they execute effectively once.** Rounding reproduces
+  the exact canonical sizes the ticket specifies (320×568 viewport →
+  320px × 200px); `Math.floor` would instead yield 319 × 199 because
+  `960 * (320 / 960)` is `319.99…` in floating point, so a floor-based
+  fit would look visibly under-sized against the viewport edges while
+  still fitting (worst-case overshoot of round is ≤ 0.5px per axis).
+  Alternatives: `Math.ceil` (can exceed the viewport on fractional fits
+  — rejects "fit, not stretch"), or keeping floor (correct but
+  systematically one pixel smaller than the true fit at common sizes).
+  The backing-store guard means a resize storm never re-clears the
+  canvas (setting `canvas.width` even to the same value resets the 2d
+  context), keeping the hot path allocation- and state-free.
+
+## 2026-10-31 — Ticket #39 review round 1: zero-width rect in `setPaddleX` is ignored, not snapped
+
+- **When `getBoundingClientRect().width` is not `> 0` (canvas hidden,
+  mid-detach), `setPaddleX` skips the move entirely: the paddle keeps
+  its last valid position instead of receiving a NaN (naive division)
+  or snapping to an edge (clamping a NaN maps to the left edge).**
+  A hidden canvas receives no meaningful pointer data anyway, so the
+  latest *valid* position is the best known truth; the next event with
+  a real rect re-maps normally. Alternatives: snap to the nearest edge
+  (wrong — fabricates a move the player never made), or leave the
+  divide alone and rely on `clampPaddle` (poisons: NaN comparisons are
+  false, so the paddle stays NaN forever).
+- **The letterbox fit is capped at the native stage size (scale ≤ 1):
+  a viewport larger than 960×600 renders the stage at 960×600 CSS px,
+  never upscaled.** Paul's "optimal size irrespective of screen size"
+  reads as the stage having a definite size; upsampling a 2× raster
+  past 1:1 only blurs, and the canvas already carries the CANVAS_SCALE
+  supersample for smaller fits. Alternative: uncapped aspect-fit
+  (rejected — blurs on large monitors).
