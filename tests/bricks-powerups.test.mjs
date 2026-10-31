@@ -130,6 +130,8 @@ function boot(width = 960, height = 600) {
     "btn-start": makeEl("btn-start"),
     "screen-gameover": makeEl("screen-gameover"),
     "btn-restart": makeEl("btn-restart"),
+    "screen-pause": makeEl("screen-pause"),
+    "btn-resume": makeEl("btn-resume"),
     "gameover-final": makeEl("gameover-final"),
     "hud-score": makeEl("hud-score"),
     "hud-level": makeEl("hud-level"),
