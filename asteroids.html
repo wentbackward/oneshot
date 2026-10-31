@@ -617,12 +617,12 @@
 
     function initAudio() {
       if (audioCtx) {
-        if (audioCtx.state === "suspended") audioCtx.resume();
+        if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
         return;
       }
       if (typeof AudioContext === "undefined") return; // silent, no error
       audioCtx = new AudioContext();
-      if (audioCtx.state === "suspended") audioCtx.resume();
+      if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
       masterGain = audioCtx.createGain();
       masterGain.gain.value = MASTER_GAIN;
       masterGain.connect(audioCtx.destination);
