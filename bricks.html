@@ -375,6 +375,8 @@ var keys = { left: new Set(), right: new Set() };
 function loadHighScore() {
   try {
     var value = JSON.parse(localStorage.getItem(HIGH_SCORE_KEY));
+    // The value > 0 gate deliberately folds a persisted "0" into
+    // fresh-boot: 0 is the empty baseline, not a record to keep.
     return Number.isInteger(value) && value > 0 ? value : 0;
   } catch {
     return 0; // storage unavailable, blocked, or corrupt: play on
