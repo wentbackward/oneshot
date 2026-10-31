@@ -33,6 +33,12 @@
     transform: translate(-50%, -50%);
     display: block;
   }
+  /* The paddle is the visible pointer: the OS cursor is hidden over
+     the stage only — the menus/HUD keep a normal cursor so their
+     CTAs still look clickable (ticket #40). Deliberately a one-line
+     rule: the repo gate locks this declaration via a single-line
+     selector-plus-declaration match. */
+  #game { cursor: none; }
   /* Top bar HUD (PRD section 3). Overlay styling, no scroll impact. */
   #hud {
     position: fixed;
@@ -95,7 +101,8 @@
     color: var(--ink);
   }
   #btn-start,
-  #btn-resume {
+  #btn-resume,
+  #btn-restart {
     font-family: inherit;
     font-size: 1rem;
     letter-spacing: 0.2em;
@@ -107,7 +114,8 @@
     cursor: pointer;
   }
   #btn-start:hover,
-  #btn-resume:hover {
+  #btn-resume:hover,
+  #btn-restart:hover {
     background: rgba(92, 242, 176, 0.12);
   }
 </style>
@@ -506,10 +514,14 @@ function setPaddleX(clientX) {
     clampPaddle();
   }
 }
-canvas.addEventListener("mousemove", function (e) {
+// Window-level pointer tracking (ticket #40): the listeners live on
+// window, not the canvas, so the paddle keeps following the cursor
+// after it leaves the stage rect — off-field positions clamp to the
+// nearest edge via clampPaddle() instead of stopping.
+window.addEventListener("mousemove", function (e) {
   setPaddleX(e.clientX);
 });
-canvas.addEventListener("touchmove", function (e) {
+window.addEventListener("touchmove", function (e) {
   if (e.touches && e.touches.length > 0) setPaddleX(e.touches[0].clientX);
   e.preventDefault(); // keep the page from scrolling while dragging
 }, { passive: false });

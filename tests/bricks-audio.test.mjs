@@ -342,7 +342,8 @@ function boot(width = 960, height = 600, opts = {}) {
       fireWin(type, { code, preventDefault() {} });
     },
     mouseMove(clientX) {
-      canvas.dispatch("mousemove", { clientX });
+      // ticket #40: pointer tracking is window-level.
+      fireWin("mousemove", { clientX });
     },
     canvasClick() {
       canvas.dispatch("click", { type: "click" });

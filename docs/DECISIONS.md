@@ -1153,3 +1153,17 @@
   past 1:1 only blurs, and the canvas already carries the CANVAS_SCALE
   supersample for smaller fits. Alternative: uncapped aspect-fit
   (rejected — blurs on large monitors).
+
+## 2026-10-31 — Ticket #40: the window-level touchmove keeps page-wide `preventDefault`
+
+- **Moving `touchmove` from the canvas to `window` also moves its
+  `{ passive: false }` + `preventDefault()` to page scope: a horizontal
+  drag anywhere in the viewport (including across the letterbox bars)
+  steers the paddle without triggering browser scroll/refresh
+  gestures.** The page already sets `overflow: hidden` and the game is
+  single-screen, so suppressing the default costs nothing; a
+  canvas-scoped handler would only cover the stage and reopen the
+  tracking hole the ticket closes. Alternatives: keep `touchmove` on
+  the canvas (rejected — the same off-stage gap the ticket closes),
+  or drop `preventDefault` at window level (rejected — refresh/scroll
+  gestures would fight the paddle during a drag).
