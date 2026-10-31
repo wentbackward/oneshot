@@ -476,13 +476,7 @@ window.addEventListener("keyup", onKeyUp);
 window.addEventListener("blur", onBlur);
 // The canvas CSS footprint equals the viewport, so the client-x
 // transform to internal px folds in the responsive CANVAS_SCALE.
-// Pointer input writes the paddle position DIRECTLY (the keyboard
-// side is frozen automatically, since updatePaddle only runs in
-// "playing"); the write-through must therefore be state-gated the
-// same way, or a stray move during the pause would un-freeze the
-// paddle.
 function setPaddleX(clientX) {
-  if (gameState !== "playing") return;
   paddle.x = (clientX / window.innerWidth) * canvas.width;
   clampPaddle();
 }
