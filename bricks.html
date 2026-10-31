@@ -114,7 +114,7 @@
   <header id="hud">
     <span>Score <b id="hud-score">0</b></span>
     <span>Level <b id="hud-level">1</b></span>
-    <span>High <b id="hud-high">0</b></span>
+    <span>High <b id="hiscore">0</b></span>
     <span>Lives <span id="lives"></span></span>
   </header>
 
@@ -151,7 +151,10 @@
 // contact catches a ball that a click re-launches) effects, and
 // synthesized Web Audio SFX (named recipes per required event on a
 // single master gain bus, built on the first user gesture, degrading
-// to silent where Web Audio is missing)
+// to silent where Web Audio is missing), and the high score
+// persisted in localStorage under a named key — loaded at boot,
+// shown in the #hiscore top-bar element, and rewritten as a JSON
+// number only when the live score overtakes it
 // ================================================================
 
 // ---- Tunables (var: addressable as globals, e.g. from the console) ----
@@ -317,7 +320,7 @@ var btnRestart = document.getElementById("btn-restart");
 var gameoverFinal = document.getElementById("gameover-final");
 var hudScore = document.getElementById("hud-score");
 var hudLevel = document.getElementById("hud-level");
-var hudHigh = document.getElementById("hud-high");
+var hiscoreEl = document.getElementById("hiscore");
 var livesEl = document.getElementById("lives");
 
 // ---- State ----
@@ -371,15 +374,18 @@ var keys = { left: new Set(), right: new Set() };
 // ---- High score (localStorage persistence, PRD section 4) ----
 function loadHighScore() {
   try {
-    var value = parseInt(localStorage.getItem(HIGH_SCORE_KEY), 10);
-    return Number.isFinite(value) && value > 0 ? value : 0;
+    var value = JSON.parse(localStorage.getItem(HIGH_SCORE_KEY));
+    // The value > 0 gate deliberately folds a persisted "0" into
+    // fresh-boot: 0 is the empty baseline, not a record to keep.
+    return Number.isInteger(value) && value > 0 ? value : 0;
   } catch {
-    return 0; // storage unavailable or blocked: play on
+    return 0; // storage unavailable, blocked, or corrupt: play on
   }
 }
 function saveHighScore() {
   try {
-    localStorage.setItem(HIGH_SCORE_KEY, String(highScore));
+    // Persisted as a JSON number: "600", not "\"600\"".
+    localStorage.setItem(HIGH_SCORE_KEY, JSON.stringify(highScore));
   } catch {
     // Non-persistent storage (e.g. blocked): the session still works.
   }
@@ -405,7 +411,7 @@ function setText(el, value) {
 function syncHud() {
   setText(hudScore, score);
   setText(hudLevel, level);
-  setText(hudHigh, highScore);
+  setText(hiscoreEl, highScore);
 }
 
 // ---- Paddle (input + kinematics) ----
@@ -836,11 +842,13 @@ function frame(time) {
   draw();
   requestAnimationFrame(frame);
 }
-// Promote the live score to the persisted high score when it rises.
+// Promote the live score to the persisted high score when it rises;
+// the same frame also refreshes the #hiscore readout.
 function syncScore() {
   if (score > highScore) {
     highScore = score;
     saveHighScore();
+    syncHud();
   }
 }
 function update(dt) {

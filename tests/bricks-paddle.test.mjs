@@ -121,7 +121,7 @@ function boot(width = 960, height = 600) {
     "gameover-final": makeEl("gameover-final"),
     "hud-score": makeEl("hud-score"),
     "hud-level": makeEl("hud-level"),
-    "hud-high": makeEl("hud-high"),
+    "hiscore": makeEl("hiscore"),
     lives: makeEl("lives"),
   };
   const winListeners = {};

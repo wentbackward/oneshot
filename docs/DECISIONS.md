@@ -1023,3 +1023,35 @@
   parameter are still flagged. Alternatives: `then(undefined, …)` (obscure,
   and the review named `.catch` explicitly) or a synchronous wrapper that
   cannot observe the Promise rejection.
+
+## 2026-10-30 — Ticket #23: persist high score in localStorage across reloads
+
+- **The top-bar high-score element is `#hiscore`, replacing `#hud-high`.** The
+  ticket's criteria name the `#hiscore` selector explicitly, so the scaffold's
+  `hud-high` id was renamed (markup, DOM handle, and the stub registries of all
+  six bricks suites in one mechanical pass). Alternatives: keep `hud-high` and
+  treat it as equivalent (rejected — the criteria are the contract, and two
+  names for one readout would leave `#hiscore` unmet), or add a parallel
+  `#hiscore` span (rejected — duplicate state surface for no requirement).
+- **The stored value is written with `JSON.stringify` and read with
+  `JSON.parse` + a `Number.isInteger` gate, instead of `String`/`parseInt`.**
+  The criteria require `setItem` "with the new value as a JSON number", so the
+  codec is now literally JSON on both sides; the wire format is byte-identical
+  for integers (`"600"`), so the existing suite expectations keep holding.
+  The `Number.isInteger` gate rejects what `parseInt` used to silently truncate
+  (e.g. `"72.9"` → 72) — a corrupt value now degrades to 0, matching the
+  blocked-storage degradation. Alternatives: keep `String`/`parseInt` and note
+  equivalence (rejected — the test must prove the JSON contract itself),
+  store an object like `{"highScore": n}` (rejected — over-encodes a single
+  scalar the PRD never asks for).
+- **An overtake now refreshes the HUD in the same frame: `syncScore` calls
+  `syncHud()` inside the `score > highScore` branch.** The new exact-write
+  criterion requires `#hiscore` to show 600 the moment the live score reaches
+  600, but the per-frame path (`frame` → `syncScore` → `draw`) previously only
+  updated `highScore` and storage, leaving the readout stale until the next
+  coincidental `syncHud` (brick kill, level, game over). The branch placement
+  keeps the write-through cost at overtake rate, not frame rate. Alternatives:
+  call `syncHud` every frame (rejected — write-checks on three nodes per frame
+  for nothing; `setText` is already change-gated but the call itself is the
+  per-frame work the PRD's 60 fps rule discourages), or only in `draw` (wrong
+  layer — draw renders, it does not mutate HUD state).
