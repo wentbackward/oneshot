@@ -32,6 +32,10 @@
     top: 50%;
     transform: translate(-50%, -50%);
     display: block;
+    /* The paddle is the visible pointer: hide the OS cursor over the
+       stage only — the menus/HUD keep a normal cursor so their CTAs
+       still look clickable (ticket #40). */
+    cursor: none;
   }
   /* Top bar HUD (PRD section 3). Overlay styling, no scroll impact. */
   #hud {
@@ -506,10 +510,14 @@ function setPaddleX(clientX) {
     clampPaddle();
   }
 }
-canvas.addEventListener("mousemove", function (e) {
+// Window-level pointer tracking (ticket #40): the listeners live on
+// window, not the canvas, so the paddle keeps following the cursor
+// after it leaves the stage rect — off-field positions clamp to the
+// nearest edge via clampPaddle() instead of stopping.
+window.addEventListener("mousemove", function (e) {
   setPaddleX(e.clientX);
 });
-canvas.addEventListener("touchmove", function (e) {
+window.addEventListener("touchmove", function (e) {
   if (e.touches && e.touches.length > 0) setPaddleX(e.touches[0].clientX);
   e.preventDefault(); // keep the page from scrolling while dragging
 }, { passive: false });
