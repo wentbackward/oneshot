@@ -23,13 +23,15 @@
     color: var(--accent);
     font-family: monospace;
   }
-  /* Full-viewport playground; internal resolution is set from JS. */
+  /* Centered fixed-aspect stage: the JS resize pass sizes the canvas
+     to the largest 16:10 rectangle that fits the viewport
+     (letterbox — it shrinks to fit, never stretches). */
   #game {
     position: fixed;
-    inset: 0;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
     display: block;
-    width: 100vw;
-    height: 100vh;
   }
   /* Top bar HUD (PRD section 3). Overlay styling, no scroll impact. */
   #hud {
@@ -145,9 +147,10 @@
 // brick grid, ball-brick collision, scoring, level progression and
 // the win condition
 //
-// Single file: responsive full-viewport canvas with an internal-
-// resolution scale factor, a requestAnimationFrame loop with a
-// clamped frame delta, start / pause / game-over overlay screens
+// Single file: fixed-aspect 960×600 (16:10) logical stage, rendered
+// at an internal-resolution scale factor and letterboxed/centered in
+// the viewport (fit, not stretch), a requestAnimationFrame loop with
+// a clamped frame delta, start / pause / game-over overlay screens
 // (the pause freezes the whole simulation; resume via the overlay
 // CTA or a fresh Escape/KeyP press), keyboard and pointer paddle
 // control, a served ball with wall and paddle
@@ -168,7 +171,9 @@
 // ================================================================
 
 // ---- Tunables (var: addressable as globals, e.g. from the console) ----
-var CANVAS_SCALE = 2;             // canvas pixels per viewport pixel
+var CANVAS_SCALE = 2;             // canvas pixels per stage pixel
+var GAME_W = 960;                 // fixed logical stage width (16:10)
+var GAME_H = 600;                 // fixed logical stage height (16:10)
 var UI_FONT = "monospace";        // retro face for canvas UI text
 var MAX_FRAME_SECONDS = 1 / 30;   // dt clamp: no teleports after tab switches
 var random = Math.random;          // mutable hook: test suites pin it for determinism
@@ -344,7 +349,7 @@ var lives = PLAYER_LIVES;         // (re)start-time snapshot of PLAYER_LIVES
 var resizePending = false;
 var lastFrameTime = null;
 // Paddle position is its centre x; the top-edge y derives from the
-// (resizable) canvas height so a relayout never strands the paddle.
+// (constant) stage height.
 var paddle = { x: 0 };
 // Runtime paddle width: widened while an expand capsule's effect is
 // live, otherwise the base width.
@@ -407,16 +412,27 @@ function saveHighScore() {
   }
 }
 
-// ---- Responsive canvas ----
-// Internal resolution tracks the viewport times CANVAS_SCALE; the
-// CSS side is fixed at 100vw x 100vh, so aspect distortion is zero.
+// ---- Fixed-aspect stage ----
+// The playfield is a constant GAME_W × GAME_H logical stage; the
+// backing store (stage × CANVAS_SCALE) is set once and never follows
+// the viewport, so the world geometry is monitor-independent.
+// The visible size is the largest 16:10 rectangle fitting the
+// viewport, written as CSS px (letterbox, centered by CSS) — fit,
+// not stretch (PRD section 5 responsive scaling).
 function resizeCanvas() {
-  canvas.width = Math.round(window.innerWidth * CANVAS_SCALE);
-  canvas.height = Math.round(window.innerHeight * CANVAS_SCALE);
-  if (gameState === "playing") layoutBricks(); // keep the grid inside the new field
+  if (canvas.width !== GAME_W * CANVAS_SCALE) canvas.width = GAME_W * CANVAS_SCALE;
+  if (canvas.height !== GAME_H * CANVAS_SCALE) canvas.height = GAME_H * CANVAS_SCALE;
+  fitStageCss();
+}
+function fitStageCss() {
+  var fit = Math.min(window.innerWidth / GAME_W, window.innerHeight / GAME_H);
+  var w = Math.round(GAME_W * fit) + "px";
+  var h = Math.round(GAME_H * fit) + "px";
+  if (canvas.style.width !== w) canvas.style.width = w;
+  if (canvas.style.height !== h) canvas.style.height = h;
 }
 window.addEventListener("resize", function () {
-  resizePending = true; // defer the actual rescale to the next frame
+  resizePending = true; // defer the refit to the next frame
 });
 
 // ---- HUD (write-through only when a value changed) ----
@@ -474,10 +490,13 @@ function onBlur() {
 window.addEventListener("keydown", onKeyDown);
 window.addEventListener("keyup", onKeyUp);
 window.addEventListener("blur", onBlur);
-// The canvas CSS footprint equals the viewport, so the client-x
-// transform to internal px folds in the responsive CANVAS_SCALE.
+// The canvas CSS footprint is the letterboxed stage rect, so the
+// client-x -> internal-px transform maps through the bounding rect:
+// a fraction of the visible stage width becomes a fraction of the
+// (constant) backing store width.
 function setPaddleX(clientX) {
-  paddle.x = (clientX / window.innerWidth) * canvas.width;
+  var rect = canvas.getBoundingClientRect();
+  paddle.x = ((clientX - rect.left) / rect.width) * canvas.width;
   clampPaddle();
 }
 canvas.addEventListener("mousemove", function (e) {
@@ -489,8 +508,9 @@ canvas.addEventListener("touchmove", function (e) {
 }, { passive: false });
 
 // ---- Bricks (fixed-size pool, mutated in place across levels) ----
-// Geometry derives from the current canvas size, so the deferred
-// viewport rescale keeps the grid inside the field.
+// Geometry derives from the constant stage size (the backing store
+// never changes after boot), so one layout is stable for the whole
+// run and never needs a re-fit.
 function layoutBricks() {
   var bw = (canvas.width - 2 * BRICK_SIDE_MARGIN - (BRICK_COLS - 1) * BRICK_GAP) / BRICK_COLS;
   for (var i = 0; i < bricks.length; i += 1) {
