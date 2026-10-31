@@ -92,7 +92,8 @@
     text-transform: uppercase;
     color: var(--ink);
   }
-  #btn-start {
+  #btn-start,
+  #btn-resume {
     font-family: inherit;
     font-size: 1rem;
     letter-spacing: 0.2em;
@@ -103,7 +104,8 @@
     padding: 0.7em 1.6em;
     cursor: pointer;
   }
-  #btn-start:hover {
+  #btn-start:hover,
+  #btn-resume:hover {
     background: rgba(92, 242, 176, 0.12);
   }
 </style>
@@ -130,6 +132,12 @@
     <button id="btn-restart" type="button">Try Again</button>
   </section>
 
+  <section class="screen" id="screen-pause">
+    <h1>Paused</h1>
+    <p>The board is holding &middot; Esc or P resumes</p>
+    <button id="btn-resume" type="button">Resume</button>
+  </section>
+
 <script>
 "use strict";
 // ================================================================
@@ -139,8 +147,10 @@
 //
 // Single file: responsive full-viewport canvas with an internal-
 // resolution scale factor, a requestAnimationFrame loop with a
-// clamped frame delta, start / game-over overlay screens, keyboard
-// and pointer paddle control, a served ball with wall and paddle
+// clamped frame delta, start / pause / game-over overlay screens
+// (the pause freezes the whole simulation; resume via the overlay
+// CTA or a fresh Escape/KeyP press), keyboard and pointer paddle
+// control, a served ball with wall and paddle
 // bounces (position-dependent angle, speed-preserving), a fixed-pool
 // brick grid the ball breaks for colour-valued points, level
 // progression on a cleared board (faster serve per level, capped),
@@ -317,6 +327,8 @@ var screenStart = document.getElementById("screen-start");
 var screenOver = document.getElementById("screen-gameover");
 var btnStart = document.getElementById("btn-start");
 var btnRestart = document.getElementById("btn-restart");
+var screenPause = document.getElementById("screen-pause");
+var btnResume = document.getElementById("btn-resume");
 var gameoverFinal = document.getElementById("gameover-final");
 var hudScore = document.getElementById("hud-score");
 var hudLevel = document.getElementById("hud-level");
@@ -324,7 +336,7 @@ var hiscoreEl = document.getElementById("hiscore");
 var livesEl = document.getElementById("lives");
 
 // ---- State ----
-var gameState = "start"; // "start" | "playing" | "gameover"
+var gameState = "start"; // "start" | "playing" | "paused" | "gameover"
 var score = 0;
 var level = 1;
 var highScore = loadHighScore();
@@ -370,6 +382,10 @@ var serveSpeed = BALL_SERVE_SPEED;
 // Auto-repeat keydowns re-add the same code (idempotent), so the
 // set size mirrors the fingers on the deck, not the re-dispatches.
 var keys = { left: new Set(), right: new Set() };
+// Distinct pause keys currently held: mirrors the paddle key sets, so
+// browser auto-repeat re-dispatches of a held Escape/KeyP never re-
+// toggle the pause screen — only a fresh physical press does.
+var pauseKeys = new Set();
 
 // ---- High score (localStorage persistence, PRD section 4) ----
 function loadHighScore() {
@@ -432,7 +448,9 @@ function updatePaddle(dt) {
 }
 function onKeyDown(e) {
   ensureAudio(); // a keydown is a user gesture: build the audio graph once
-  if (e.code === "ArrowLeft" || e.code === "KeyA") {
+  if (e.code === "Escape" || e.code === "KeyP") {
+    onPauseKeyPress(e.code);
+  } else if (e.code === "ArrowLeft" || e.code === "KeyA") {
     keys.left.add(e.code);
     e.preventDefault();
   } else if (e.code === "ArrowRight" || e.code === "KeyD") {
@@ -441,12 +459,15 @@ function onKeyDown(e) {
   }
 }
 function onKeyUp(e) {
-  if (e.code === "ArrowLeft" || e.code === "KeyA") keys.left.delete(e.code);
+  if (e.code === "Escape" || e.code === "KeyP") pauseKeys.delete(e.code);
+  else if (e.code === "ArrowLeft" || e.code === "KeyA") keys.left.delete(e.code);
   else if (e.code === "ArrowRight" || e.code === "KeyD") keys.right.delete(e.code);
 }
 // A blurred window drops its keyups; clear the held sets with it so
-// the paddle cannot keep gliding on ghost keys.
+// the paddle cannot keep gliding on ghost keys and the next Escape
+// press cannot be swallowed as a ghost-held pause key.
 function onBlur() {
+  pauseKeys.clear();
   keys.left.clear();
   keys.right.clear();
 }
@@ -732,6 +753,7 @@ function collideBricks(b) {
 // ---- Flow ----
 function setScreen(which) {
   screenStart.style.display = which === "start" ? "flex" : "none";
+  screenPause.style.display = which === "paused" ? "flex" : "none";
   screenOver.style.display = which === "gameover" ? "flex" : "none";
 }
 function startGame() {
@@ -768,6 +790,36 @@ function beginRun() {
 }
 btnStart.addEventListener("click", startGame);
 btnRestart.addEventListener("click", restartRun);
+// Pause / resume (ticket #24): a state-gated toggle bridging only
+// "playing" <-> "paused"; every other state ignores the pause keys
+// (campaign-1 edge-triggered, state-gated transition precedent).
+// The simulation is frozen for free: frame() runs update(dt) only in
+// "playing", so simTime, paddle, balls and power-ups all stand still
+// while paused, and the next frame after resume moves on.
+function togglePause() {
+  if (gameState === "playing") {
+    gameState = "paused";
+    setScreen("paused");
+  } else if (gameState === "paused") {
+    gameState = "playing";
+    setScreen("playing");
+  }
+}
+// Edge trigger: a keydown counts as one press only if the key is not
+// held already, so browser auto-repeat of a held Escape/KeyP never
+// re-toggles the pause screen.
+function onPauseKeyPress(code) {
+  if (pauseKeys.has(code)) return; // held already: auto-repeat, not a press
+  pauseKeys.add(code);
+  togglePause();
+}
+function resumeGame() {
+  ensureAudio(); // a click is a user gesture: build the audio graph once
+  if (gameState !== "paused") return; // the button only lives on the pause screen
+  gameState = "playing";
+  setScreen("playing");
+}
+btnResume.addEventListener("click", resumeGame);
 
 // ---- Lives / game over ----
 // A fresh serve always parks ONE resting ball at the paddle centre:

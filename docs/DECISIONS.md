@@ -1055,3 +1055,46 @@
   for nothing; `setText` is already change-gated but the call itself is the
   per-frame work the PRD's 60 fps rule discourages), or only in `draw` (wrong
   layer — draw renders, it does not mutate HUD state).
+
+## 2026-10-30 — Ticket #24: pause and resume screen via Escape/P
+
+- **Edge triggering uses a held-key `Set` (`pauseKeys`), not the
+  `KeyboardEvent.repeat` flag.** The paddle suites model browser
+  auto-repeat as plain re-dispatched keydowns with no `repeat`
+  property, and the synthetic dispatch in every bricks suite carries
+  no such flag — a `repeat` check would be untestable here and would
+  leave no home for the blur semantics. `pauseKeys` mirrors the
+  existing `keys.left/right` sets exactly (add on the first keydown of
+  a held code, delete on keyup, `onBlur()` clears it all), so one
+  concept of "finger on the key" covers paddle and pause, and a blur
+  while the key is logically held cannot swallow the next press as a
+  ghost repeat. Alternatives: an `e.repeat`-guarded handler
+  (rejected — synthetic events carry no flag, untestable), or a
+  time-debounced toggle (rejected — timing knobs the PRD never asks
+  for, and a 500 ms window would feel laggy for legitimate rapid
+  pauses).
+- **The `mousemove`/`touchmove` listeners stay state-ungated in
+  "paused", per the recorded pointer decision.** The first draft
+  state-gated `setPaddleX` to `"playing"`, which broke the paddle
+  suite's review-approved contract ("pointer listeners are
+  state-ungated: a canvas mousemove dispatched during 'start' still
+  moves the paddle"). That ruling transfers unchanged: in a real
+  browser the full-viewport pause overlay (`.screen`, `z-index: 3`)
+  occludes the canvas, so no pointer input can actually reach the
+  listeners while paused — the ungated write is a script-layer
+  property, unreachable by a player, and the ticket's soak criterion
+  is frame-driven (no pointer dispatch) and holds. The keyboard side
+  is frozen for free: `updatePaddle` only runs in `"playing"`, so a
+  held arrow key cannot glide the paddle across the pause.
+  Alternatives: gate the pointer writes (rejected — reverses a
+  review-approved decision mid-ticket and adds state the overlay
+  makes inert), or buffer pointer events until resume (extra state, no
+  player-visible benefit, same overlay-occlusion argument as the
+  original ruling).
+- **Either pause key resumes (`KeyP` exits an `Escape` pause and
+  vice versa); the keys are aliases of one action, not two.** The
+  ticket guarantees "the same key" resumes; treating both codes as
+  one toggle (both map to `togglePause` through the shared held set)
+  is simpler and cannot strand a pause that only one of the two keys
+  could close. Alternative: remember which key paused and accept
+  only that one (rejected — bookkeeping for a UX nobody requested).
