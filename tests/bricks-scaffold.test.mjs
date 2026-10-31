@@ -117,7 +117,7 @@ function boot(width, height, storedHigh = null, throwingStorage = false) {
     "gameover-final": makeEl("gameover-final"),
     "hud-score": makeEl("hud-score"),
     "hud-level": makeEl("hud-level"),
-    "hud-high": makeEl("hud-high"),
+    "hiscore": makeEl("hiscore"),
     "lives": makeEl("lives"),
   };
   const winListeners = {};
@@ -381,8 +381,8 @@ check("a stored high score loads from localStorage and shows in the HUD", () => 
   const g = boot(960, 600, "1234");
   g.tick(1);
   assert(g.q("highScore") === 1234, `highScore must load 1234, got ${g.q("highScore")}`);
-  assert(g.els["hud-high"].textContent === "1234",
-    `the HUD must show the high score, got ${JSON.stringify(g.els["hud-high"].textContent)}`);
+  assert(g.els["hiscore"].textContent === "1234",
+    `the HUD must show the high score, got ${JSON.stringify(g.els["hiscore"].textContent)}`);
 });
 
 check("a corrupt stored high score degrades to 0", () => {
