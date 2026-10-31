@@ -378,13 +378,17 @@ check("setPaddleX maps through getBoundingClientRect(), not window.innerWidth, a
   const g = boot(960, 600);
   start(g);
   // The viewport shrank to a tall 480×800 window: the letterboxed
-  // stage is a 480×300 rect centred at top 250. Pointer mapping must
-  // use that rect — and the backing store stays fixed.
+  // stage is a 480×300 rect centred in the window. Pointer mapping
+  // must use that rect — and the backing store stays fixed.
   g.win.innerWidth = 480;
   g.win.innerHeight = 800;
   g.resize();
   g.tick(1);
-  g.setRect({ left: 0, top: 250, width: 480, height: 300 });
+  // Derive the stage rect from the recorded canvas.style writes: the
+  // letterbox size the game actually wrote, centred in the viewport.
+  const w = parseFloat(g.canvas.style.width);
+  const h = parseFloat(g.canvas.style.height);
+  g.setRect({ left: (480 - w) / 2, top: (800 - h) / 2, width: w, height: h });
   assert(g.canvas.width === g.q("GAME_W * CANVAS_SCALE") && g.canvas.height === g.q("GAME_H * CANVAS_SCALE"),
     `the backing store must stay fixed at ${g.q("GAME_W * CANVAS_SCALE")}x${g.q("GAME_H * CANVAS_SCALE")}, got ${g.canvas.width}x${g.canvas.height}`);
   g.mouseMove(120); // inside the rect
@@ -392,6 +396,24 @@ check("setPaddleX maps through getBoundingClientRect(), not window.innerWidth, a
   const want = ((120 - rect.left) / rect.width) * g.canvas.width; // 480
   assertClose(g.paddleX(), want, 1,
     `post-resize mousemove clientX 120 must land the paddle at ${want} px (not (120/480)·width), got ${g.paddleX()}`);
+});
+
+check("a degenerate bounding rect (width 0) never poisons the paddle — the move is ignored and later moves still work", () => {
+  const g = boot(960, 600);
+  start(g);
+  g.mouseMove(100);
+  const before = g.paddleX();
+  assert(Number.isFinite(before), `sanity: paddle must be finite after a normal move, got ${before}`);
+  g.setRect({ left: 0, top: 0, width: 0, height: 0 }); // e.g. rect queried while hidden
+  g.mouseMove(480); // naive mapping divides by rect.width → NaN
+  assert(Number.isFinite(g.paddleX()), `a width-0 rect must not NaN the paddle, got ${g.paddleX()}`);
+  assertClose(g.paddleX(), before, 1e-9,
+    `a degenerate-rect mousemove must leave the paddle alone, got ${g.paddleX()}, want ${before}`);
+  g.setRect({ left: 0, top: 0, width: 960, height: 600 }); // viewport reappears
+  g.mouseMove(100);
+  const want = (100 / 960) * g.canvas.width;
+  assertClose(g.paddleX(), want, 1,
+    `after the rect recovers the mapping must work again, want ${want}, got ${g.paddleX()}`);
 });
 
 check("a mousemove into an offset rect lands the paddle at (clientX - rect.left) / rect.width · canvas.width (clamped)", () => {

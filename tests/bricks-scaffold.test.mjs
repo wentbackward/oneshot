@@ -5,7 +5,8 @@
 //
 // The playfield is a fixed GAME_W×GAME_H (16:10) logical stage whose
 // backing store never follows the viewport; the visible size is the
-// largest 16:10 rectangle fitting the viewport (letterbox fit),
+// largest 16:10 rectangle fitting the viewport (letterbox fit, capped
+// at the native stage size so large monitors never upscale it),
 // written as CSS px and centered by CSS.
 //
 // Same harness style as tests/screens.test.mjs (campaign 1): runs
@@ -202,14 +203,15 @@ function boot(width, height, storedHigh = null, throwingStorage = false) {
 }
 
 // The fixed stage in internal canvas px, and the largest 16:10 CSS
-// size (integer px) that fits a vw×vh viewport — the letterbox fit
-// the resize pass must write.
+// size (integer px) that fits a vw×vh viewport, capped at the native
+// stage size (fit, never upscale) — the letterbox fit the resize pass
+// must write.
 const backing = (g) => ({
   width: g.q("GAME_W") * g.q("CANVAS_SCALE"),
   height: g.q("GAME_H") * g.q("CANVAS_SCALE"),
 });
 const fitted = (g, vw, vh) => {
-  const scale = Math.min(vw / g.q("GAME_W"), vh / g.q("GAME_H"));
+  const scale = Math.min(vw / g.q("GAME_W"), vh / g.q("GAME_H"), 1);
   return {
     width: Math.round(g.q("GAME_W") * scale),
     height: Math.round(g.q("GAME_H") * scale),
@@ -226,6 +228,51 @@ check("GAME_W and GAME_H exist as addressable globals defining a 16:10 stage (96
   const gh = g.q("typeof GAME_H === 'undefined' ? NaN : GAME_H");
   assert(gw === 960 && gh === 600, `GAME_W/GAME_H must be 960/600, got ${gw}/${gh}`);
   assert(gw / gh === 16 / 10, `the stage aspect must be 16:10, got ${gw / gh}`);
+});
+
+// ================================================================
+// Criterion: initial gameState "start", start overlay visible,
+// Start CTA button present
+// ================================================================
+check("boot lands on gameState 'start' with the start overlay visible", () => {
+  const g = boot(960, 600);
+  assert(g.state() === "start", `initial gameState must be "start", got ${g.state()}`);
+  assert(g.els["screen-start"].style.display === "flex",
+    `the start overlay must be visible on boot, display=${JSON.stringify(g.els["screen-start"].style.display)}`);
+});
+
+check("the start screen ships a Start CTA button wired to a click handler", () => {
+  const g = boot(960, 600);
+  const btn = g.els["btn-start"];
+  assert((btn.listeners["click"] ?? []).length === 1,
+    `the Start CTA must register exactly one click handler, got ${btn.listeners["click"]?.length}`);
+  // The markup itself labels the button as a Start action.
+  assert(/<button\b[^>]*id="btn-start"[^>]*>\s*start[^<]*\s*<\/button>/i.test(html),
+    "the <button id=btn-start> markup must carry a Start label");
+});
+
+// ================================================================
+// Criterion: clicking Start -> gameState "playing", overlay hidden
+// ================================================================
+check("clicking the Start button switches to 'playing' and hides the overlay", () => {
+  const g = boot(960, 600);
+  g.tick(2);
+  g.els["btn-start"].click();
+  assert(g.state() === "playing", `the Start click must enter "playing", state is ${g.state()}`);
+  assert(g.els["screen-start"].style.display === "none",
+    `the start overlay must be hidden after Start, display=${JSON.stringify(g.els["screen-start"].style.display)}`);
+  g.tick(30);
+  assert(g.state() === "playing", `the game must stay in "playing" after the rAF loop runs, state is ${g.state()}`);
+});
+
+check("a second Start click during play is a no-op (cannot reset a run)", () => {
+  const g = boot(960, 600);
+  g.els["btn-start"].click();
+  g.q("score = 7; level = 3;");
+  g.els["btn-start"].click();
+  assert(g.state() === "playing", `repeat Start click must not change the state, state is ${g.state()}`);
+  assert(g.q("score") === 7, `repeat Start click must not reset the score, got ${g.q("score")}`);
+  assert(g.q("level") === 3, `repeat Start click must not reset the level, got ${g.q("level")}`);
 });
 
 // ================================================================
@@ -256,14 +303,17 @@ check("shrinking the viewport from 1920×1080 to 320×568 leaves the backing sto
 
 // ================================================================
 // Criterion: letterboxing — the visible size is the largest 16:10
-// rectangle fitting the viewport (fit, not stretch), written as
-// CSS px on the next frame after the resize event
+// rectangle fitting the viewport (fit, not stretch), capped at the
+// native stage size, written as CSS px on the next frame after the
+// resize event
 // ================================================================
-check("on boot the letterbox CSS size is the largest 16:10 fitting the 1920×1080 viewport (1728px × 1080px)", () => {
+check("on boot the letterbox CSS size is capped at the native stage on a 1920×1080 viewport (960px × 600px)", () => {
   const g = boot(1920, 1080);
   const want = fitted(g, 1920, 1080);
+  assert(want.width === 960 && want.height === 600,
+    `the 1920×1080 viewport must cap the fit at the native 960×600 stage, expected ${want.width}×${want.height}`);
   assert(g.canvas.style.width === `${want.width}px` && g.canvas.style.height === `${want.height}px`,
-    `the recorded CSS size must be ${want.width}px × ${want.height}px, got ${g.canvas.style.width} × ${g.canvas.style.height}`);
+    `the recorded CSS size must be ${want.width}px × ${want.height}px (never upscaled past native), got ${g.canvas.style.width} × ${g.canvas.style.height}`);
 });
 
 check("after shrinking to a 320×568 viewport the letterbox is 320px × 200px (tolerance 1px) and never exceeds the viewport", () => {
@@ -284,16 +334,16 @@ check("after shrinking to a 320×568 viewport the letterbox is 320px × 200px (t
 });
 
 check("a resize event updates the letterbox fit on the NEXT frame (deferred, not mid-event)", () => {
-  const g = boot(960, 600); // exact fit: 960px × 600px
+  const g = boot(1920, 1080); // capped: 960px × 600px
   assert(g.canvas.style.width === "960px" && g.canvas.style.height === "600px",
-    `the 960×600 viewport must fit the stage 1:1, got ${g.canvas.style.width} × ${g.canvas.style.height}`);
-  g.win.innerWidth = 1280;
-  g.win.innerHeight = 720;
+    `the capped boot fit must be 960px × 600px, got ${g.canvas.style.width} × ${g.canvas.style.height}`);
+  g.win.innerWidth = 800;
+  g.win.innerHeight = 500;
   g.resize();
   assert(g.canvas.style.width === "960px" && g.canvas.style.height === "600px",
     `resize must not refit mid-event (got ${g.canvas.style.width} × ${g.canvas.style.height})`);
   g.tick(1);
-  const want = fitted(g, 1280, 720);
+  const want = fitted(g, 800, 500);
   assert(g.canvas.style.width === `${want.width}px` && g.canvas.style.height === `${want.height}px`,
     `the next frame must refit to ${want.width}px × ${want.height}px, got ${g.canvas.style.width} × ${g.canvas.style.height}`);
 });
@@ -314,14 +364,14 @@ check("a resize during live play updates only the letterbox fit, leaving the bac
 });
 
 check("a burst of resize events collapses to one letterbox fit per frame", () => {
-  const g = boot(960, 600);
-  g.win.innerWidth = 1024;
-  g.win.innerHeight = 768;
+  const g = boot(1920, 1080); // capped: 960px × 600px
+  g.win.innerWidth = 768;
+  g.win.innerHeight = 480;
   g.resize();
   g.resize();
   g.resize();
   g.tick(1);
-  const want = fitted(g, 1024, 768);
+  const want = fitted(g, 768, 480);
   assert(g.canvas.style.width === `${want.width}px` && g.canvas.style.height === `${want.height}px`,
     `duplicate resize events must converge on ${want.width}px × ${want.height}px, got ${g.canvas.style.width} × ${g.canvas.style.height}`);
 });
