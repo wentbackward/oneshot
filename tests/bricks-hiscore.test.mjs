@@ -6,7 +6,9 @@
 // Same harness style as tests/bricks-scaffold.test.mjs: runs the
 // REAL <script> from bricks.html in a sandboxed vm context with
 // stubbed window/document/localStorage/requestAnimationFrame and
-// DOM element stubs. This suite's storage stub is RECORDING: it
+// DOM element stubs. Like every sibling suite, each boot pins the
+// game's mutable `random` hook so a capsule can never drop by
+// chance mid-test. This suite's storage stub is RECORDING: it
 // backs a plain object (so a "refresh" can re-boot the game onto the
 // same backing store) and logs every getItem/setItem call with its
 // key and value, so tests can assert the exact writes performed.
@@ -167,6 +169,10 @@ function boot(width, height, initialStore = {}) {
   };
   const context = vm.createContext(sandbox);
   vm.runInContext(gameSource, context);
+  // Pin the mutable random hook (like every sibling suite):
+  // random() => 1 makes `random() >= POWERUP_DROP_RATE` always true,
+  // so a destroyed brick can never release an unplanned capsule.
+  vm.runInContext("random = () => 1;", context);
 
   let nowMs = 0;
   const FRAME_MS = 1000 / 60;
@@ -249,6 +255,35 @@ check("a score reaching 600 over stored 500 performs exactly one setItem of JSON
   const parsed = JSON.parse(wValue); // throws if not valid JSON
   assert(Number.isInteger(parsed) && parsed === 600,
     `the written value must be the new score as a JSON number 600, got ${JSON.stringify(wValue)}`);
+});
+
+// syncScore runs once per frame, so EVERY step of the climb past
+// the stored value is a genuine overtake and must produce exactly
+// one write of that step's value (the write pattern the ticket
+// mandates: "whenever score exceeds the stored high score").
+check("a stepped overtake 520 -> 570 -> 620 over stored 500 performs exactly three setItem calls (520, 570, 620) and persists 620", () => {
+  const g = boot(960, 600, { [KEY]: "500" });
+  g.els["btn-start"].click();
+  g.q("score = 520");
+  g.tick(1);
+  g.q("score = 570");
+  g.tick(1);
+  g.q("score = 620");
+  g.tick(1);
+  assert(g.storage.writes.length === 3,
+    `each overtake must rewrite storage, so the stepped climb must produce exactly 3 setItem calls, got ${g.storage.writes.length}: ${JSON.stringify(g.storage.writes)}`);
+  const wanted = [[KEY, "520"], [KEY, "570"], [KEY, "620"]];
+  for (let i = 0; i < 3; i += 1) {
+    assert(g.storage.writes[i][0] === wanted[i][0],
+      `write ${i + 1} must target ${KEY}, got ${JSON.stringify(g.storage.writes[i][0])}`);
+    assert(g.storage.writes[i][1] === wanted[i][1],
+      `write ${i + 1} must be the JSON number ${wanted[i][1]}, got ${JSON.stringify(g.storage.writes[i][1])}`);
+  }
+  assert(g.q("highScore") === 620, `highScore must end at 620, got ${g.q("highScore")}`);
+  assert(g.store[KEY] === "620",
+    `the backing store must end holding "620", got ${JSON.stringify(g.store[KEY])}`);
+  assert(g.els["hiscore"].textContent === "620",
+    `#hiscore must show 620, got ${JSON.stringify(g.els["hiscore"].textContent)}`);
 });
 
 // ================================================================
