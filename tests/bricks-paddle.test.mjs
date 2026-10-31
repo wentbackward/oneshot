@@ -435,13 +435,14 @@ check("off-field tracking clamps: a clientX far right of the rect pins the paddl
 
 check("cursor: none sits on the single-line #game rule (gate-locked), not in a page-wide (html/body) rule", () => {
   const css = html.match(/<style>([\s\S]*?)<\/style>/)[1];
-  // Mirrors the .devloop.json gate: the match must be ONE line carrying
-  // both the #game selector and the declaration, so a page-wide hide,
-  // a comment, or a cursor declaration buried in a multi-line rule can
-  // never satisfy the check.
+  // Mirrors the .devloop.json gate: the match must be ONE line
+  // starting with the #game selector and carrying the declaration on
+  // that same line, so a page-wide hide, a comment, or a cursor
+  // declaration buried in a multi-line rule can never satisfy the
+  // check.
   assert(
-    css.split("\n").some((line) => /#game[\s]*\{[^}]*cursor:[\s]*none/.test(line)),
-    "a single line must carry '#game { ... cursor: none' (the gate's single-line match)"
+    css.split("\n").some((line) => /^\s*#game\s*\{[^}]*cursor:\s*none/.test(line)),
+    "a single line must start with '#game {' and carry 'cursor: none' (the gate's single-line match)"
   );
   const pageRules = [...css.matchAll(/\b(?:html|body)[^{]*\{([^}]*)\}/g)].map((m) => m[1]);
   assert(pageRules.length > 0, "sanity: html/body rules must exist in the stylesheet");
