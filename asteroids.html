@@ -285,9 +285,9 @@
       // Ship-convention wrap margin: a beam re-enters the opposite edge only
       // once it is fully past its own edge by LASER_LENGTH, so the drawn beam
       // (centre ± LASER_LENGTH/2) is never partially visible at the seam.
-      const M = LASER_LENGTH;
-      const perX = w + 2 * M;
-      const perY = h + 2 * M;
+      const WRAP_MARGIN = LASER_LENGTH;
+      const perX = w + 2 * WRAP_MARGIN;
+      const perY = h + 2 * WRAP_MARGIN;
       for (let i = 0; i < laserPool.slots.length; i++) {
         const s = laserPool.slots[i];
         if (!s.active) continue;
@@ -300,10 +300,16 @@
         // remainder. The hit test needs no change — its sweep segment,
         // reconstructed backwards from the wrapped position, lands in the
         // matching copy of the field and covers the entry-side sweep.
-        if (s.x < -M) s.x += perX;
-        else if (s.x > w + M) s.x -= perX;
-        if (s.y < -M) s.y += perY;
-        else if (s.y > h + M) s.y -= perY;
+        // single-period fold (one if/else per axis, not a modulo): valid
+        // while a per-frame displacement stays under one full period,
+        // i.e. LASER_SPEED * MAX_FRAME_SECONDS < w + 2*WRAP_MARGIN —
+        // true at defaults (~23 px vs >= ~40 px) and the same convention
+        // the ship wrap uses; a console-retuned LASER_SPEED far above it
+        // would need the modulo form instead.
+        if (s.x < -WRAP_MARGIN) s.x += perX;
+        else if (s.x > w + WRAP_MARGIN) s.x -= perX;
+        if (s.y < -WRAP_MARGIN) s.y += perY;
+        else if (s.y > h + WRAP_MARGIN) s.y -= perY;
         // Recycling is driven by the sim-time lifetime, not by leaving the
         // field: on the wrapped screen a beam has nowhere to leave to.
         s.age += dt;
