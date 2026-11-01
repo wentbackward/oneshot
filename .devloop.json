@@ -10,7 +10,7 @@
     "grep -qi 'monospace' bricks.html",
     "[ \"$(grep -cE '(src|href)=' bricks.html)\" -eq 0 ]",
     "grep -qE '^[[:space:]]*#game[[:space:]]*\\{[^}]*cursor:[[:space:]]*none' bricks.html",
-    "for f in tests/bricks-*.test.mjs; do node \"$f\" || exit 1; done"
+    "for f in tests/bricks-*.test.mjs; do timeout 60 node \"$f\" || exit 1; done"
   ],
   "heavy": { "slots": 2 },
   "stop_gate": { "require_clean_tree": true, "max_blocks": 5 },
