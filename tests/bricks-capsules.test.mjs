@@ -361,10 +361,10 @@ check("while the multiplier is armed, destroying a tier-A brick adds POINTS_BRIC
   dropKindAndCatch(g, first, g.q("KIND_MULTIPLIER"));
   assert(g.multUntil() > g.simTime(), "setup: the window is armed");
   const victim = g.firstBreakableIndex(0);
-  assert(victim !== null && victim.i !== first.i, "setup: a second tier-A brick is alive");
+  assert(victim !== null && victim !== first, "setup: a second tier-A brick is alive");
   pinNoDrop(g); // this kill must not release an interfering capsule
   const before = g.score();
-  kill(g, victim.i);
+  kill(g, victim);
   assert(g.score() - before === pts * m,
     `an armed-tier-A kill must credit POINTS_BRICK_A * MULT_VALUE (${pts * m}), credited ${g.score() - before}`);
 });
@@ -388,7 +388,7 @@ check("after the multiplier window elapses, destroying a tier-A brick adds POINT
   assert(victim !== null, "setup: a tier-A brick is still alive");
   pinNoDrop(g);
   const before = g.score();
-  kill(g, victim.i);
+  kill(g, victim);
   assert(g.score() - before === pts,
     `an unarmed tier-A kill must credit plain POINTS_BRICK_A (${pts}), credited ${g.score() - before}`);
 });
