@@ -263,6 +263,10 @@ check("coast decay is framerate-independent (equal sim time -> equal speed at 15
   for (const g of [a, b]) {
     stillShip(g);
     g.q("ship.vx = 0; ship.vy = 150");
+    // The first rAF frame always carries dt = 0 (no previous
+    // timestamp), so consume it before measuring; both histories
+    // lose exactly this one no-op frame.
+    g.tickFrame(15);
   }
   for (let i = 0; i < 60; i++) a.tickFrame(15); // 0.6 s at 66.6 fps
   for (let i = 0; i < 30; i++) b.tickFrame(30); // 0.6 s at 33.3 fps
