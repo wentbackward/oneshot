@@ -39,6 +39,10 @@
     const SHIP_RADIUS = 14;      // px, hull size and wrap margin
     var ENGINE_FLAME_MIN_PX = 6;   // px, shortest flicker of the held-thrust engine flame
     var ENGINE_FLAME_MAX_PX = 16;  // px, longest flicker of the held-thrust engine flame
+    // Shared amber of the impact fragments and the engine flame: the
+    // flame is meant to read as the same material as the debris it
+    // throws, so both draw paths take their colour from this one knob.
+    var AMBER_FRAGMENT = "#fbbf24";
     var LASER_COOLDOWN_MS = 150; // ms between shots while Space is held
     var LASER_SPEED = 700;        // px/s along the ship's heading
     const LASER_POOL_SIZE = 32;   // pre-allocated laser slots, recycled (never reallocated)
@@ -885,7 +889,7 @@
           ctx.lineTo(-SHIP_RADIUS * 0.4 - len, 0); // the flickering tip
           ctx.lineTo(-SHIP_RADIUS * 0.4, -SHIP_RADIUS * 0.35);
           ctx.closePath();
-          ctx.fillStyle = "#fbbf24"; // same amber as the impact fragments
+          ctx.fillStyle = AMBER_FRAGMENT; // same amber as the impact fragments
           ctx.fill();
           ctx.stroke();
         }
@@ -913,7 +917,7 @@
       }
 
       // Particles: 4 px amber fragments fading over their short life.
-      ctx.fillStyle = "#fbbf24";
+      ctx.fillStyle = AMBER_FRAGMENT;
       for (const p of particlePool.slots) {
         if (!p.active) continue;
         ctx.globalAlpha = 1 - p.age / PARTICLE_LIFE_S;
