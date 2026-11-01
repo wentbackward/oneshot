@@ -193,7 +193,7 @@ function boot(width = 960, height = 600) {
       const cols = q("BRICK_COLS");
       return q(`(() => {
         const t = bricks[${row * cols + col}];
-        return { active: t.active, tier: t.tier, x: t.x, y: t.y, w: t.w, h: t.h };
+        return { active: t.active, tier: t.tier, hp: t.hp, x: t.x, y: t.y, w: t.w, h: t.h };
       })()`);
     },
     canvasClick() {
@@ -231,15 +231,28 @@ function winLevel(g) {
 }
 
 // Park a fresh ball just below the brick's underside, rising
-// straight at 300 px/s, and tick until the strike lands. Only the
-// bottom row has open space beneath it, so callers target that row.
+// straight at 480 px/s: one frame travels 8 px, so a ball parked
+// 2 px below the underside contacts within exactly one frame. The
+// ball reflects and falls away after the strike, so one call lands
+// exactly ONE hit — a multi-hit brick (ticket #42) needs one parked
+// strike per hp point. Only the bottom row has open space beneath
+// it, so callers target that row.
 function strikeBrick(g, row, col) {
+  const cols = g.q("BRICK_COLS");
+  const idx = row * cols + col;
   const b = g.brickAt(row, col);
+  if (!b.active) return g.brickAt(row, col);
+  const hp0 = b.hp;
   g.q(`balls[0].attached = false;
        balls[0].x = ${b.x + b.w / 2};
-       balls[0].y = ${b.y + b.h} + BALL_RADIUS + 9;
-       balls[0].vx = 0; balls[0].vy = -300;`);
-  for (let f = 0; f < 8 && g.activeCount() === g.grid(); f += 1) g.tick(1);
+       balls[0].y = ${b.y + b.h} + BALL_RADIUS + 2;
+       balls[0].vx = 0; balls[0].vy = -480;`);
+  for (
+    let f = 0;
+    f < 8 && g.q(`bricks[${idx}].active && bricks[${idx}].hp === ${hp0}`);
+    f += 1
+  )
+    g.tick(1);
   return g.brickAt(row, col);
 }
 
@@ -309,19 +322,27 @@ check("at least three brick colours map to named per-colour point constants", ()
 // colour's point value to the score, reflects the ball, and the
 // top-bar score element mirrors the exact value
 // ================================================================
-check("a ball striking a brick destroys it in one hit and reflects", () => {
+check("a ball striking a two-hit brick reflects, and destroys only on the final strike", () => {
   const g = boot(960, 600);
   start(g);
   const before = g.activeCount();
   const b = strikeBrick(g, 4, 2);
-  assert(b.active === false, "the struck brick must be destroyed");
-  assert(g.activeCount() === before - 1,
-    `exactly one brick may be destroyed, active=${g.activeCount()} want ${before - 1}`);
+  assert(b.active === true, "a single strike of a two-hit brick must not destroy it");
+  assert(b.hp === g.q("BRICK_TIERS[1].hp") - 1,
+    `the non-lethal strike must cost exactly one hp, got ${b.hp}`);
+  assert(g.activeCount() === before && g.score() === 0,
+    "the non-lethal strike must destroy nothing and credit nothing");
   const n = g.ball();
   assert(n.attached === false, "the ball must still be in flight after the bounce");
   assert(n.vy > 0, `the ball must reflect back down off the brick's underside, vy=${n.vy}`);
   assert(g.brickAt(4, 1).active && g.brickAt(4, 3).active,
     "neighbour bricks must survive the strike");
+  const b2 = strikeBrick(g, 4, 2);
+  assert(b2.active === false, "the second strike must destroy the brick");
+  assert(g.activeCount() === before - 1,
+    `exactly one brick may be destroyed in total, active=${g.activeCount()} want ${before - 1}`);
+  assert(g.score() === g.q("BRICK_TIERS[1].points"),
+    `the score must be credited once, on the lethal strike, got ${g.score()}`);
 });
 
 check("destroying a brick adds exactly that colour's point value and mirrors it in the top-bar score element", () => {
@@ -330,9 +351,11 @@ check("destroying a brick adds exactly that colour's point value and mirrors it 
   const tier = g.brickAt(4, 5).tier;
   const points = g.q(`BRICK_TIERS[${tier}].points`);
   assert(g.score() === 0, "setup: score starts at 0");
-  strikeBrick(g, 4, 5);
+  strikeBrick(g, 4, 5); // first: non-lethal
+  assert(g.score() === 0, "the non-lethal first strike must credit nothing");
+  strikeBrick(g, 4, 5); // second: lethal
   assert(g.score() === points,
-    `the score must rise by exactly the struck colour's value (${points}), got ${g.score()}`);
+    `the score must rise by exactly the struck colour's value (${points}) once, got ${g.score()}`);
   assert(g.els["hud-score"].textContent === String(points),
     `#hud-score must read ${points}, got ${JSON.stringify(g.els["hud-score"].textContent)}`);
 });
@@ -343,8 +366,11 @@ check("score accrues exactly per colour across the grid and the HUD mirrors the 
   const cols = g.q("BRICK_COLS");
   const pts = (row, col) => g.q(`BRICK_TIERS[bricks[${row * cols + col}].tier].points`);
   const tierObj = (row, col) => g.q(`BRICK_TIERS[bricks[${row * cols + col}].tier]`);
-  // One physics strike (bottom row), then two direct kills of the two
-  // remaining tiers through the same destroyBrick path.
+  // One physics strike per hp point (ticket #42): the struck bottom
+  // brick is two-hit, so it takes two parked strikes; then two direct
+  // kills of the two remaining tiers through the same destroyBrick
+  // path.
+  strikeBrick(g, 4, 5);
   strikeBrick(g, 4, 5);
   const s1 = pts(4, 5);
   g.q("destroyBrick(0)");            // top row, another tier
@@ -386,9 +412,27 @@ check("side hit: collideBricks reflects horizontally — vx flips, vy untouched,
   const n = g.ball();
   assert(n.vx === -250, `vx must flip to exactly -250, got ${n.vx}`);
   assert(n.vy === 0, `vy must stay untouched at 0, got ${n.vy}`);
-  assert(n.x === b.x - r, `the ball must be pinned to the brick's left face, x=${n.x} want ${b.x - r}`);
+  assert(Math.abs(n.x - (b.x - r)) < 1e-5,
+    `the ball must be pinned to the brick's left face, x=${n.x} want ${b.x - r}`);
   assert(n.y === b.y + b.h / 2, `y must be unchanged, got ${n.y}`);
-  assert(g.brickAt(4, 0).active === false, "the struck brick must be destroyed");
+  const d = g.brickAt(4, 0);
+  assert(d.active === true, "the first strike of a two-hit brick is non-lethal");
+  assert(d.hp === g.q("BRICK_TIERS[1].hp") - 1,
+    `the non-lethal strike must cost exactly one hp, got ${d.hp}`);
+  assert(g.score() === 0, "the non-lethal strike must credit nothing");
+  // Second strike: a frame boundary must elapse first (the
+  // per-brick, per-frame damage cap charges one hp per frame),
+  // then re-park the same fixture and destroy for real.
+  g.q("update(MAX_FRAME_SECONDS)");
+  g.q(`balls[0].attached = false;
+       balls[0].x = ${b.x} - BALL_RADIUS + 0.5;
+       balls[0].y = ${b.y + b.h / 2};
+       balls[0].vx = 250; balls[0].vy = 0;`);
+  const hit2 = g.q("collideBricks(balls[0])");
+  assert(hit2 === true, "the second side contact must register as a hit");
+  assert(g.brickAt(4, 0).active === false, "the second strike must destroy the brick");
+  assert(g.score() === g.q("BRICK_TIERS[1].points"),
+    `the score must credit the tier's points exactly once, got ${g.score()}`);
   assert(g.activeCount() === g.grid() - 1, "exactly one brick may be destroyed");
   assert(g.brickAt(4, 1).active, "the neighbouring brick must survive");
 });
@@ -407,22 +451,43 @@ check("near-corner hit: collideBricks resolves the shallowest axis — exactly o
   const hit = g.q("collideBricks(balls[0])");
   assert(hit === true, "the near-corner contact must register as a hit");
   const n = g.ball();
-  assert(n.x === b.x - r, `x must be pinned to the shallow (side) face, x=${n.x} want ${b.x - r}`);
+  assert(Math.abs(n.x - (b.x - r)) < 1e-5,
+    `x must be pinned to the shallow (side) face, x=${n.x} want ${b.x - r}`);
   assert(n.y === yPlaced, `y must be unchanged on a side resolution, got ${n.y}`);
   assert(n.vx === -200 && n.vy === -250,
     `exactly one axis may flip (the shallow, horizontal one): got vx=${n.vx} vy=${n.vy}`);
   assertClose(Math.hypot(n.vx, n.vy), speedBefore, 1e-9, "the incoming speed must be preserved");
-  assert(g.brickAt(4, 0).active === false, "the struck brick must be destroyed");
+  const d = g.brickAt(4, 0);
+  assert(d.active === true, "the first strike of a two-hit brick is non-lethal");
+  assert(d.hp === g.q("BRICK_TIERS[1].hp") - 1,
+    `the non-lethal strike must cost exactly one hp, got ${d.hp}`);
+  assert(g.score() === 0, "the non-lethal strike must credit nothing");
+  // Second strike: a frame boundary must elapse first (the
+  // per-brick, per-frame damage cap charges one hp per frame),
+  // then re-park the same fixture and destroy for real.
+  g.q("update(MAX_FRAME_SECONDS)");
+  g.q(`balls[0].attached = false;
+       balls[0].x = ${b.x} - BALL_RADIUS + 0.2;
+       balls[0].y = ${b.y + b.h} + BALL_RADIUS - 0.8;
+       balls[0].vx = 200; balls[0].vy = -250;`);
+  const hit2 = g.q("collideBricks(balls[0])");
+  assert(hit2 === true, "the second near-corner contact must register as a hit");
+  assert(g.brickAt(4, 0).active === false, "the second strike must destroy the brick");
+  assert(g.score() === g.q("BRICK_TIERS[1].points"),
+    `the score must credit the tier's points exactly once, got ${g.score()}`);
   assert(g.activeCount() === g.grid() - 1, "exactly one brick may be destroyed");
 });
 
 // ================================================================
-// Review finding 1 (round 2): a side hit at row centre resolves
-// along x and pins the ball to the brick face — but the brick gap
-// is narrower than the ball, so the push-out position can
-// land inside the seam neighbour. The sub-step loop must drain
-// residual overlap after a hit (resolve until collideBricks(balls[0])
-// returns false), locking: no live overlap at end of frame.
+// Review finding 1 (round 2) + ticket #42 round 2: a side hit at
+// row centre resolves and pins the ball in the seam (the gap is
+// narrower than the ball). With one-hit bricks the drain ended by
+// destroying both seam bricks; with multi-hit bricks the seam
+// members survive, so the drain must be BOUNDED (ping-pong between
+// mutually-exclusive pin faces would otherwise spin forever). The
+// lock: the frame terminates with the ball in flight, exactly one
+// hp per seam brick, and residual overlap confined to the
+// documented seam artifact.
 // ================================================================
 function liveOverlapCount(g) {
   // Counts active bricks whose rect overlaps the ball, using the
@@ -440,7 +505,7 @@ function liveOverlapCount(g) {
   })()`);
 }
 
-check("row-centre side hit: the sub-step loop drains residual overlap — no live overlap at end of frame", () => {
+check("row-centre side hit: the wedge frame terminates — bounded drain, accounted hp, residual seam overlap ≤ 1", () => {
   const g = boot(960, 600);
   start(g);
   const gap = g.q("BRICK_GAP");
@@ -463,22 +528,38 @@ check("row-centre side hit: the sub-step loop drains residual overlap — no liv
 
   g.q(`update(${frame})`);
 
+  // Multi-hit tiers change the wedge outcome: the seam bricks no
+  // longer die in the wedge frame — each may spend at most one hp
+  // (per-brick, per-frame damage cap), and the ball cannot clear
+  // both seam faces in a gap narrower than itself, so the drain
+  // rescan-caps (MAX_BRICK_RESCANS_PER_SUBSTEP). The regression
+  // lock is TERMINATION + accounting: the frame ends, the ball is
+  // in flight at full speed, each seam brick lost exactly one hp,
+  // nothing else moved, and the residual overlap is the bounded,
+  // documented seam artifact (≤ 1 seam-member brick).
   const left = g.brickAt(4, 4);
-  assert(left.active === false,
-    "the overlapped seam brick (col 4) must be resolved by the frame");
-  assert(g.brickAt(4, 5).active === false,
-    "the second seam brick (col 5) must be resolved by the drain");
+  const right = g.brickAt(4, 5);
+  const hpB = g.q("BRICK_TIERS[1].hp");
+  assert(left.active && right.active,
+    "the two seam bricks must survive the wedge frame");
+  assert(left.hp === hpB - 1,
+    `the overlapped seam brick (col 4) must lose exactly one hp, got ${left.hp}`);
+  assert(right.hp === hpB - 1,
+    `the second seam brick (col 5) must lose exactly one hp, got ${right.hp}`);
   assert(g.brickAt(4, 3).active && g.brickAt(4, 6).active,
     "untouched neighbours must survive");
-  assert(g.activeCount() === g.grid() - 2,
-    `exactly the two seam bricks may be gone, active=${g.activeCount()} want ${g.grid() - 2}`);
-  // The regression lock: the frame must end with the ball clear of
-  // every live brick (a single-hit frame leaves the seam overlap
-  // behind and pops the neighbour a frame early).
-  assert(liveOverlapCount(g) === 0,
-    `no live brick may overlap the ball at end of frame, found ${liveOverlapCount(g)}`);
+  assert(g.brickAt(4, 3).hp === hpB && g.brickAt(4, 6).hp === hpB,
+    "untouched neighbours must keep full hp");
+  assert(g.activeCount() === g.grid(),
+    `nothing may be destroyed by the wedge frame, active=${g.activeCount()} want ${g.grid()}`);
+  assert(g.score() === 0, "the non-lethal wedge frame must credit nothing");
+  const residual = liveOverlapCount(g);
+  assert(residual <= 1,
+    `at most the one documented seam-artifact overlap may remain, found ${residual}`);
   const n = g.ball();
   assert(n.attached === false, "the ball must still be in flight");
+  assert(Math.abs(n.vx) === 250 && n.vy === 0,
+    `the ball must keep flying at the incoming speed, got vx=${n.vx} vy=${n.vy}`);
 });
 
 // ================================================================
@@ -488,7 +569,7 @@ check("row-centre side hit: the sub-step loop drains residual overlap — no liv
 // destroyed and the ball reflected. A naive one-step-integration
 // implementation skips the target row entirely and fails this.
 // ================================================================
-check("tunnelling: a ball at the top-level max speed that skips a brick row in one clamped frame still destroys the brick and reflects", () => {
+check("tunnelling: a ball at the top-level max speed that skips a brick row in one clamped frame still strikes the brick and reflects", () => {
   const g = boot(960, 600);
   start(g);
   const TOP_LEVEL = 10; // level whose serve speed reaches the cap
@@ -517,12 +598,15 @@ check("tunnelling: a ball at the top-level max speed that skips a brick row in o
        balls[0].vx = 0; balls[0].vy = -${topSpeed};`);
   g.q(`update(${frame})`);
 
-  assert(g.brickAt(SEED_ROW, SEED_COL).active === false,
-    `the seed brick (row ${SEED_ROW}, col ${SEED_COL}) must be destroyed within the single clamped frame`);
+  assert(g.brickAt(SEED_ROW, SEED_COL).active === true,
+    `a single strike of a two-hit brick must not destroy it within the clamped frame`);
+  assert(g.brickAt(SEED_ROW, SEED_COL).hp === g.q("BRICK_TIERS[1].hp") - 1,
+    `the tunnelling pass must cost the seed brick exactly one hit, hp=${g.brickAt(SEED_ROW, SEED_COL).hp}`);
   const n = g.ball();
   assert(n.vy > 0, `the ball must reflect off the brick, vy=${n.vy}`);
-  assert(g.activeCount() === g.grid() - 1,
-    `exactly one brick may be destroyed by the tunnelling pass, active=${g.activeCount()}`);
+  assert(g.activeCount() === g.grid(),
+    `no brick may be destroyed by a single non-lethal strike, active=${g.activeCount()}`);
+  assert(g.score() === 0, "the non-lethal strike must credit nothing");
 });
 
 // ================================================================

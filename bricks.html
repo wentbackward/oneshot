@@ -199,6 +199,11 @@ var BALL_SERVE_SPEED = 480;       // level-1 launch speed on click/tap, px/s
 var LEVEL_SPEED_GROWTH = 1.15;    // per-level serve-speed multiplier (PRD section 4)
 var MAX_BALL_SPEED = 1500;        // ceiling the per-level growth caps at, px/s
 var MAX_PADDLE_BOUNCE_ANGLE = Math.PI / 3;  // 60 deg from vertical at the rim
+// Pin nudge: when collideBricks pins a ball flush to a brick face it
+// nudges it this far OUTSIDE, so a re-computed overlap of the pinned
+// position is strictly zero — a flush pin can never re-register as
+// (ULP-rounding-dependent) contact on a LATER frame.
+var BRICK_PIN_EPS = 1e-6;
 // Bricks: grid geometry (internal canvas px) over a fixed-size pool
 var BRICK_ROWS = 5;
 var BRICK_COLS = 10;
@@ -206,19 +211,50 @@ var BRICK_SIDE_MARGIN = 24;
 var BRICK_TOP_MARGIN = 64;
 var BRICK_GAP = 6;
 var BRICK_HEIGHT = 26;
-// Brick colours map to named per-colour point values (PRD section 2);
-// every brick is one-hit (ticket #22), so the colour encodes the value.
+// Hard bound on the post-hit seam drain in updateBalls(). With
+// multi-hit bricks (ticket #42) a ball wedged in a gap narrower
+// than itself can ping-pong between the two seam faces forever:
+// clearing the left neighbour needs the centre at
+// leftRightFace + R or beyond, clearing the right neighbour needs
+// it at rightLeftFace - R or below, and the two bounds are
+// 2*R - GAP apart with 2*R > GAP — no position satisfies both.
+// The drain therefore rescan-caps at one-plus-the-pool-size;
+// residual overlap past the cap is the documented seam artifact,
+// never a busy loop.
+var MAX_BRICK_RESCANS_PER_SUBSTEP = BRICK_ROWS * BRICK_COLS + 1;
+// Brick colours map to named per-colour point values (PRD section 2)
+// and per-colour durability (ticket #42): the top tier is
+// multi-hit, the base tier is one-hit, so a colour still encodes
+// exactly one point value.
 var COLOR_BRICK_A = "#ef5d62";
 var POINTS_BRICK_A = 30;
 var COLOR_BRICK_B = "#f2a541";
 var POINTS_BRICK_B = 20;
 var COLOR_BRICK_C = "#4fc1e9";
 var POINTS_BRICK_C = 10;
+// Per-tier hit points to break (ticket #42): the top tier takes the
+// most hits, the base tier still dies in one.
+var HP_BRICK_A = 3;
+var HP_BRICK_B = 2;
+var HP_BRICK_C = 1;
 var BRICK_TIERS = [
-  { color: COLOR_BRICK_A, points: POINTS_BRICK_A },
-  { color: COLOR_BRICK_B, points: POINTS_BRICK_B },
-  { color: COLOR_BRICK_C, points: POINTS_BRICK_C }
+  { color: COLOR_BRICK_A, points: POINTS_BRICK_A, hp: HP_BRICK_A },
+  { color: COLOR_BRICK_B, points: POINTS_BRICK_B, hp: HP_BRICK_B },
+  { color: COLOR_BRICK_C, points: POINTS_BRICK_C, hp: HP_BRICK_C }
 ];
+// Damaged fill of a tier colour: a non-lethal hit dims the brick in
+// place. Channels scaled down by BRICK_DARK_FACTOR, computed once at
+// module load — the hit and draw paths never allocate.
+var BRICK_DARK_FACTOR = 0.45;
+function darkenHex(hex, factor) {
+  var out = "#";
+  for (var i = 1; i < hex.length; i += 2) {
+    out += Math.round(parseInt(hex.slice(i, i + 2), 16) * factor)
+      .toString(16).padStart(2, "0");
+  }
+  return out;
+}
+BRICK_TIERS.forEach(function (t) { t.dark = darkenHex(t.color, BRICK_DARK_FACTOR); });
 // Power-ups (PRD section 4): capsules released by destroyed bricks
 var POWERUP_DROP_RATE = 0.25;      // chance per destroyed brick, rolled via `random`
 var CAPSULE_FALL_SPEED = 200;      // descent speed, px/s
@@ -382,10 +418,15 @@ var stickyUntil = -1;              // simTime at which the sticky catch expires;
                                    // absolute clock, so a mid-run re-serve
                                    // inside the window leaves it armed
 // Brick pool: allocated once at this size and reused in place for
-// every level, so the grid never allocates on a level spawn.
+// every level, so the grid never allocates on a level spawn. hp is
+// the per-brick durability remaining; spawnLevel() refills it from
+// the tier table (ticket #42). charged is the per-frame damage
+// flag: a brick may cost at most one hp per frame, regardless of
+// how many times the seam drain loop re-resolves it in that frame;
+// update() clears it at frame end.
 var bricks = [];
 for (var i = 0; i < BRICK_ROWS * BRICK_COLS; i += 1) {
-  bricks.push({ active: false, tier: 0, x: 0, y: 0, w: 0, h: 0 });
+  bricks.push({ active: false, tier: 0, hp: 0, charged: false, x: 0, y: 0, w: 0, h: 0 });
 }
 var bricksLeft = 0;               // live bricks, kept as an O(1) win check
 // Runtime serve speed: reset to BALL_SERVE_SPEED at (re)start, grown
@@ -561,14 +602,16 @@ function spawnLevel() {
   for (var i = 0; i < bricks.length; i += 1) {
     var row = Math.floor(i / BRICK_COLS);
     bricks[i].tier = (row + shift) % BRICK_TIERS.length;
+    bricks[i].hp = BRICK_TIERS[bricks[i].tier].hp; // full durability
+    bricks[i].charged = false;
     bricks[i].active = true;
   }
   bricksLeft = bricks.length;
   layoutBricks();
 }
-// One kill path shared by the physics hit and console access: a
-// brick is destroyed in one hit, credits exactly its tier's points,
-// and the final brick wins the level.
+// One kill path shared by the lethal physics hit and console
+// access: a brick is destroyed outright, credits exactly its
+// tier's points, and the final brick wins the level.
 function destroyBrick(index) {
   var b = bricks[index];
   if (!b.active) return;
@@ -714,8 +757,14 @@ function updateBalls(dt) {
         bricked = true;
         // The gap is narrower than the ball: pinning to a brick face
         // can land the ball inside the seam neighbour. Drain the
-        // residual overlap now so the frame ends clear of the grid.
-        while (collideBricks(b)) { /* resolved */ }
+        // residual overlap now. Bounded: in a seam the two pin faces
+        // are mutually exclusive (ball wider than gap), so a wedged
+        // ball can cycle the pins forever — a physically-wrong
+        // position, but the frame must end (ticket #42 round 2).
+        var rescans = 0;
+        while (rescans < MAX_BRICK_RESCANS_PER_SUBSTEP && collideBricks(b)) {
+          rescans += 1;
+        }
         break;
       }
     }
@@ -778,7 +827,19 @@ function bounceWalls(b) {
 // Circle vs brick overlap resolved along the shallowest axis; the
 // sign-based flip preserves the incoming speed exactly. One brick
 // per call (the first contact in pool order); the sub-step loop
-// drains follow-on seam overlaps after a hit.
+// drains follow-on seam overlaps after a hit. Multi-hit tiers
+// (ticket #42): a brick may pay at most ONE hp per frame — the
+// charge flag (cleared in update() at frame end) makes same-frame
+// re-contacts resolve the overlap but cost no further hp. A
+// non-lethal hit reflects the ball normally but scores nothing,
+// drops nothing and leaves bricksLeft untouched; only the lethal
+// hit routes to destroyBrick().
+//
+// NOTE: a charged brick still RESOLVES (reflect + pin) on re-contact.
+// In a seam narrower than the ball the two pin faces are mutually
+// exclusive (the ball cannot clear both neighbours at once), so the
+// drain must be bounded by MAX_BRICK_RESCANS_PER_SUBSTEP or a wedged
+// ball would cycle the pins forever (ticket #42 review round 2).
 function collideBricks(b) {
   for (var i = 0; i < bricks.length; i += 1) {
     var k = bricks[i];
@@ -790,12 +851,20 @@ function collideBricks(b) {
     if (ovx <= 0 || ovy <= 0) continue;
     if (ovx < ovy) {
       b.vx = b.x < cx ? -Math.abs(b.vx) : Math.abs(b.vx);
-      b.x = b.x < cx ? k.x - BALL_RADIUS : k.x + k.w + BALL_RADIUS;
+      b.x = b.x < cx
+        ? k.x - BALL_RADIUS - BRICK_PIN_EPS
+        : k.x + k.w + BALL_RADIUS + BRICK_PIN_EPS;
     } else {
       b.vy = b.y < cy ? -Math.abs(b.vy) : Math.abs(b.vy);
-      b.y = b.y < cy ? k.y - BALL_RADIUS : k.y + k.h + BALL_RADIUS;
+      b.y = b.y < cy
+        ? k.y - BALL_RADIUS - BRICK_PIN_EPS
+        : k.y + k.h + BALL_RADIUS + BRICK_PIN_EPS;
     }
-    destroyBrick(i);
+    if (!k.charged) {
+      k.charged = true; // spent this frame's single damage charge
+      k.hp -= 1;
+      if (k.hp <= 0) destroyBrick(i);
+    }
     return true;
   }
   return false;
@@ -959,6 +1028,9 @@ function update(dt) {
   updatePaddle(dt);
   updateBalls(dt);
   updatePowerups(dt);
+  // Frame end: reset the per-brick damage charges so the next
+  // frame's contacts can cost hp again (ticket #42 cap).
+  for (var i = 0; i < bricks.length; i += 1) bricks[i].charged = false;
 }
 function draw() {
   ctx.fillStyle = COLOR_BG;
@@ -975,7 +1047,10 @@ function drawBricks() {
   for (var i = 0; i < bricks.length; i += 1) {
     var b = bricks[i];
     if (!b.active) continue;
-    ctx.fillStyle = BRICK_TIERS[b.tier].color;
+    // Damaged bricks (hp below the tier's full hp) paint the dimmed
+    // variant of their tier colour; full-hp bricks — including every
+    // one-hit brick — render exactly as before.
+    ctx.fillStyle = b.hp < BRICK_TIERS[b.tier].hp ? BRICK_TIERS[b.tier].dark : BRICK_TIERS[b.tier].color;
     ctx.fillRect(b.x, b.y, b.w, b.h);
   }
 }
