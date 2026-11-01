@@ -222,6 +222,7 @@ check("60 held-thrust frames flicker: >=2 distinct lengths, all within [MIN, MAX
   const sr = g.q("SHIP_RADIUS");
   const min = g.q("ENGINE_FLAME_MIN_PX");
   const max = g.q("ENGINE_FLAME_MAX_PX");
+  g.key("ArrowUp", true);
   // The flame tip sits at x = -0.4*SHIP_RADIUS - len, so the drawn
   // extent recovers len directly from the recorded coordinates.
   const base = 0.4 * sr;
