@@ -30,10 +30,13 @@
     // ================================================================
     // "var" on purpose: these are the runtime tuning knobs — reassigning
     // them from the DevTools console must work (accepted behavior).
-    var THRUST = 420;          // px/s^2 applied along the ship's heading
-    var FRICTION = 0.90;       // per-frame velocity retention at 60 fps (framerate-independent)
+    var THRUST = 420;               // px/s^2 applied along the ship's heading while thrust is held
+    var SHIP_MAX_SPEED = 220;       // px/s, top speed the held-thrust ramp levels off at
+    var SHIP_SPEED_EPS = 1;         // px/s, tolerance band for "at the cap"
+    var SHIP_COAST_FRICTION = 0.95; // per-frame velocity retention at 60 fps while coasting (framerate-independent)
+    var COAST_SETTLE_S = 2.0;       // s — from max speed, the coast must snap to rest within this (holds for SHIP_COAST_FRICTION + STOP_SPEED)
     var TURN_SPEED = 3.6;      // rad/s of rotation while turning
-    const BASE_FPS = 60;         // reference rate that FRICTION is defined against
+    const BASE_FPS = 60;         // reference rate that SHIP_COAST_FRICTION is defined against
     const STOP_SPEED = 1;        // px/s — below this the ship snaps to stillness
     const MAX_FRAME_SECONDS = 1 / 30; // clamp long frames (tab switches) to avoid teleporting
     const SHIP_RADIUS = 14;      // px, hull size and wrap margin
@@ -794,16 +797,26 @@
           (keys.has("ArrowLeft") || keys.has("KeyA") ? 1 : 0);
         ship.heading += turn * TURN_SPEED * dt;
 
-        // Thrust: up or W accelerates along the current heading.
+        // Held thrust: accelerate along the current heading, ramping the
+        // speed toward SHIP_MAX_SPEED — hold longer, fly faster.
         if (keys.has("ArrowUp") || keys.has("KeyW")) {
           ship.vx += Math.cos(ship.heading) * THRUST * dt;
           ship.vy += Math.sin(ship.heading) * THRUST * dt;
+          const speed = Math.sqrt(ship.vx * ship.vx + ship.vy * ship.vy);
+          if (speed > SHIP_MAX_SPEED) {
+            // Cap the speed at the top, preserving the travel direction.
+            const scale = SHIP_MAX_SPEED / speed;
+            ship.vx *= scale;
+            ship.vy *= scale;
+          }
+        } else {
+          // Coast: velocity (not position) decays framerate-independently,
+          // so a released ship glides along its bearing and settles to
+          // rest within COAST_SETTLE_S via the snap below.
+          const coast = Math.pow(SHIP_COAST_FRICTION, dt * BASE_FPS);
+          ship.vx *= coast;
+          ship.vy *= coast;
         }
-
-        // Friction: decay velocity, framerate-independently; snap to rest.
-        const retention = Math.pow(FRICTION, dt * BASE_FPS);
-        ship.vx *= retention;
-        ship.vy *= retention;
         if (ship.vx * ship.vx + ship.vy * ship.vy < STOP_SPEED * STOP_SPEED) {
           ship.vx = 0;
           ship.vy = 0;
