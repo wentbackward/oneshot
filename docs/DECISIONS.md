@@ -1348,3 +1348,51 @@
 - **Window mechanics mirror `expandUntil`**: `multUntil` stores the expiry, `updatePowerups()` clears it to -1 at expiry, `destroyBrick()` tests `simTime < multUntil`. Alternatives: a boolean flag toggled by the timer (rejected — two-state drift risk), subtractive countdown (rejected — inconsistent with the other armed windows).
 - **Colours**: `COLOR_CAPSULE_LIFE = "#ff5c7a"` (warm rose — reads as heart/life), `COLOR_CAPSULE_MULT = "#6eff8f"` (mint — reads as bonus/gain); both distinct from the yellow/cyan/purple already in use.
 
+## 2026-11-01 — Ticket #46: three selectable retro themes (THEMES table, one-pass apply, persistence)
+
+- **`THEMES` is one row per skin holding the CSS custom-property triple
+  (`bg`/`accent`/`ink`) and the canvas palette mirrors the draw pass
+  reads (`COLOR_BG`/`COLOR_PADDLE`/`COLOR_BALL` plus the four
+  `BRICK_TIERS` colours in A/B/C/fixed order).** `classic` references the
+  named module-load constants for every mirror (the `DIFFICULTY.normal`
+  row precedent), so the legacy look keeps one source of truth; the
+  other two rows are literal hex (the ticket's neon-cyberpunk and
+  minimalist concepts). `applyTheme()` is the single apply path shared
+  by boot and selection change: it writes the CSS triple onto
+  `document.documentElement` and every canvas mirror in one pass — the
+  draw code itself never changes and keeps reading the same variables,
+  so theming adds zero per-frame branches (locked in by the one-pass
+  test that reads the globals in the running context after a click).
+  Alternatives: a per-draw theme lookup (rejected — per-frame branches,
+  the ticket forbids them), separate constants per theme
+  (rejected — dead parallel palettes).
+- **The brick tiers' dimmed `dark` variants are re-derived inside
+  `applyTheme` via the existing `darkenHex` rule, so damage dimming
+  stays exactly the 0.45-factor rule per theme.** Alternative: store a
+  pre-baked `dark` per row (rejected — doubles the table data and could
+  drift from the rule).
+- **The CSS write degrades silently when there is no
+  `documentElement.style` (the vm test stubs of the sibling suites),
+  leaving the canvas mirrors to carry the skin on the playfield.**
+  Mirrors the Web-Audio `typeof`-guard silent-degradation precedent
+  (ticket #9); the alternative — forcing all twelve sibling harnesses
+  to stub `documentElement` — buys nothing the game needs.
+- **The translucent accent tints (difficulty/theme option borders and
+  button hovers, `rgba(92, 242, 176, …)`) stay at the legacy teal under
+  every theme.** The ticket scopes the theme surface to the
+  `--bg`/`--accent`/`--ink` triple and the canvas palette; re-tinting
+  those would need extra custom properties (e.g. a per-theme
+  `--accent-soft`) the ticket does not ask for. The theme buttons reuse
+  the exact `.difficulty-opt` pattern (group div, `.opt` buttons,
+  `.selected` mark) so the start-screen markup and the harness stubs
+  stay uniform across both selectors.
+- **Persistence mirrors the difficulty selector exactly: JSON string
+  under `THEME_KEY = "brickbreaker.theme"`, validated against the table
+  keys and the string type at boot, unknown/corrupt/non-string values
+  falling back to `classic`, and a no-op on re-clicking the active
+  skin so an idle screen never chatters writes.** Alternatives: a
+  separate encoding (rejected — the high-score/difficulty precedent is
+  the house style), applying the theme only per run like difficulty
+  (rejected — the ticket says applied at boot AND on selection change,
+  and the draw pass is cheap enough that a live apply is a three-write
+  CSS + nine-assign pass with no gameplay cost).
