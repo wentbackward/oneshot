@@ -1493,3 +1493,50 @@
   the particle amber ties the flame into the existing palette without
   a third colour. Alternative: a pure UI_ACCENT flame (less readable
   against the teal HUD/stroke palette).
+## 2026-11-01 — Ticket #52: wrap lasers around the screen edges
+
+- **`LASER_LIFETIME_S` is a console-retunable `var` defaulting to 1.5 s.**
+  With wrapping, a beam has nowhere to leave to, so the old "recycle on
+  first off-screen exit" rule is obsolete and the lifetime is a pure
+  tuning choice. 1.5 s at the default 700 px/s covers ~1050 px — more
+  than a 960×600 field's width or height and within one body of its
+  1131 px diagonal, so a default beam travels about as far as the
+  longest old-beam flight; the knob retunes from the console either
+  way. Alternatives: derive the lifetime from canvas size at boot
+  (rejected — a console resize would desync it, and the criterion asks
+  for a named sim-time constant) or an integer frame count (rejected —
+  the criterion names a `*_S` seconds value). Declared `var` per the
+  ticket-#2/#3 precedent for console retuning.
+- **Wrap margin is the beam's own `LASER_LENGTH`, ship-convention:
+  x/y each wrap independently once the beam CENTRE is fully past the
+  edge by `LASER_LENGTH` (≥ half the beam), re-entering the opposite
+  edge offset by `w + 2·LASER_LENGTH` / `h + 2·LASER_LENGTH` — the
+  exact remainder, mirrored symmetrically like the ship (`±2·margin`).**
+  Independence of axes is what makes the near-corner diagonal wrap
+  both edges in the same update and re-emerg at the opposite corner.
+  Alternatives: margin 0 (rejected — half the beam vanishes then
+  reappears, the ship-wrap defect the #2 decision already rejected) or
+  margin `LASER_LENGTH/2` (works, but the ticket pins the margin at
+  `LASER_LENGTH`, and the wider band gives the entry/exit a visible
+  glide-in rather than a pop).
+- **Cross-seam kill detection needed NO change to `checkLaserKills`:
+  the sweep segment is reconstructed backwards from the CURRENT
+  (already-wrapped) position — `prev = pos − dir·speed·dt` — which
+  after a wrap lands in the matching periodic copy of the field, and
+  that lifted segment IS the beam's true entry-side sweep.** A rock
+  just inside the opposite edge is hit by that segment on the frame(s)
+  the beam traverses it. Proven by the deterministic cross-seam kill
+  fixture (parked rock, single beam, exact-remainder arithmetic).
+  Alternatives: explicit per-axis wrap flags and dual segment tests
+  (rejected — more hot-path work for a result the backwards
+  reconstruction already yields) or torus-distance math (rejected —
+  overkill for a straight-line sweep).
+- **`tests/lasers.test.mjs` adaptations (documented in the file header):**
+  the old "deactivate once off-screen" test was rewritten for wrap +
+  lifetime recycling; the 2 s cooldown soak raises `LASER_LIFETIME_S`
+  to 10 s (under the old cull, the giant canvas kept the beam alive
+  for the window — the lifetime knob now does that job); the
+  pool-saturation soak (pathological `LASER_SPEED = 0`) raises
+  `LASER_LIFETIME_S` to 100 s so the default 1.5 s life cannot reclaim
+  slots before the 32-slot pool saturates. All other campaign-1 suites
+  needed no adaptation.

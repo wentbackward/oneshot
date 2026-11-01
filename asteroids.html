@@ -47,6 +47,7 @@
     var LASER_SPEED = 700;        // px/s along the ship's heading
     const LASER_POOL_SIZE = 32;   // pre-allocated laser slots, recycled (never reallocated)
     const LASER_LENGTH = 18;      // px, visual length of the beam
+    var LASER_LIFETIME_S = 1.5;   // s of sim time a beam lives before recycling (wrapping makes off-screen culling obsolete; ~1050 px at the default speed)
     var ASTEROID_BASE = 6;        // asteroids in wave 1; wave N fields ASTEROID_BASE + ASTEROID_GROWTH * (N - 1)
     var ASTEROID_GROWTH = 2;      // extra asteroids each wave above the first
     var SCORE_PER_ASTEROID = 10;  // HUD score credited per laser kill
@@ -143,7 +144,7 @@
     // place, so sustained fire never creates new objects.
     const laserPool = { slots: [] };
     for (let i = 0; i < LASER_POOL_SIZE; i++) {
-      laserPool.slots.push({ active: false, x: 0, y: 0, dx: 0, dy: 0, dt: 0 });
+      laserPool.slots.push({ active: false, x: 0, y: 0, dx: 0, dy: 0, dt: 0, age: 0 });
     }
 
     // Pre-allocated asteroid pool: every rock mutates an existing slot in
@@ -273,6 +274,7 @@
       slot.y = ship.y + dy * nose;
       slot.dx = dx;
       slot.dy = dy;
+      slot.age = 0; // sim-time lifetime starts at the shot
       lastFireAt = gameTime;
       playShoot();
     }
@@ -280,14 +282,38 @@
     function updateLasers(dt) {
       const w = canvas.width;
       const h = canvas.height;
-      const CULL_MARGIN = LASER_LENGTH; // px — recycle only once fully off-screen
+      // Ship-convention wrap margin: a beam re-enters the opposite edge only
+      // once it is fully past its own edge by LASER_LENGTH, so the drawn beam
+      // (centre ± LASER_LENGTH/2) is never partially visible at the seam.
+      const WRAP_MARGIN = LASER_LENGTH;
+      const perX = w + 2 * WRAP_MARGIN;
+      const perY = h + 2 * WRAP_MARGIN;
       for (let i = 0; i < laserPool.slots.length; i++) {
         const s = laserPool.slots[i];
         if (!s.active) continue;
         s.x += s.dx * LASER_SPEED * dt;
         s.y += s.dy * LASER_SPEED * dt;
         s.dt = dt; // last step, so hit tests can reconstruct the sweep segment
-        if (s.x < -CULL_MARGIN || s.x > w + CULL_MARGIN || s.y < -CULL_MARGIN || s.y > h + CULL_MARGIN) s.active = false;
+        // Screen wrap, one axis at a time (a near-corner diagonal crosses
+        // both edges and re-emergs at the opposite corner): leaving one
+        // edge puts the beam on the opposite one, offset by the exact
+        // remainder. The hit test needs no change — its sweep segment,
+        // reconstructed backwards from the wrapped position, lands in the
+        // matching copy of the field and covers the entry-side sweep.
+        // single-period fold (one if/else per axis, not a modulo): valid
+        // while a per-frame displacement stays under one full period,
+        // i.e. LASER_SPEED * MAX_FRAME_SECONDS < w + 2*WRAP_MARGIN —
+        // true at defaults (~23 px vs >= ~40 px) and the same convention
+        // the ship wrap uses; a console-retuned LASER_SPEED far above it
+        // would need the modulo form instead.
+        if (s.x < -WRAP_MARGIN) s.x += perX;
+        else if (s.x > w + WRAP_MARGIN) s.x -= perX;
+        if (s.y < -WRAP_MARGIN) s.y += perY;
+        else if (s.y > h + WRAP_MARGIN) s.y -= perY;
+        // Recycling is driven by the sim-time lifetime, not by leaving the
+        // field: on the wrapped screen a beam has nowhere to leave to.
+        s.age += dt;
+        if (s.age >= LASER_LIFETIME_S) s.active = false;
       }
     }
 
