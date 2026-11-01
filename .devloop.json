@@ -12,6 +12,7 @@
     "grep -qE '^[[:space:]]*#game[[:space:]]*\\{[^}]*cursor:[[:space:]]*none' bricks.html",
     "[ \"$(grep -c 'data-difficulty=' bricks.html)\" -eq 3 ]",
     "[ \"$(grep 'data-difficulty=' bricks.html | grep -c selected)\" -eq 1 ] && grep 'data-difficulty=\"normal\"' bricks.html | grep -q selected",
+    "grep -q 'id=\"btn-mute\"' bricks.html && grep -q 'id=\"sound-volume\"' bricks.html",
     "for f in tests/bricks-*.test.mjs; do timeout 60 node \"$f\" || exit 1; done"
   ],
   "heavy": {

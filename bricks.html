@@ -162,6 +162,42 @@
     border-color: var(--accent);
     background: rgba(92, 242, 176, 0.12);
   }
+  /* Start-screen sound controls (ticket #47): the mute toggle reads
+     like the other start-screen options; the slider follows it. */
+  .sound {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .sound-opt {
+    font-family: inherit;
+    font-size: 0.8rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--ink);
+    background: transparent;
+    border: 1px solid rgba(92, 242, 176, 0.4);
+    padding: 0.5em 1.2em;
+    cursor: pointer;
+  }
+  .sound-opt.muted {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: rgba(92, 242, 176, 0.12);
+  }
+  .sound .vol {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--ink);
+  }
+  #sound-volume {
+    width: 120px;
+    accent-color: var(--accent);
+  }
 </style>
 </head>
 <body>
@@ -186,6 +222,10 @@
       <button id="theme-classic" type="button" class="theme-opt selected" data-theme="classic">Classic</button>
       <button id="theme-neon" type="button" class="theme-opt" data-theme="neon">Neon</button>
       <button id="theme-minimal" type="button" class="theme-opt" data-theme="minimal">Minimal</button>
+    </div>
+    <div class="sound">
+      <button id="btn-mute" type="button" class="sound-opt">Sound On</button>
+      <label class="vol">Vol<input id="sound-volume" type="range" min="0" max="100" value="100"></label>
     </div>
     <button id="btn-start" type="button">Start Game</button>
   </section>
@@ -236,7 +276,10 @@
 // persisted in localStorage under their own named key, driven by
 // one THEMES table that at boot and on every selection change
 // applies the CSS custom properties and the canvas palette in a
-// single pass
+// single pass; and a start-screen sound toggle with a volume
+// slider, persisted as JSON { muted, volume } under their own
+// named key and driving the master bus level live (mute wins over
+// volume)
 // ================================================================
 
 // ---- Tunables (var: addressable as globals, e.g. from the console) ----
@@ -452,7 +495,7 @@ var THEMES = {
 // MASTER_BUS gain node, whose level tracks MASTER_GAIN live so a
 // console reassignment applies to the next sound (and 0 silences
 // everything). Mirrors the campaign-1 audio architecture (ticket #9).
-var MASTER_GAIN = 0.2;                 // master bus level (0..1); 0 silences every SFX
+var MASTER_GAIN = 0.2;                 // master bus level (0..1); the sound-settings block rewrites it from effectiveMaster() at boot and on every change
 var WAVE_SINE = "sine";               // named waveform sources
 var WAVE_SQUARE = "square";
 var WAVE_NOISE = "noise";
@@ -553,6 +596,8 @@ var themeButtons = [
   [document.getElementById("theme-neon"), "neon"],
   [document.getElementById("theme-minimal"), "minimal"],
 ];
+var btnMute = document.getElementById("btn-mute");
+var soundVolumeInput = document.getElementById("sound-volume");
 
 // ---- State ----
 var gameState = "start"; // "start" | "playing" | "paused" | "gameover"
@@ -769,6 +814,84 @@ for (var i = 0; i < themeButtons.length; i += 1) {
     });
   })(themeButtons[i][1]);
 }
+
+// ---- Sound settings: mute toggle + volume slider (ticket #47) ----
+// { muted, volume } persisted as JSON under the named key (the
+// high-score / difficulty / theme encoding precedent). Corrupt or
+// invalid stored fields fall back to the defaults individually:
+// a botched write must never break boot. The effective master bus
+// level is muted ? 0 : SOUND_BASE * volume/100 (mute wins over
+// volume); each accepted change rewrites MASTER_GAIN, which
+// ensureAudio() applies when it builds the context and
+// scheduleSound() re-reads on every event, so the bus follows
+// live with no per-frame branches. A muted state therefore never
+// blocks gesture building — the context is built anyway and simply
+// carries zero gain.
+var SOUND_KEY = "brickbreaker.sound";
+var SOUND_BASE = 0.2;                   // nominal master level; the slider scales it
+var DEFAULT_SOUND_MUTED = false;
+var DEFAULT_SOUND_VOLUME = 100;
+function loadSoundSettings() {
+  var muted = DEFAULT_SOUND_MUTED;
+  var volume = DEFAULT_SOUND_VOLUME;
+  try {
+    var value = JSON.parse(localStorage.getItem(SOUND_KEY));
+    if (typeof value.muted === "boolean") muted = value.muted;
+    if (Number.isInteger(value.volume) &&
+        value.volume >= 0 && value.volume <= 100) volume = value.volume;
+  } catch {
+    // storage unavailable, blocked, or corrupt: fall back per field
+  }
+  return { muted: muted, volume: volume };
+}
+function saveSoundSettings() {
+  try {
+    // Persisted as a JSON object: {"muted":true,"volume":60}.
+    localStorage.setItem(SOUND_KEY,
+      JSON.stringify({ muted: soundMuted, volume: soundVolume }));
+  } catch {
+    // Non-persistent storage (e.g. blocked): the session still works.
+  }
+}
+var soundSettings = loadSoundSettings();
+var soundMuted = soundSettings.muted;
+var soundVolume = soundSettings.volume;
+function effectiveMaster() {
+  return soundMuted ? 0 : SOUND_BASE * (soundVolume / 100);
+}
+MASTER_GAIN = effectiveMaster(); // restored settings apply from the first gesture
+// Reflect both controls onto the current settings; called at boot
+// (storage may override the static defaults) and on every change.
+// The state is carried by the label and the .muted class.
+function syncSoundControls() {
+  btnMute.className = soundMuted ? "sound-opt muted" : "sound-opt";
+  btnMute.textContent = soundMuted ? "Sound Off" : "Sound On";
+  if (soundVolumeInput.value !== String(soundVolume)) {
+    soundVolumeInput.value = String(soundVolume);
+  }
+}
+syncSoundControls(); // boot: before the first frame
+// The single apply path shared by both controls: an identical
+// re-application is a no-op, so no redundant storage write fires.
+function applySoundSettings(muted, volume) {
+  if (muted === soundMuted && volume === soundVolume) return;
+  soundMuted = muted;
+  soundVolume = volume;
+  MASTER_GAIN = effectiveMaster();
+  saveSoundSettings();
+  syncSoundControls();
+}
+btnMute.addEventListener("click", function () {
+  ensureAudio(); // a click is a user gesture: build the audio graph once
+  applySoundSettings(!soundMuted, soundVolume);
+});
+soundVolumeInput.addEventListener("input", function () {
+  // A range input reports its own value as a string; clamp into
+  // [0, 100] so programmatic out-of-range writes degrade cleanly.
+  var v = parseInt(soundVolumeInput.value, 10);
+  var volume = Number.isInteger(v) ? Math.min(100, Math.max(0, v)) : soundVolume;
+  applySoundSettings(soundMuted, volume);
+});
 
 // ---- Fixed-aspect stage ----
 // The playfield is a constant GAME_W × GAME_H logical stage; the

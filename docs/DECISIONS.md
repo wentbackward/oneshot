@@ -1396,3 +1396,36 @@
   (rejected — the ticket says applied at boot AND on selection change,
   and the draw pass is cheap enough that a live apply is a three-write
   CSS + nine-assign pass with no gameplay cost).
+
+## 2026-11-01 — Ticket #47: sound toggle + volume slider (placement, invalid-value policy)
+
+- **The controls live on the start screen, as a row below the theme
+  selector (`#btn-mute` toggle button + `#sound-volume` range
+  input, 0–100).** The ticket allows "start screen (or HUD)"; the
+  start screen already hosts every persisted preference
+  (difficulty, theme), and a mute/volume row there keeps the HUD
+  clear of non-status chrome. The toggle communicates state via its
+  label ("Sound On"/"Sound Off") and a `.muted` accent class — the
+  same state-mark pattern the option selectors use — instead of
+  `aria-pressed`, which the vm harness element stubs would have
+  needed to grow for every suite.
+- **Invalid *stored* fields fall back to the defaults per field
+  (unmuted, volume 100), while *in-flight* slider values are clamped
+  into [0, 100].** Loading mirrors the house fallback precedent
+  (difficulty/theme: invalid stored value → default, never crash);
+  clamping at load would silently invent a level the user never set.
+  The slider's own handler still clamps because the value is read
+  from the DOM and a programmatic out-of-range write must degrade
+  cleanly. Re-applying an identical `{muted, volume}` pair is a
+  no-op (no redundant storage write), matching the
+  selectDifficulty/selectTheme precedent.
+- **`MASTER_GAIN` stays the single live knob:** the settings block
+  recomputes `MASTER_GAIN = effectiveMaster()` at boot and on every
+  accepted change, and neither `ensureAudio()` nor `scheduleSound()`
+  gains branches — mute wins over volume, a muted boot never blocks
+  gesture context building, and console reassignment of
+  `MASTER_GAIN` keeps its ticket #27 meaning until the next settings
+  change. Alternatives: a dedicated `effectiveMaster()` read in
+  `scheduleSound` (rejected — two sources of truth for the bus level)
+  and skipping scheduling while muted (rejected — the silence must be
+  the bus, so unmuting changes only a gain value, mid-run).

@@ -129,6 +129,8 @@ function boot(width = 960, height = 600) {
     "theme-classic": makeEl("theme-classic"),
     "theme-neon": makeEl("theme-neon"),
     "theme-minimal": makeEl("theme-minimal"),
+    "btn-mute": makeEl("btn-mute"),
+    "sound-volume": makeEl("sound-volume"),
     "screen-gameover": makeEl("screen-gameover"),
     "btn-restart": makeEl("btn-restart"),
     "screen-pause": makeEl("screen-pause"),
