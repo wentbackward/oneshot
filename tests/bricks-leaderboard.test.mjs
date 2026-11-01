@@ -142,6 +142,8 @@ function boot(width, height, initialStore = {}) {
     "theme-neon": makeEl("theme-neon"),
     "theme-minimal": makeEl("theme-minimal"),
     "btn-reset-hiscore": makeEl("btn-reset-hiscore"),
+    "btn-mute": makeEl("btn-mute"),
+    "sound-volume": makeEl("sound-volume"),
     "leaderboard-start": makeEl("leaderboard-start"),
     "screen-gameover": makeEl("screen-gameover"),
     "btn-restart": makeEl("btn-restart"),
