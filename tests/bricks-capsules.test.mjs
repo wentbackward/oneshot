@@ -466,7 +466,7 @@ check("capsule drops still never allocate: the pool stays at CAPSULE_POOL_SIZE u
     `the pool length must still be constant, got ${g.capsPoolLen()}`);
 });
 
-check("the kind roll is uniform over all five kinds: each pinned roll index produces exactly that kind", () => {
+check("the kind roll is bin-exact over all five kinds: each pinned roll index produces exactly that kind (proves the bin→kind mapping; uniformity rests on the `random` hook contract)", () => {
   const g = boot(960, 600);
   start(g);
   const kinds = g.q("CAPSULE_KINDS");

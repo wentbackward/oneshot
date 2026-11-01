@@ -1344,7 +1344,7 @@
 
 ## 2026-11-01 — Ticket #45: life-restore and score-multiplier capsules (values and colours)
 
-- **`MULT_VALUE = 2`, `MULT_DURATION_S = 6`** (the ticket names neither). The duration mirrors the sibling timed effects (`PADDLE_EXPAND_DURATION_S`, `STICKY_DURATION_S`) so the whole power-up family shares one rhythm; value 2 doubles tier points and is the weakest non-trivial multiplier, keeping scores in band with the existing hiscore tuning. Alternatives: value 3 (rejected — inflates scores fast on the 10-wide tier-A rows), stacking/stacked windows (rejected — the ticket specifies re-arm, not extend).
+- **`MULT_VALUE = 2`, `MULT_DURATION_S = 6`** (the ticket names neither). The duration mirrors the sibling timed effects (`PADDLE_EXPAND_DURATION_S`, `STICKY_DURATION_S`) so the whole power-up family shares one rhythm; value 2 doubles tier points for EVERY tier (the ticket names tier A only; applying it uniformly is the simpler rule, so B/C kills are doubled too) and is the weakest non-trivial multiplier, keeping scores in band with the existing hiscore tuning. Alternatives: value 3 (rejected — inflates scores fast on the 10-wide tier-A rows), stacking/stacked windows (rejected — the ticket specifies re-arm, not extend).
 - **Window mechanics mirror `expandUntil`**: `multUntil` stores the expiry, `updatePowerups()` clears it to -1 at expiry, `destroyBrick()` tests `simTime < multUntil`. Alternatives: a boolean flag toggled by the timer (rejected — two-state drift risk), subtractive countdown (rejected — inconsistent with the other armed windows).
 - **Colours**: `COLOR_CAPSULE_LIFE = "#ff5c7a"` (warm rose — reads as heart/life), `COLOR_CAPSULE_MULT = "#6eff8f"` (mint — reads as bonus/gain); both distinct from the yellow/cyan/purple already in use.
 
