@@ -812,6 +812,7 @@ function renderLeaderboards() {
 // persistence keys and drops both in-memory mirrors to their empty
 // baselines; a later qualifying run re-persists records as usual.
 function resetHighScoreAndLeaderboard() {
+  if (gameState !== "start") return; // house style: screen buttons are state-gated
   try {
     localStorage.removeItem(HIGH_SCORE_KEY);
   } catch {

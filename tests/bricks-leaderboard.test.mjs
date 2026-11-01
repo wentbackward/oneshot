@@ -458,6 +458,22 @@ check("clicking the reset button deletes BOTH keys, zeroes highScore, and refres
     `the game-over-screen leaderboard must re-render the placeholder, got ${JSON.stringify(g.rows(g.els["leaderboard-gameover"]))}`);
 });
 
+check("a stray reset dispatch outside the start screen is a no-op (house-style state gate)", () => {
+  const g = boot(960, 600, {
+    [HS_KEY]: "600",
+    [LB_KEY]: "[300, 250, 100]",
+  });
+  g.els["btn-start"].click();
+  g.tick(1); // into 'playing'
+  g.els["btn-reset-hiscore"].click();
+  assert(g.q("highScore") === 600,
+    `the in-memory high score must survive an out-of-state reset, got ${g.q("highScore")}`);
+  assert(g.storage.getItem(HS_KEY) === "600",
+    `${HS_KEY} must survive an out-of-state reset, got ${JSON.stringify(g.storage.getItem(HS_KEY))}`);
+  assert(g.storage.getItem(LB_KEY) === "[300, 250, 100]",
+    `${LB_KEY} must survive an out-of-state reset, got ${JSON.stringify(g.storage.getItem(LB_KEY))}`);
+});
+
 check("a fresh qualifying run after a reset re-persists a new high score and a new leaderboard record", () => {
   const g = boot(960, 600, {
     [HS_KEY]: "600",
