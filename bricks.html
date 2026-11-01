@@ -118,6 +118,28 @@
   #btn-restart:hover {
     background: rgba(92, 242, 176, 0.12);
   }
+  /* Start-screen difficulty selector (ticket #44): one group of
+     three preset options; the active preset carries .selected. */
+  .difficulty {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .difficulty-opt {
+    font-family: inherit;
+    font-size: 0.8rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--ink);
+    background: transparent;
+    border: 1px solid rgba(92, 242, 176, 0.4);
+    padding: 0.5em 1.2em;
+    cursor: pointer;
+  }
+  .difficulty-opt.selected {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: rgba(92, 242, 176, 0.12);
+  }
 </style>
 </head>
 <body>
@@ -133,6 +155,11 @@
   <section class="screen" id="screen-start">
     <h1>Brick Breaker</h1>
     <p>Clear the wall &middot; Keep the ball up</p>
+    <div class="difficulty">
+      <button id="difficulty-easy" type="button" class="difficulty-opt" data-difficulty="easy">Easy</button>
+      <button id="difficulty-normal" type="button" class="difficulty-opt selected" data-difficulty="normal">Normal</button>
+      <button id="difficulty-hard" type="button" class="difficulty-opt" data-difficulty="hard">Hard</button>
+    </div>
     <button id="btn-start" type="button">Start Game</button>
   </section>
 
@@ -175,7 +202,9 @@
 // to silent where Web Audio is missing), and the high score
 // persisted in localStorage under a named key — loaded at boot,
 // shown in the #hiscore top-bar element, and rewritten as a JSON
-// number only when the live score overtakes it
+// number only when the live score overtakes it; a start-screen
+// difficulty selector (Easy / Normal / Hard) persisted in
+// localStorage under its own named key and applied per run
 // ================================================================
 
 // ---- Tunables (var: addressable as globals, e.g. from the console) ----
@@ -282,7 +311,7 @@ function darkenHex(hex, factor) {
 }
 BRICK_TIERS.forEach(function (t) { t.dark = darkenHex(t.color, BRICK_DARK_FACTOR); });
 // Power-ups (PRD section 4): capsules released by destroyed bricks
-var POWERUP_DROP_RATE = 0.25;      // chance per destroyed brick, rolled via `random`
+var POWERUP_DROP_RATE = 0.25;      // normal-preset baseline; the run rolls its snapshot
 var CAPSULE_FALL_SPEED = 200;      // descent speed, px/s
 var CAPSULE_W = 24;                // capsule footprint, internal px
 var CAPSULE_H = 14;
@@ -301,9 +330,26 @@ var COLOR_CAPSULE_STICKY = "#d05ce3";
 // kind has exactly one row. A new kind adds a row here and an entry
 // in CAPSULE_KINDS — never a branch in the draw pass.
 var CAPSULE_COLORS = [COLOR_CAPSULE_EXPAND, COLOR_CAPSULE_EXTRA, COLOR_CAPSULE_STICKY];
-var PADDLE_EXPAND_FACTOR = 1.6;         // widened width = BASE_PADDLE_W * factor
+var PADDLE_EXPAND_FACTOR = 1.6;         // widened width = the run's base paddle width * factor
 var PADDLE_EXPAND_DURATION_S = 6;       // simulated seconds of widen
 var STICKY_DURATION_S = 6;              // simulated seconds the paddle still catches
+// Difficulty presets (ticket #44): the start-screen choice maps to a
+// row of named knobs. beginRun() snapshots the selected row onto the
+// run, so switching presets between runs never mutates the global
+// tuning above.
+var DIFFICULTY_KEY = "brickbreaker.difficulty";
+var DEFAULT_DIFFICULTY = "normal";
+var DIFFICULTY = {
+  easy: { serveSpeed: 400, paddleWidth: 150, dropRate: 0.35 },
+  // normal is the legacy tuning: the row references the named
+  // constants, keeping a single source of truth.
+  normal: {
+    serveSpeed: BALL_SERVE_SPEED,
+    paddleWidth: BASE_PADDLE_W,
+    dropRate: POWERUP_DROP_RATE,
+  },
+  hard: { serveSpeed: 560, paddleWidth: 96, dropRate: 0.15 },
+};
 
 // ---- Palette (the page accent lives in the CSS --accent property;
 // a canvas-drawn mirror is added with the canvas-text gameplay tickets) ----
@@ -409,6 +455,12 @@ var hudScore = document.getElementById("hud-score");
 var hudLevel = document.getElementById("hud-level");
 var hiscoreEl = document.getElementById("hiscore");
 var livesEl = document.getElementById("lives");
+// [element, preset-name] pairs for the three start-screen options.
+var difficultyButtons = [
+  [document.getElementById("difficulty-easy"), "easy"],
+  [document.getElementById("difficulty-normal"), "normal"],
+  [document.getElementById("difficulty-hard"), "hard"],
+];
 
 // ---- State ----
 var gameState = "start"; // "start" | "playing" | "paused" | "gameover"
@@ -422,8 +474,12 @@ var lastFrameTime = null;
 // (constant) stage height.
 var paddle = { x: 0 };
 // Runtime paddle width: widened while an expand capsule's effect is
-// live, otherwise the base width.
+// live, otherwise the run's base width.
 var paddleW = BASE_PADDLE_W;
+// The run's resting paddle width: snapshotted from the selected
+// difficulty preset in beginRun(); the expand capsule's widen and
+// relaxation work off this, not the raw BASE_PADDLE_W constant.
+var basePaddleW = BASE_PADDLE_W;
 var simTime = 0;                     // simulated seconds; advances only while playing
 var expandUntil = -1;                // simTime at which the current widen expires
 // Capsule pool: allocated once, reused in place for every drop, so a
@@ -455,9 +511,12 @@ for (var i = 0; i < BRICK_ROWS * BRICK_COLS; i += 1) {
   bricks.push({ active: false, tier: 0, hp: 0, charged: false, unbreakable: false, x: 0, y: 0, w: 0, h: 0 });
 }
 var bricksLeft = 0;               // live bricks, kept as an O(1) win check
-// Runtime serve speed: reset to BALL_SERVE_SPEED at (re)start, grown
-// per cleared level and capped at MAX_BALL_SPEED.
+// Runtime serve speed: reset to the selected preset's serveSpeed at
+// (re)start, grown per cleared level and capped at MAX_BALL_SPEED.
 var serveSpeed = BALL_SERVE_SPEED;
+// Runtime capsule drop rate: the run's snapshot of the selected
+// preset's dropRate (default preset before the first run).
+var dropRate = DIFFICULTY[DEFAULT_DIFFICULTY].dropRate;
 // Held keys per direction: one set entry per distinct held code.
 // Auto-repeat keydowns re-add the same code (idempotent), so the
 // set size mirrors the fingers on the deck, not the re-dispatches.
@@ -485,6 +544,56 @@ function saveHighScore() {
   } catch {
     // Non-persistent storage (e.g. blocked): the session still works.
   }
+}
+
+// ---- Difficulty selection (persisted, ticket #44) ----
+// The start-screen preset choice, persisted as a JSON string under
+// the named key (the high score's encoding precedent). Unknown or
+// corrupt stored values fall back to the default preset: a botched
+// write must never break boot.
+function loadDifficulty() {
+  try {
+    var value = JSON.parse(localStorage.getItem(DIFFICULTY_KEY));
+    return typeof value === "string" &&
+      Object.prototype.hasOwnProperty.call(DIFFICULTY, value)
+      ? value
+      : DEFAULT_DIFFICULTY;
+  } catch {
+    return DEFAULT_DIFFICULTY; // storage unavailable, blocked, or corrupt: play on
+  }
+}
+function saveDifficulty() {
+  try {
+    localStorage.setItem(DIFFICULTY_KEY, JSON.stringify(selectedDifficulty));
+  } catch {
+    // Non-persistent storage (e.g. blocked): the session still works.
+  }
+}
+var selectedDifficulty = loadDifficulty();
+// Mark exactly one option button; called at boot (storage may
+// override the static normal default) and on every selection change.
+function markSelectedDifficulty(name) {
+  for (var i = 0; i < difficultyButtons.length; i += 1) {
+    var pair = difficultyButtons[i];
+    pair[0].className =
+      pair[1] === name ? "difficulty-opt selected" : "difficulty-opt";
+  }
+}
+markSelectedDifficulty(selectedDifficulty);
+// A click re-selects the preset and persists it; re-clicking the
+// active option is a no-op, so no redundant storage write fires.
+function selectDifficulty(name) {
+  if (name === selectedDifficulty) return;
+  selectedDifficulty = name;
+  saveDifficulty();
+  markSelectedDifficulty(name);
+}
+for (var i = 0; i < difficultyButtons.length; i += 1) {
+  (function (name) {
+    difficultyButtons[i][0].addEventListener("click", function () {
+      selectDifficulty(name);
+    });
+  })(difficultyButtons[i][1]);
 }
 
 // ---- Fixed-aspect stage ----
@@ -686,7 +795,7 @@ function advanceLevel() {
 // a hit takes the first free slot of the fixed pool, so a drop never
 // allocates and quietly vanishes when the pool is full.
 function maybeDropCapsule(x, y) {
-  if (random() >= POWERUP_DROP_RATE) return;
+  if (random() >= dropRate) return; // rolled against the run's snapshot
   for (var i = 0; i < capsules.length; i += 1) {
     var c = capsules[i];
     if (c.active) continue;
@@ -703,7 +812,7 @@ function maybeDropCapsule(x, y) {
 function applyCapsule(kind) {
   scheduleSound(SFX_POWERUP_CATCH); // the catch blip is kind-independent
   if (kind === KIND_EXPAND) {
-    paddleW = BASE_PADDLE_W * PADDLE_EXPAND_FACTOR;
+    paddleW = basePaddleW * PADDLE_EXPAND_FACTOR;
     expandUntil = simTime + PADDLE_EXPAND_DURATION_S;
     clampPaddle();
   } else if (kind === KIND_EXTRA) {
@@ -715,7 +824,7 @@ function applyCapsule(kind) {
   }
 }
 function updatePowerups(dt) {
-  if (paddleW !== BASE_PADDLE_W && simTime >= expandUntil) paddleW = BASE_PADDLE_W;
+  if (paddleW !== basePaddleW && simTime >= expandUntil) paddleW = basePaddleW;
   var pt = paddleTop();
   var halfSpan = paddleW / 2 + CAPSULE_W / 2;
   for (var i = 0; i < capsules.length; i += 1) {
@@ -942,14 +1051,18 @@ function restartRun() {
 }
 // One reset path shared by first start and restart: a fresh
 // attached serve, the level-1 pattern grid (spawnLevel below), and a
-// drained power-up state (no capsule or widen carries over).
+// drained power-up state (no capsule or widen carries over). The
+// selected difficulty's knobs are snapshotted onto the run here.
 function beginRun() {
   score = 0;
   level = 1;
   lives = PLAYER_LIVES;
-  serveSpeed = BALL_SERVE_SPEED;
+  var preset = DIFFICULTY[selectedDifficulty];
+  serveSpeed = preset.serveSpeed;
+  basePaddleW = preset.paddleWidth;
+  paddleW = basePaddleW;
+  dropRate = preset.dropRate;
   simTime = 0;
-  paddleW = BASE_PADDLE_W;
   expandUntil = -1;
   stickyUntil = -1;
   for (var i = 0; i < capsules.length; i += 1) capsules[i].active = false;

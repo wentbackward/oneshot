@@ -10,6 +10,8 @@
     "grep -qi 'monospace' bricks.html",
     "[ \"$(grep -cE '(src|href)=' bricks.html)\" -eq 0 ]",
     "grep -qE '^[[:space:]]*#game[[:space:]]*\\{[^}]*cursor:[[:space:]]*none' bricks.html",
+    "[ \"$(grep -c 'data-difficulty=' bricks.html)\" -eq 3 ]",
+    "grep -E 'data-difficulty=\"normal\"' bricks.html | grep -q 'selected'",
     "for f in tests/bricks-*.test.mjs; do timeout 60 node \"$f\" || exit 1; done"
   ],
   "heavy": { "slots": 2 },
