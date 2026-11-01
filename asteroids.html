@@ -37,6 +37,8 @@
     const STOP_SPEED = 1;        // px/s — below this the ship snaps to stillness
     const MAX_FRAME_SECONDS = 1 / 30; // clamp long frames (tab switches) to avoid teleporting
     const SHIP_RADIUS = 14;      // px, hull size and wrap margin
+    var ENGINE_FLAME_MIN_PX = 6;   // px, shortest flicker of the held-thrust engine flame
+    var ENGINE_FLAME_MAX_PX = 16;  // px, longest flicker of the held-thrust engine flame
     var LASER_COOLDOWN_MS = 150; // ms between shots while Space is held
     var LASER_SPEED = 700;        // px/s along the ship's heading
     const LASER_POOL_SIZE = 32;   // pre-allocated laser slots, recycled (never reallocated)
@@ -870,6 +872,23 @@
         ctx.strokeStyle = UI_ACCENT;
         ctx.lineWidth = 2;
         ctx.stroke();
+        // Engine flame: while thrust (Up/W) is held, one flickering
+        // triangle from the rear notch, sharing this exact transform so
+        // it rotates with the hull. Coordinates are computed inline and
+        // the path reuses the hull's stroke settings — a thrust frame
+        // allocates nothing.
+        if (keys.has("ArrowUp") || keys.has("KeyW")) {
+          const flicker = random(); // the injectable random, like every other random value
+          const len = ENGINE_FLAME_MIN_PX + (ENGINE_FLAME_MAX_PX - ENGINE_FLAME_MIN_PX) * flicker;
+          ctx.beginPath();
+          ctx.moveTo(-SHIP_RADIUS * 0.4, SHIP_RADIUS * 0.35);
+          ctx.lineTo(-SHIP_RADIUS * 0.4 - len, 0); // the flickering tip
+          ctx.lineTo(-SHIP_RADIUS * 0.4, -SHIP_RADIUS * 0.35);
+          ctx.closePath();
+          ctx.fillStyle = "#fbbf24"; // same amber as the impact fragments
+          ctx.fill();
+          ctx.stroke();
+        }
         ctx.restore(); // also restores globalAlpha
       }
 
