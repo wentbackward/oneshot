@@ -156,6 +156,9 @@ function boot(width, height, initialStore = {}) {
     "hud-level": makeEl("hud-level"),
     "hiscore": makeEl("hiscore"),
     "lives": makeEl("lives"),
+    "btn-reset-hiscore": makeEl("btn-reset-hiscore"),
+    "leaderboard-start": makeEl("leaderboard-start"),
+    "leaderboard-gameover": makeEl("leaderboard-gameover"),
   };
   // Recording documentElement: setProperty calls land in `props` in
   // call order, so a selection change is assertable as an exact

@@ -289,6 +289,9 @@ function boot(width = 960, height = 600, opts = {}) {
     "hud-level": makeEl("hud-level"),
     "hiscore": makeEl("hiscore"),
     lives: makeEl("lives"),
+    "btn-reset-hiscore": makeEl("btn-reset-hiscore"),
+    "leaderboard-start": makeEl("leaderboard-start"),
+    "leaderboard-gameover": makeEl("leaderboard-gameover"),
   };
   const winListeners = {};
   let rafCb = null;

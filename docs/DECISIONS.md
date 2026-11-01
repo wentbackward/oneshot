@@ -1429,3 +1429,41 @@
   `scheduleSound` (rejected — two sources of truth for the bus level)
   and skipping scheduling while muted (rejected — the silence must be
   the bus, so unmuting changes only a gain value, mid-run).
+## 2026-11-01 — Ticket #48: high-score reset and local top-five leaderboard
+- **The two on-screen leaderboard containers are
+  `#leaderboard-start` and `#leaderboard-gameover`, sharing the
+  `leaderboard` class; each screen carries exactly one.** The ticket's
+  "`#leaderboard` element" wording is taken as "an element
+  identifiable as the leaderboard"; literal duplicate `id="leaderboard"`
+  in one document would be invalid HTML (ids must be unique), and moving
+  a single element between sections would break the always-present
+  start-screen display the ticket requires. Locked in by the
+  HTML-shape test (one container per section, one reset button).
+- **Boundary rule: a run's final score qualifies iff it is an integer
+  > 0 and the list has room (< 5 entries) or strictly beats the list's
+  lowest entry — a tie with the lowest of a FULL list never displaces
+  it, and duplicates are kept while there is room.** A rejected tie
+  performs no storage write at all. Alternatives: replace-on-tie
+  (arbitrary — the incumbent's position in time is unknowable) and
+  deduplicate-on-insert (drops genuine repeated scores while there is
+  room). Locked in by the tie, duplicate and top-five-truncation tests.
+- **An empty list renders as one placeholder row ("no scores yet") on
+  BOTH screens rather than hiding the containers.** Keeps both
+  screens' layout identical between states; the ticket allows either
+  (hidden or single placeholder row) and the placeholder is the
+  self-documenting choice.
+- **Load is defensive and validating: the stored value must parse to an
+  array whose every entry is a positive integer, else the list starts
+  empty; valid lists are re-sorted descending and re-capped to five at
+  load.** Mirrors the high-score/difficulty/loadTheme corrupt-fallback
+  house style; hand-edited or drifted storage is normalised, never
+  trusted. Alternatives: trust the stored order (rejected — one
+  hand-edit away from a broken ranking) and filter individual bad
+  entries (silent data loss, harder to explain).
+- **The reset control (`#btn-reset-hiscore`) deletes BOTH
+  `brickbreaker.highScore` and `brickbreaker.leaderboard` and drops
+  both in-memory mirrors to their empty baselines in one click;
+  `removeItem` failures degrade like the other storage paths
+  (in-memory reset still applies).** The ticket names it the
+  documented single control for both; a per-key confirm dialog was
+  rejected as scope creep.
