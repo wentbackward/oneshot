@@ -140,6 +140,28 @@
     border-color: var(--accent);
     background: rgba(92, 242, 176, 0.12);
   }
+  /* Start-screen theme selector (ticket #46): one group of three
+     skins; the active skin carries .selected. */
+  .themes {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .theme-opt {
+    font-family: inherit;
+    font-size: 0.8rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--ink);
+    background: transparent;
+    border: 1px solid rgba(92, 242, 176, 0.4);
+    padding: 0.5em 1.2em;
+    cursor: pointer;
+  }
+  .theme-opt.selected {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: rgba(92, 242, 176, 0.12);
+  }
 </style>
 </head>
 <body>
@@ -159,6 +181,11 @@
       <button id="difficulty-easy" type="button" class="difficulty-opt" data-difficulty="easy">Easy</button>
       <button id="difficulty-normal" type="button" class="difficulty-opt selected" data-difficulty="normal">Normal</button>
       <button id="difficulty-hard" type="button" class="difficulty-opt" data-difficulty="hard">Hard</button>
+    </div>
+    <div class="themes">
+      <button id="theme-classic" type="button" class="theme-opt selected" data-theme="classic">Classic</button>
+      <button id="theme-neon" type="button" class="theme-opt" data-theme="neon">Neon</button>
+      <button id="theme-minimal" type="button" class="theme-opt" data-theme="minimal">Minimal</button>
     </div>
     <button id="btn-start" type="button">Start Game</button>
   </section>
@@ -204,7 +231,12 @@
 // shown in the #hiscore top-bar element, and rewritten as a JSON
 // number only when the live score overtakes it; a start-screen
 // difficulty selector (Easy / Normal / Hard) persisted in
-// localStorage under its own named key and applied per run
+// localStorage under its own named key and applied per run; and
+// three selectable retro themes (Classic / Neon / Minimal)
+// persisted in localStorage under their own named key, driven by
+// one THEMES table that at boot and on every selection change
+// applies the CSS custom properties and the canvas palette in a
+// single pass
 // ================================================================
 
 // ---- Tunables (var: addressable as globals, e.g. from the console) ----
@@ -366,6 +398,51 @@ var COLOR_BG = "#0b0f14";
 var COLOR_PADDLE = "#5cf2b0";
 var COLOR_BALL = "#e8ecf1";
 
+// ---- Themes (selectable retro skins, ticket #46) ----
+// One row per theme: the CSS custom-property triple (applied to
+// document.documentElement and picked up by the stylesheet via
+// --bg/--accent/--ink) and the canvas palette mirrors the draw
+// pass reads (COLOR_BG / COLOR_PADDLE / COLOR_BALL and the four
+// BRICK_TIERS colours in A/B/C/fixed order). Applying a theme is
+// a single write-through pass, so a selection change never adds
+// per-frame branches to the draw path.
+var THEME_KEY = "brickbreaker.theme";
+var DEFAULT_THEME = "classic";
+var THEMES = {
+  // classic is the legacy look: every mirror references the named
+  // module-load constants above, keeping one source of truth (the
+  // DIFFICULTY.normal row precedent).
+  classic: {
+    css: { bg: "#0b0f14", accent: "#5cf2b0", ink: "#9fb4c7" },
+    palette: {
+      bg: COLOR_BG,
+      paddle: COLOR_PADDLE,
+      ball: COLOR_BALL,
+      bricks: [COLOR_BRICK_A, COLOR_BRICK_B, COLOR_BRICK_C, COLOR_BRICK_FIXED],
+    },
+  },
+  // neon: saturated cyan/magenta over a deep violet-black ground.
+  neon: {
+    css: { bg: "#0a0118", accent: "#00f0ff", ink: "#8f86c9" },
+    palette: {
+      bg: "#0a0118",
+      paddle: "#00f0ff",
+      ball: "#ffffff",
+      bricks: ["#ff2d78", "#ffbe0b", "#7c4dff", "#5b4b8a"],
+    },
+  },
+  // minimal: near-monochrome warm stone over an off-white ground.
+  minimal: {
+    css: { bg: "#f2efe9", accent: "#14141a", ink: "#8d877c" },
+    palette: {
+      bg: "#f2efe9",
+      paddle: "#14141a",
+      ball: "#14141a",
+      bricks: ["#57534e", "#78716c", "#a8a29e", "#d6d3d1"],
+    },
+  },
+};
+
 // ---- Audio: synthesized SFX on a master gain bus (ticket #27) ----
 // All sound effects are synthesized with the Web Audio API (PRD
 // section 4) — no audio files. The context is constructed only on
@@ -469,6 +546,12 @@ var difficultyButtons = [
   [document.getElementById("difficulty-easy"), "easy"],
   [document.getElementById("difficulty-normal"), "normal"],
   [document.getElementById("difficulty-hard"), "hard"],
+];
+// [element, theme-name] pairs for the three start-screen skins.
+var themeButtons = [
+  [document.getElementById("theme-classic"), "classic"],
+  [document.getElementById("theme-neon"), "neon"],
+  [document.getElementById("theme-minimal"), "minimal"],
 ];
 
 // ---- State ----
@@ -604,6 +687,87 @@ for (var i = 0; i < difficultyButtons.length; i += 1) {
       selectDifficulty(name);
     });
   })(difficultyButtons[i][1]);
+}
+
+// ---- Theme selection (persisted, ticket #46) ----
+// The start-screen skin choice, persisted as a JSON string under
+// the named key (the high-score and difficulty encoding
+// precedent). Unknown or corrupt stored values fall back to the
+// default theme: a botched write must never break boot.
+function loadTheme() {
+  try {
+    var value = JSON.parse(localStorage.getItem(THEME_KEY));
+    return typeof value === "string" &&
+      Object.prototype.hasOwnProperty.call(THEMES, value)
+      ? value
+      : DEFAULT_THEME;
+  } catch {
+    return DEFAULT_THEME; // storage unavailable, blocked, or corrupt: play on
+  }
+}
+function saveTheme() {
+  try {
+    localStorage.setItem(THEME_KEY, JSON.stringify(selectedTheme));
+  } catch {
+    // Non-persistent storage (e.g. blocked): the session still works.
+  }
+}
+var selectedTheme = loadTheme();
+// Writes the CSS triple onto the document root. Engines without a
+// documentElement (the vm test stubs) degrade to the canvas
+// mirrors alone, which fully carry the skin on the playfield.
+function applyThemeCss(css) {
+  var root = document.documentElement;
+  if (!root || !root.style) return;
+  root.style.setProperty("--bg", css.bg);
+  root.style.setProperty("--accent", css.accent);
+  root.style.setProperty("--ink", css.ink);
+}
+// The single apply path shared by boot and selection change: the
+// CSS triple, then every canvas palette mirror the draw pass
+// reads — including each brick tier's dimmed damage variant,
+// re-derived from the row's tier colours. The draw code itself
+// never changes: it keeps reading the same variables (COLOR_*,
+// BRICK_TIERS), so theming adds no per-frame branches.
+function applyTheme(name) {
+  var row = THEMES[name];
+  applyThemeCss(row.css);
+  COLOR_BG = row.palette.bg;
+  COLOR_PADDLE = row.palette.paddle;
+  COLOR_BALL = row.palette.ball;
+  var tierColors = row.palette.bricks;
+  for (var i = 0; i < BRICK_TIERS.length; i += 1) {
+    BRICK_TIERS[i].color = tierColors[i];
+    BRICK_TIERS[i].dark = darkenHex(tierColors[i], BRICK_DARK_FACTOR);
+  }
+}
+// Mark exactly one option button; called at boot (storage may
+// override the static classic default) and on every selection
+// change.
+function markSelectedTheme(name) {
+  for (var i = 0; i < themeButtons.length; i += 1) {
+    var pair = themeButtons[i];
+    pair[0].className =
+      pair[1] === name ? "theme-opt selected" : "theme-opt";
+  }
+}
+applyTheme(selectedTheme); // boot apply: before the first frame
+markSelectedTheme(selectedTheme);
+// A click re-selects the skin and persists it; re-clicking the
+// active option is a no-op, so no redundant storage write fires.
+function selectTheme(name) {
+  if (name === selectedTheme) return;
+  selectedTheme = name;
+  saveTheme();
+  applyTheme(name);
+  markSelectedTheme(name);
+}
+for (var i = 0; i < themeButtons.length; i += 1) {
+  (function (name) {
+    themeButtons[i][0].addEventListener("click", function () {
+      selectTheme(name);
+    });
+  })(themeButtons[i][1]);
 }
 
 // ---- Fixed-aspect stage ----
