@@ -1467,3 +1467,29 @@
   (in-memory reset still applies).** The ticket names it the
   documented single control for both; a per-key confirm dialog was
   rejected as scope creep.
+
+## 2026-11-01 — Ticket #49: engine firing animation (geometry, flicker source, colour)
+- **The flame is a single triangle from the hull's rear notch: base
+  points at local (−0.4·SHIP_RADIUS, ±0.35·SHIP_RADIUS), tip at
+  (−0.4·SHIP_RADIUS − len, 0), drawn inside the hull's existing
+  save/translate/rotate block so it inherits the heading and the
+  invulnerability blink for free.** The ticket mandates the knobs,
+  flicker and heading inheritance but not the shape; a rear triangle
+  is the classic Asteroids reading and needs exactly three inline
+  coordinates (zero allocation). Alternatives: a two-segment flame
+  with a curved base (more points, no readability win) and a
+  sprite-like pre-built path (needs stored state).
+- **Flicker is `random()` per frame: len = MIN + (MAX − MIN) ·
+  random().** Reuses the campaign's injectable random source (same
+  convention as particles and SFX noise), which keeps the test suite
+  able to pin a deterministic sequence and keeps the console
+  retunable through the `var` knobs. Alternatives: frame-parity
+  alternation (only two legal lengths, less organic) and a
+  sine-of-gameTime oscillator (correlates every ship; rejected).
+- **The flame fills with #fbbf24 (the impact-fragment amber) and
+  strokes with the hull's already-set UI_ACCENT / lineWidth 2, per the
+  ticket's "existing stroke/fill pattern".** Keeping the existing
+  stroke state avoids extra ctx assignments in the hot path; reusing
+  the particle amber ties the flame into the existing palette without
+  a third colour. Alternative: a pure UI_ACCENT flame (less readable
+  against the teal HUD/stroke palette).
