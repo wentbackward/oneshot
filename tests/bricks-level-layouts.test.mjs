@@ -153,6 +153,10 @@ function boot(width = 960, height = 600) {
   };
   const context = vm.createContext(sandbox);
   vm.runInContext(gameSource, context);
+  // Pin the game's mutable `random` hook above every drop rate so
+  // the destroyBrick kill paths never roll a capsule: the suite is
+  // byte-for-byte reproducible (review #43 round 1).
+  vm.runInContext("random = () => 1 - 1e-9", context);
 
   let nowMs = 0;
   const FRAME_MS = 1000 / 60;
@@ -303,7 +307,11 @@ check("LEVEL_PATTERNS is a table of at least four distinct BRICK_ROWS x BRICK_CO
 // LEVEL_PATTERNS[k] cell-for-cell, bricksLeft = count of non-X
 // non-'.' cells, the pool stays fixed-size
 // ================================================================
-for (let k = 0; k < 4; k += 1) {
+// Bind the cell-for-cell sweep to the table's ACTUAL length (a
+// fifth pattern must not be silently skipped by the validation):
+// fetch it once up front from a throwaway boot.
+const patternCount = boot(960, 600).patterns().length;
+for (let k = 0; k < patternCount; k += 1) {
   check(`level ${k + 1}: spawnLevel() reproduces LEVEL_PATTERNS[${k}] cell-for-cell (active, tier, unbreakable) with bricksLeft = breakable count`, () => {
     const g = boot(960, 600);
     start(g);
