@@ -250,13 +250,17 @@ const breakableCount = (pattern) => pattern.join("").replace(/[.\X]/g, "").lengt
 // path until the board is won (fixed bricks survive by design).
 function clearBoard(g) {
   const ok = g.q(`(function () {
+    var startLevel = level;
     for (var guard = 0; guard < 400; guard += 1) {
-      if (bricksLeft === 0) return true;
+      if (level !== startLevel) return true; // win fired: the board advanced
+      var k = -1;
       for (var i = 0; i < bricks.length; i += 1) {
-        if (bricks[i].active && !bricks[i].unbreakable) { destroyBrick(i); break; }
+        if (bricks[i].active && !bricks[i].unbreakable) { k = i; break; }
       }
+      if (k < 0) return false; // nothing breakable left but no win: inconsistent
+      destroyBrick(k);
     }
-    return bricksLeft === 0;
+    return false; // guard exhausted
   })()`);
   assert(ok === true, "the board must be clearable of every breakable brick");
 }
@@ -400,7 +404,7 @@ check("a ball striking a fixed brick reflects: brick stays active, score and bri
   assert(g.capsActive() === 0, `a fixed brick must release no capsule, active=${g.capsActive()}`);
   const n = g.ball();
   assert(n.attached === false, "the ball must still be in flight");
-  assertClose(n.y, brick.y + brick.h + g.q("BALL_RADIUS"), 1e-9,
+  assertClose(n.y, brick.y + brick.h + g.q("BALL_RADIUS") + g.q("BRICK_PIN_EPS"), 1e-9,
     "the ball must be pinned to the fixed brick's underside");
 });
 
