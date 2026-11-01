@@ -286,6 +286,8 @@ check("the classic row is the legacy look (matches the module-load palette const
     `classic css bg must be the legacy COLOR_BG, got ${row.css.bg}`);
   assert(row.css.accent === g.q("COLOR_PADDLE"),
     `classic css accent must be the legacy accent #5cf2b0 (COLOR_PADDLE), got ${row.css.accent}`);
+  assert(row.css.ink === "#9fb4c7",
+    `classic css ink must be the legacy :root --ink #9fb4c7, got ${row.css.ink}`);
   assert(row.palette.bg === g.q("COLOR_BG") &&
          row.palette.paddle === g.q("COLOR_PADDLE") &&
          row.palette.ball === g.q("COLOR_BALL"),
@@ -365,7 +367,7 @@ check("clicking neon applies the neon CSS triple (exact recorded setProperty cal
   row.palette.bricks.forEach((color, i) => {
     assert(tiers[i].color === color,
       `BRICK_TIERS[${i}].color must be the neon tier colour ${color}, got ${tiers[i].color}`);
-    assert(tiers[i].dark === darkenHex(color, 0.45),
+    assert(tiers[i].dark === darkenHex(color, g.q("BRICK_DARK_FACTOR")),
       `BRICK_TIERS[${i}].dark must be the dimmed neon colour, got ${tiers[i].dark}`);
   });
   const o = opts(g);
