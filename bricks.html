@@ -322,17 +322,26 @@ var CAPSULE_POOL_SIZE = 4;         // fixed pre-allocated pool of concurrent cap
 var KIND_EXPAND = 0;
 var KIND_EXTRA = 1;
 var KIND_STICKY = 2;
-var CAPSULE_KINDS = [KIND_EXPAND, KIND_EXTRA, KIND_STICKY];
+var KIND_LIFE = 3;
+var KIND_MULTIPLIER = 4;
+var CAPSULE_KINDS = [KIND_EXPAND, KIND_EXTRA, KIND_STICKY, KIND_LIFE, KIND_MULTIPLIER];
 var COLOR_CAPSULE_EXPAND = "#ffd23f";
 var COLOR_CAPSULE_EXTRA = "#63d4ff";
 var COLOR_CAPSULE_STICKY = "#d05ce3";
+var COLOR_CAPSULE_LIFE = "#ff5c7a";
+var COLOR_CAPSULE_MULT = "#6eff8f";
 // Exhaustive kind-to-colour table, indexed by kind: every enumerated
 // kind has exactly one row. A new kind adds a row here and an entry
 // in CAPSULE_KINDS — never a branch in the draw pass.
-var CAPSULE_COLORS = [COLOR_CAPSULE_EXPAND, COLOR_CAPSULE_EXTRA, COLOR_CAPSULE_STICKY];
+var CAPSULE_COLORS = [
+  COLOR_CAPSULE_EXPAND, COLOR_CAPSULE_EXTRA, COLOR_CAPSULE_STICKY,
+  COLOR_CAPSULE_LIFE, COLOR_CAPSULE_MULT,
+];
 var PADDLE_EXPAND_FACTOR = 1.6;         // widened width = the run's base paddle width * factor
 var PADDLE_EXPAND_DURATION_S = 6;       // simulated seconds of widen
 var STICKY_DURATION_S = 6;              // simulated seconds the paddle still catches
+var MULT_VALUE = 2;                     // armed kills are worth this many times their tier points
+var MULT_DURATION_S = 6;                // simulated seconds the multiplier window stays armed
 // Difficulty presets (ticket #44): the start-screen choice maps to a
 // row of named knobs. beginRun() snapshots the selected row onto the
 // run, so switching presets between runs never mutates the global
@@ -482,6 +491,7 @@ var paddleW = BASE_PADDLE_W;
 var basePaddleW = BASE_PADDLE_W;
 var simTime = 0;                     // simulated seconds; advances only while playing
 var expandUntil = -1;                // simTime at which the current widen expires
+var multUntil = -1;                  // simTime at which the score-multiplier window expires
 // Capsule pool: allocated once, reused in place for every drop, so a
 // drop never allocates.
 var capsules = [];
@@ -765,15 +775,18 @@ function spawnLevel() {
 }
 // One kill path shared by the lethal physics hit and console
 // access: a brick whose durability the hit drained to zero is
-// destroyed outright, credits exactly its tier's points, and the
-// final brick wins the level. Fixed bricks are immune — a kill
+// destroyed outright, credits exactly its tier's points (times the
+// live multiplier), and the final brick wins the level. Fixed bricks are immune — a kill
 // attempt on them is a silent no-op.
 function destroyBrick(index) {
   var b = bricks[index];
   if (!b.active || b.unbreakable) return;
   b.active = false;
   bricksLeft -= 1;
-  score += BRICK_TIERS[b.tier].points;
+  // A kill while the multiplier window is armed is worth MULT_VALUE
+  // times the tier's points.
+  var pts = BRICK_TIERS[b.tier].points;
+  score += simTime < multUntil ? pts * MULT_VALUE : pts;
   scheduleSound(SFX_BRICK_BREAK);
   syncHud();
   maybeDropCapsule(b.x + b.w / 2, b.y + b.h);
@@ -821,10 +834,22 @@ function applyCapsule(kind) {
     // (Re)arm the catch window: the expiry is set to now + the full
     // duration, never added to whatever the previous arm had left.
     stickyUntil = simTime + STICKY_DURATION_S;
+  } else if (kind === KIND_LIFE) {
+    // Restored in place; the cap is hard, so a catch at
+    // PLAYER_LIVES spends the capsule without touching lives.
+    if (lives < PLAYER_LIVES) {
+      lives += 1;
+      renderLives();
+    }
+  } else if (kind === KIND_MULTIPLIER) {
+    // (Re)arm the score window: the expiry is set to now + the full
+    // duration, never added to whatever the previous arm had left.
+    multUntil = simTime + MULT_DURATION_S;
   }
 }
 function updatePowerups(dt) {
   if (paddleW !== basePaddleW && simTime >= expandUntil) paddleW = basePaddleW;
+  if (multUntil !== -1 && simTime >= multUntil) multUntil = -1; // window elapsed
   var pt = paddleTop();
   var halfSpan = paddleW / 2 + CAPSULE_W / 2;
   for (var i = 0; i < capsules.length; i += 1) {
@@ -1065,6 +1090,7 @@ function beginRun() {
   simTime = 0;
   expandUntil = -1;
   stickyUntil = -1;
+  multUntil = -1;
   for (var i = 0; i < capsules.length; i += 1) capsules[i].active = false;
   spawnLevel();
   serveBall();
