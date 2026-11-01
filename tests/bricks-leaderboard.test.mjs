@@ -221,8 +221,11 @@ function boot(width, height, initialStore = {}) {
     const menuBtn =
       q("gameState") === "gameover" ? els["btn-restart"] : els["btn-start"];
     menuBtn.click();
+    q(`score = ${finalScore};`);
+    // One frame so syncScore promotes the forced score to the
+    // high score exactly as the real frame loop would.
+    tick(1);
     q(
-      `score = ${finalScore};` +
       "loseLife(); loseLife(); loseLife();"
     );
   }
@@ -317,7 +320,6 @@ check("a stored list survives a simulated reload (fresh vm sandbox, same backing
   assert(before.state() === "gameover", `the run must end at game over, state is ${before.state()}`);
   assert(before.store[LB_KEY] === "[120]",
     `the first session must persist "[120]", got ${JSON.stringify(before.store[LB_KEY])}`);
-
   const after = boot(960, 600, before.store);
   after.tick(1);
   assert(after !== before, "the reload must be a distinct vm sandbox");
@@ -356,7 +358,7 @@ check("stored non-integer or non-positive entries invalidate the whole list", ()
 check("a stored out-of-order list is normalised to descending order at load", () => {
   const g = boot(960, 600, { [LB_KEY]: "[100, 300, 250]" });
   g.tick(1);
-  assert(g.q("JSON.stringify(leaderboard)") === "[300, 250, 100]",
+  assert(g.q("JSON.stringify(leaderboard)") === "[300,250,100]",
     `an out-of-order store must load normalised, got ${g.q("JSON.stringify(leaderboard)")}`);
 });
 
@@ -372,12 +374,12 @@ check("forced final scores 100, 300, 250 in three runs persist exactly [300, 250
   assert(g.store[LB_KEY] === "[100]",
     `after run 1 the store must hold "[100]", got ${JSON.stringify(g.store[LB_KEY])}`);
   g.finishRun(300);
-  assert(g.store[LB_KEY] === "[300, 100]",
-    `after run 2 the store must hold "[300, 100]", got ${JSON.stringify(g.store[LB_KEY])}`);
+  assert(g.store[LB_KEY] === "[300,100]",
+    `after run 2 the store must hold "[300,100]", got ${JSON.stringify(g.store[LB_KEY])}`);
   g.finishRun(250);
   assert(g.state() === "gameover", `run 3 must reach game over, state is ${g.state()}`);
-  assert(g.store[LB_KEY] === "[300, 250, 100]",
-    `after run 3 the store must hold "[300, 250, 100]", got ${JSON.stringify(g.store[LB_KEY])}`);
+  assert(g.store[LB_KEY] === "[300,250,100]",
+    `after run 3 the store must hold "[300,250,100]", got ${JSON.stringify(g.store[LB_KEY])}`);
 });
 
 check("a run's qualifying final score is visible in the game-over leaderboard the moment the screen opens", () => {
@@ -406,7 +408,7 @@ check("six qualifying runs leave exactly the five highest scores, descending", (
   const g = boot(960, 600);
   for (const s of [200, 400, 100, 300, 500, 150]) g.finishRun(s);
   assert(g.state() === "gameover", `the sixth run must reach game over, state is ${g.state()}`);
-  assert(g.store[LB_KEY] === "[500, 400, 300, 200, 150]",
+  assert(g.store[LB_KEY] === "[500,400,300,200,150]",
     `six runs must leave the five highest descending, got ${JSON.stringify(g.store[LB_KEY])}`);
   assert(g.q("leaderboard.length") === 5,
     `the in-memory list must hold exactly five entries, got ${g.q("leaderboard.length")}`);
@@ -415,14 +417,16 @@ check("six qualifying runs leave exactly the five highest scores, descending", (
 check("a full list rejects a score that ties its lowest entry (strict-greater boundary rule)", () => {
   const g = boot(960, 600, { [LB_KEY]: "[400, 300, 250, 150, 100]" });
   g.finishRun(100);
+  // No qualifying insertion means no write: the backing store must
+  // still hold the original seeded string byte for byte.
   assert(g.store[LB_KEY] === "[400, 300, 250, 150, 100]",
-    `a tie with the lowest entry of a full list must not displace it, got ${JSON.stringify(g.store[LB_KEY])}`);
+    `a tie with the lowest entry of a full list must not displace it (no write), got ${JSON.stringify(g.store[LB_KEY])}`);
 });
 
 check("duplicates are kept while the list has room", () => {
   const g = boot(960, 600, { [LB_KEY]: "[300]" });
   g.finishRun(300);
-  assert(g.store[LB_KEY] === "[300, 300]",
+  assert(g.store[LB_KEY] === "[300,300]",
     `an equal score with room must be kept, got ${JSON.stringify(g.store[LB_KEY])}`);
 });
 

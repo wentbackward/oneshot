@@ -162,6 +162,45 @@
     border-color: var(--accent);
     background: rgba(92, 242, 176, 0.12);
   }
+  /* Top-five leaderboard (ticket #48): one ranked row per entry,
+     rebuilt in place on insert, reset, or boot; an empty list
+     renders as a single placeholder row. */
+  .leaderboard {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-height: 1.4em;
+    font-size: 0.85rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink);
+  }
+  .leaderboard-row {
+    min-width: 8ch;
+    text-align: left;
+  }
+  .leaderboard-row.placeholder {
+    color: rgba(159, 180, 199, 0.5);
+  }
+  /* The reset control (ticket #48): clears high score AND
+     leaderboard alike — a secondary action, styled as a muted
+     opt button, not the primary accent CTA. */
+  #btn-reset-hiscore {
+    font-family: inherit;
+    font-size: 0.8rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--ink);
+    background: transparent;
+    border: 1px solid rgba(159, 180, 199, 0.4);
+    padding: 0.5em 1.2em;
+    cursor: pointer;
+  }
+  #btn-reset-hiscore:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: rgba(92, 242, 176, 0.12);
+  }
   /* Start-screen sound controls (ticket #47): the mute toggle reads
      like the other start-screen options; the slider follows it. */
   .sound {
@@ -227,12 +266,15 @@
       <button id="btn-mute" type="button" class="sound-opt">Sound On</button>
       <label class="vol">Vol<input id="sound-volume" type="range" min="0" max="100" value="100"></label>
     </div>
+    <div class="leaderboard" id="leaderboard-start"></div>
+    <button id="btn-reset-hiscore" type="button">Reset High Score</button>
     <button id="btn-start" type="button">Start Game</button>
   </section>
 
   <section class="screen" id="screen-gameover">
     <h1>Game Over</h1>
     <p id="gameover-final">Final score 0</p>
+    <div class="leaderboard" id="leaderboard-gameover"></div>
     <button id="btn-restart" type="button">Try Again</button>
   </section>
 
@@ -269,7 +311,11 @@
 // to silent where Web Audio is missing), and the high score
 // persisted in localStorage under a named key — loaded at boot,
 // shown in the #hiscore top-bar element, and rewritten as a JSON
-// number only when the live score overtakes it; a start-screen
+// number only when the live score overtakes it; a local top-five
+// leaderboard under its own named key — populated at game over,
+// rendered on the start and game-over screens, and cleared with
+// the high score by the single start-screen reset control; a
+// start-screen
 // difficulty selector (Easy / Normal / Hard) persisted in
 // localStorage under its own named key and applied per run; and
 // three selectable retro themes (Classic / Neon / Minimal)
@@ -290,6 +336,9 @@ var UI_FONT = "monospace";        // retro face for canvas UI text
 var MAX_FRAME_SECONDS = 1 / 30;   // dt clamp: no teleports after tab switches
 var random = Math.random;          // mutable hook: test suites pin it for determinism
 var HIGH_SCORE_KEY = "brickbreaker.highScore";
+var LEADERBOARD_KEY = "brickbreaker.leaderboard";  // top-five list (ticket #48)
+var LEADERBOARD_MAX = 5;                           // the top-five cap
+var LEADERBOARD_EMPTY_TEXT = "no scores yet";       // empty-list placeholder row
 var PLAYER_LIVES = 3;             // lives per run (PRD section 2 loss rule)
 // Paddle (internal canvas px, so values scale with CANVAS_SCALE)
 var BASE_PADDLE_W = 120;           // resting width; the runtime width widens on expand
@@ -584,6 +633,11 @@ var hudScore = document.getElementById("hud-score");
 var hudLevel = document.getElementById("hud-level");
 var hiscoreEl = document.getElementById("hiscore");
 var livesEl = document.getElementById("lives");
+var btnResetHighScore = document.getElementById("btn-reset-hiscore");
+var leaderboardStartEl = document.getElementById("leaderboard-start");
+var leaderboardGameoverEl = document.getElementById("leaderboard-gameover");
+// Both on-screen containers; the single render pass re-draws both.
+var leaderboardEls = [leaderboardStartEl, leaderboardGameoverEl];
 // [element, preset-name] pairs for the three start-screen options.
 var difficultyButtons = [
   [document.getElementById("difficulty-easy"), "easy"],
@@ -604,6 +658,7 @@ var gameState = "start"; // "start" | "playing" | "paused" | "gameover"
 var score = 0;
 var level = 1;
 var highScore = loadHighScore();
+var leaderboard = loadLeaderboard();
 var lives = PLAYER_LIVES;         // (re)start-time snapshot of PLAYER_LIVES
 var resizePending = false;
 var lastFrameTime = null;
@@ -682,6 +737,95 @@ function saveHighScore() {
   } catch {
     // Non-persistent storage (e.g. blocked): the session still works.
   }
+}
+
+// ---- Leaderboard: the local top five (ticket #48) ----
+// The in-memory mirror of the stored list: at most LEADERBOARD_MAX
+// positive integers in descending order. The one insertion point is
+// enterGameOver(): a final score records iff it is an integer > 0
+// and the list has room, or strictly beats the list's lowest entry —
+// a tie with the lowest of a FULL list never displaces it, and
+// duplicates are kept while the list has room.
+function loadLeaderboard() {
+  try {
+    var value = JSON.parse(localStorage.getItem(LEADERBOARD_KEY));
+    if (!Array.isArray(value)) return [];
+    var list = [];
+    for (var i = 0; i < value.length; i += 1) {
+      // One invalid entry voids the whole stored list: a botched
+      // write must never leak into the ranking.
+      if (!Number.isInteger(value[i]) || value[i] <= 0) return [];
+      list.push(value[i]);
+    }
+    // The write path always stores descending order; re-sort and
+    // re-cap at load so hand-edited storage is normalised, not
+    // trusted.
+    list.sort(function (a, b) { return b - a; });
+    return list.slice(0, LEADERBOARD_MAX);
+  } catch {
+    return []; // storage unavailable, blocked, or corrupt: empty start
+  }
+}
+function saveLeaderboard() {
+  try {
+    localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(leaderboard));
+  } catch {
+    // Non-persistent storage (e.g. blocked): the session still works.
+  }
+}
+// Inserts a run's final score; reports whether the list changed.
+function recordLeaderboardScore(finalScore) {
+  if (!Number.isInteger(finalScore) || finalScore <= 0) return false;
+  if (leaderboard.length >= LEADERBOARD_MAX &&
+      finalScore <= leaderboard[leaderboard.length - 1]) return false;
+  leaderboard.push(finalScore);
+  leaderboard.sort(function (a, b) { return b - a; });
+  while (leaderboard.length > LEADERBOARD_MAX) leaderboard.pop();
+  saveLeaderboard();
+  renderLeaderboards();
+  return true;
+}
+// Both screen containers re-drawn in one pass; it runs only at
+// boot, insertion, or reset — never in the per-frame path. An empty
+// list renders as the single placeholder row, keeping both screens'
+// layout identical.
+function renderLeaderboards() {
+  for (var j = 0; j < leaderboardEls.length; j += 1) {
+    var box = leaderboardEls[j];
+    while (box.firstChild) box.removeChild(box.firstChild);
+    if (leaderboard.length === 0) {
+      var placeholder = document.createElement("div");
+      placeholder.className = "leaderboard-row placeholder";
+      placeholder.textContent = LEADERBOARD_EMPTY_TEXT;
+      box.appendChild(placeholder);
+      continue;
+    }
+    for (var i = 0; i < leaderboard.length; i += 1) {
+      var row = document.createElement("div");
+      row.className = "leaderboard-row";
+      row.textContent = (i + 1) + ". " + leaderboard[i];
+      box.appendChild(row);
+    }
+  }
+}
+// The single clearing control (ticket #48): one click deletes BOTH
+// persistence keys and drops both in-memory mirrors to their empty
+// baselines; a later qualifying run re-persists records as usual.
+function resetHighScoreAndLeaderboard() {
+  try {
+    localStorage.removeItem(HIGH_SCORE_KEY);
+  } catch {
+    // Non-persistent storage: the in-memory reset below still applies.
+  }
+  try {
+    localStorage.removeItem(LEADERBOARD_KEY);
+  } catch {
+    // As above.
+  }
+  highScore = 0;
+  leaderboard.length = 0;
+  syncHud();
+  renderLeaderboards();
 }
 
 // ---- Difficulty selection (persisted, ticket #44) ----
@@ -1386,6 +1530,7 @@ function beginRun() {
 }
 btnStart.addEventListener("click", startGame);
 btnRestart.addEventListener("click", restartRun);
+btnResetHighScore.addEventListener("click", resetHighScoreAndLeaderboard);
 // Pause / resume (ticket #24): a state-gated toggle bridging only
 // "playing" <-> "paused"; every other state ignores the pause keys
 // (campaign-1 edge-triggered, state-gated transition precedent).
@@ -1459,6 +1604,9 @@ function enterGameOver() {
   // rest on the paddle; no live ball carries over.
   serveBall();
   gameoverFinal.textContent = "Final score " + score;
+  // Ticket #48: record the run's final score before the screen
+  // shows; a qualifying insertion re-renders both containers.
+  recordLeaderboardScore(score);
   setScreen("gameover");
   syncHud();
 }
@@ -1559,6 +1707,7 @@ paddle.x = canvas.width / 2;
 serveBall();
 setScreen("start");
 renderLives();
+renderLeaderboards();
 syncHud();
 requestAnimationFrame(frame);
 </script>
