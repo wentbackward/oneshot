@@ -268,7 +268,7 @@ check("beams survive every seam crossing and are recycled only at LASER_LIFETIME
   g.key("Space", true);
   let s0WasActive = false;
   let s0Recycled = false;
-  for (let i = 0; i < 60; i++) { // 1 s of held fire: beats recycle past the lifetime
+  for (let i = 0; i < 120; i++) { // 2 s of held fire: beats past the 1.5 s lifetime
     g.tick();
     for (const s of g.activeSlots()) assert(slotIds.includes(s), "every fired laser occupies a pre-existing slot object");
     const s0 = g.q("laserPool.slots[0].active");
