@@ -365,7 +365,7 @@ check("lethal hit: the second strike destroys the brick and credits its tier's p
   assert(g.brickAt(4, 5).active === true, "setup: the brick must still be standing");
   strike(g, 4, 5); // second: lethal
   const b = g.brickAt(4, 5);
-  assert(b.active === false, "the leathally struck brick must be deactivated");
+  assert(b.active === false, "the lethally struck brick must be deactivated");
   assert(b.hp === 0, `the lethal hit must take hp from 1 to exactly 0, got ${b.hp}`);
   const points = g.q("BRICK_TIERS[1].points");
   assert(g.score() === points,
@@ -415,6 +415,10 @@ check("a three-hit tier-A brick takes exactly three side strikes, one score cred
       assert(g.bricksLeft() === grid - 1,
         `strike 3: bricksLeft must fall by exactly 1, got ${g.bricksLeft()}`);
     }
+    // Frame boundary: the per-brick, per-frame damage cap charges
+    // at most one hp per brick per frame, so distinct strikes must
+    // land in distinct frames.
+    g.tick(1);
   }
   assert(g.activeCount() === grid - 1,
     `exactly one brick may be gone, active=${g.activeCount()} want ${grid - 1}`);
@@ -552,6 +556,9 @@ check("repeated hits allocate nothing: pool length and entry field set are invar
     sidePark(g, 3, 0);
     assert(g.q("collideBricks(balls[0])") === true, "setup: the side contact must register");
     hits += 1;
+    // Frame boundary: same-frame re-contacts charge no further hp
+    // (per-brick, per-frame damage cap).
+    g.tick(1);
     if (hits > 10) throw new Error("fixture: the brick refused to die");
   }
   assert(hits === g.q("HP_BRICK_A"),

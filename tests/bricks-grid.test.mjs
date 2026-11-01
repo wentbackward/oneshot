@@ -420,7 +420,10 @@ check("side hit: collideBricks reflects horizontally — vx flips, vy untouched,
   assert(d.hp === g.q("BRICK_TIERS[1].hp") - 1,
     `the non-lethal strike must cost exactly one hp, got ${d.hp}`);
   assert(g.score() === 0, "the non-lethal strike must credit nothing");
-  // Second strike: re-park the same fixture, destroy for real.
+  // Second strike: a frame boundary must elapse first (the
+  // per-brick, per-frame damage cap charges one hp per frame),
+  // then re-park the same fixture and destroy for real.
+  g.q("update(MAX_FRAME_SECONDS)");
   g.q(`balls[0].attached = false;
        balls[0].x = ${b.x} - BALL_RADIUS + 0.5;
        balls[0].y = ${b.y + b.h / 2};
@@ -459,7 +462,10 @@ check("near-corner hit: collideBricks resolves the shallowest axis — exactly o
   assert(d.hp === g.q("BRICK_TIERS[1].hp") - 1,
     `the non-lethal strike must cost exactly one hp, got ${d.hp}`);
   assert(g.score() === 0, "the non-lethal strike must credit nothing");
-  // Second strike: re-park the same fixture, destroy for real.
+  // Second strike: a frame boundary must elapse first (the
+  // per-brick, per-frame damage cap charges one hp per frame),
+  // then re-park the same fixture and destroy for real.
+  g.q("update(MAX_FRAME_SECONDS)");
   g.q(`balls[0].attached = false;
        balls[0].x = ${b.x} - BALL_RADIUS + 0.2;
        balls[0].y = ${b.y + b.h} + BALL_RADIUS - 0.8;
@@ -473,12 +479,15 @@ check("near-corner hit: collideBricks resolves the shallowest axis — exactly o
 });
 
 // ================================================================
-// Review finding 1 (round 2): a side hit at row centre resolves
-// along x and pins the ball to the brick face — but the brick gap
-// is narrower than the ball, so the push-out position can
-// land inside the seam neighbour. The sub-step loop must drain
-// residual overlap after a hit (resolve until collideBricks(balls[0])
-// returns false), locking: no live overlap at end of frame.
+// Review finding 1 (round 2) + ticket #42 round 2: a side hit at
+// row centre resolves and pins the ball in the seam (the gap is
+// narrower than the ball). With one-hit bricks the drain ended by
+// destroying both seam bricks; with multi-hit bricks the seam
+// members survive, so the drain must be BOUNDED (ping-pong between
+// mutually-exclusive pin faces would otherwise spin forever). The
+// lock: the frame terminates with the ball in flight, exactly one
+// hp per seam brick, and residual overlap confined to the
+// documented seam artifact.
 // ================================================================
 function liveOverlapCount(g) {
   // Counts active bricks whose rect overlaps the ball, using the
@@ -496,7 +505,7 @@ function liveOverlapCount(g) {
   })()`);
 }
 
-check("row-centre side hit: the sub-step loop drains residual overlap — no live overlap at end of frame", () => {
+check("row-centre side hit: the wedge frame terminates — bounded drain, accounted hp, residual seam overlap ≤ 1", () => {
   const g = boot(960, 600);
   start(g);
   const gap = g.q("BRICK_GAP");
@@ -519,22 +528,38 @@ check("row-centre side hit: the sub-step loop drains residual overlap — no liv
 
   g.q(`update(${frame})`);
 
+  // Multi-hit tiers change the wedge outcome: the seam bricks no
+  // longer die in the wedge frame — each may spend at most one hp
+  // (per-brick, per-frame damage cap), and the ball cannot clear
+  // both seam faces in a gap narrower than itself, so the drain
+  // rescan-caps (MAX_BRICK_RESCANS_PER_SUBSTEP). The regression
+  // lock is TERMINATION + accounting: the frame ends, the ball is
+  // in flight at full speed, each seam brick lost exactly one hp,
+  // nothing else moved, and the residual overlap is the bounded,
+  // documented seam artifact (≤ 1 seam-member brick).
   const left = g.brickAt(4, 4);
-  assert(left.active === false,
-    "the overlapped seam brick (col 4) must be resolved by the frame");
-  assert(g.brickAt(4, 5).active === false,
-    "the second seam brick (col 5) must be resolved by the drain");
+  const right = g.brickAt(4, 5);
+  const hpB = g.q("BRICK_TIERS[1].hp");
+  assert(left.active && right.active,
+    "the two seam bricks must survive the wedge frame");
+  assert(left.hp === hpB - 1,
+    `the overlapped seam brick (col 4) must lose exactly one hp, got ${left.hp}`);
+  assert(right.hp === hpB - 1,
+    `the second seam brick (col 5) must lose exactly one hp, got ${right.hp}`);
   assert(g.brickAt(4, 3).active && g.brickAt(4, 6).active,
     "untouched neighbours must survive");
-  assert(g.activeCount() === g.grid() - 2,
-    `exactly the two seam bricks may be gone, active=${g.activeCount()} want ${g.grid() - 2}`);
-  // The regression lock: the frame must end with the ball clear of
-  // every live brick (a single-hit frame leaves the seam overlap
-  // behind and pops the neighbour a frame early).
-  assert(liveOverlapCount(g) === 0,
-    `no live brick may overlap the ball at end of frame, found ${liveOverlapCount(g)}`);
+  assert(g.brickAt(4, 3).hp === hpB && g.brickAt(4, 6).hp === hpB,
+    "untouched neighbours must keep full hp");
+  assert(g.activeCount() === g.grid(),
+    `nothing may be destroyed by the wedge frame, active=${g.activeCount()} want ${g.grid()}`);
+  assert(g.score() === 0, "the non-lethal wedge frame must credit nothing");
+  const residual = liveOverlapCount(g);
+  assert(residual <= 1,
+    `at most the one documented seam-artifact overlap may remain, found ${residual}`);
   const n = g.ball();
   assert(n.attached === false, "the ball must still be in flight");
+  assert(Math.abs(n.vx) === 250 && n.vy === 0,
+    `the ball must keep flying at the incoming speed, got vx=${n.vx} vy=${n.vy}`);
 });
 
 // ================================================================

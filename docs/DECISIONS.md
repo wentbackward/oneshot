@@ -1218,3 +1218,60 @@
   contact threshold (rejected — would blunt real shallow contacts,
   not just the flush-pin artefact), or leaving the pins exact
   (rejected — the phantom-hit outcome depended on ulp rounding).
+
+## 2026-10-31 — Ticket #42 review round 1: per-brick, per-frame damage cap (1 hp max)
+
+- **A brick may pay at most ONE hp per frame, regardless of how many
+  times the frame's sub-step drain loop re-contacts it.** Review round 1
+  flagged the gameplay defect: with per-hit charging, the seam-drain
+  `while (collideBricks()) {}` could legitimately re-register a
+  non-lethal hit on the brick it had just resolved in the same frame
+  and cost an hp-2 brick both of its hp in one 16 ms step. The cap is
+  a per-entry `charged` flag: `collideBricks()` still reflects and
+  pins the overlap every time (physics unchanged), but only the first
+  contact of a frame spends the charge; `update()` clears every flag
+  once at frame end, and `spawnLevel()` resets them on (re)spawn. The
+  flag is a plain boolean on the existing pool entry — no allocation,
+  the #22 fixed-pool/no-churn rule intact; the clear is one pass over the
+  50 slots, negligible at 60 fps. Locked in by the seam-scrape
+  regression test (two same-frame contacts on hp-2 bricks end the frame
+  at hp 1, alive; only a next-frame contact is lethal) and by the two
+  multi-strike fixtures ported to the one-strike-per-frame contract
+  (a `g.tick(1)` boundary between strikes). Alternatives: make the
+  drain loop remember the last resolved brick per sub-step (rejected —
+  special-cases one drain shape, and other multi-contact paths within
+  a frame would still double-charge), or charge damage on
+  frame-boundary contact scans instead of on resolution (rejected —
+  rewires the collision pipeline for a per-flag fix).
+
+## 2026-10-31 — Ticket #42 review round 2: bound the sub-step seam drain
+
+- **The post-hit drain in `updateBalls()` is bounded by
+  `MAX_BRICK_RESCANS_PER_SUBSTEP` (= pool size + 1).** The unbounded
+  `while (collideBricks(b)) {}` spun forever on one fixture: a ball
+  wedged 0.5 px into a row-centre face, gap (6 px) narrower than the
+  ball (2·R = 14 px). Geometry proof of infeasibility: clearing the
+  left neighbour requires the centre ≥ leftRightFace + R; clearing the
+  right neighbour requires it ≤ rightLeftFace − R; the two bounds sit
+  2·R − GAP = 8 px apart — no position satisfies both. Pre-#42 the
+  loop terminated only because the re-contacted brick DIED on
+  contact (one-hit tiers); the per-frame charge cap made the
+  re-contact persistent and damage-free, so each drain iteration
+  ping-pongs the pin between the two faces and flips `vx` forever
+  (verified: 9-hour hang in `bricks-grid.test.mjs`, caught by the
+  process watchdog). The cap is a plain counter over the existing
+  call — no allocation; worst case 51 rescans × 50 pool entries per
+  sub-step, reachable only in the pathological wedge, negligible at
+  60 fps. Residual overlap past the cap is accepted as a documented
+  one-brick seam artifact (the frame ends with the ball in flight,
+  each seam member at exactly −1 hp). The grid suite's wedge test now
+  locks termination + accounting instead of "zero live overlap"
+  (geometrically unreachable), and its two double-strike fixtures
+  gained the mandatory frame boundary between strikes (same-frame
+  double-strike was never a legal contract under the cap).
+  Alternatives: skip charged bricks in the drain scan (rejected —
+  leaves the ball stuck inside a charged brick; the pin IS the
+  useful part of a charged re-resolution), or deepen `BRICK_PIN_EPS`
+  / nudge wedged balls out along `vy` (rejected — heuristic nudges
+  couple to fixture geometry and still admit other non-convergent
+  pin pairs).
