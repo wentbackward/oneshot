@@ -144,6 +144,9 @@ function boot(width, height, initialStore = {}) {
     "hud-level": makeEl("hud-level"),
     "hiscore": makeEl("hiscore"),
     "lives": makeEl("lives"),
+    "btn-reset-hiscore": makeEl("btn-reset-hiscore"),
+    "leaderboard-start": makeEl("leaderboard-start"),
+    "leaderboard-gameover": makeEl("leaderboard-gameover"),
   };
   const winListeners = {};
   let rafCb = null;
@@ -306,7 +309,7 @@ check("a stepped overtake 520 -> 570 -> 620 over stored 500 performs exactly thr
 // no write; on game over the displayed high score equals the
 // persisted one
 // ================================================================
-check("a run that does not beat the stored value makes zero setItem calls and game over shows the persisted high score", () => {
+check("a run that does not beat the stored value performs no high-score write and game over shows the persisted high score", () => {
   const g = boot(960, 600, { [KEY]: "500" });
   g.els["btn-start"].click();
   g.q("score = 120");
@@ -317,8 +320,16 @@ check("a run that does not beat the stored value makes zero setItem calls and ga
   g.tick(1);
   assert(g.state() === "gameover",
     `three ball drops must end the run, state is ${g.state()}`);
-  assert(g.storage.writes.length === 0,
-    `a sub-record run must write nothing, writes were ${JSON.stringify(g.storage.writes)}`);
+  const hsWrites = g.storage.writes.filter(([k]) => k === KEY);
+  assert(hsWrites.length === 0,
+    `a sub-record run must not write the high-score key, writes were ${JSON.stringify(hsWrites)}`);
+  // Ticket #48: the game-over handler records qualifying runs in the
+  // top-five leaderboard under its own key; exactly that one write
+  // is now expected on top of the (absent) high-score write.
+  const lbKey = "brickbreaker.leaderboard";
+  const lbWrites = g.storage.writes.filter(([k]) => k === lbKey);
+  assert(JSON.stringify(lbWrites) === JSON.stringify([[lbKey, "[120]"]]),
+    `the game over must record the qualifying run in the leaderboard, writes were ${JSON.stringify(g.storage.writes)}`);
   assert(g.store[KEY] === "500",
     `the stored value must remain "500", got ${JSON.stringify(g.store[KEY])}`);
   assert(g.els["hiscore"].textContent === "500",
