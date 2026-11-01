@@ -189,6 +189,7 @@ function boot(width = 960, height = 600) {
     activeCount: () =>
       q("typeof bricks === 'undefined' ? -1 : bricks.reduce((n, b) => n + (b.active ? 1 : 0), 0)"),
     grid: () => q("typeof BRICK_ROWS === 'undefined' ? -1 : BRICK_ROWS * BRICK_COLS"),
+    patterns: () => q("LEVEL_PATTERNS.map((p) => p.slice())"),
     brickAt(row, col) {
       const cols = q("BRICK_COLS");
       return q(`(() => {
@@ -212,14 +213,16 @@ const start = (g) => {
 
 // Destroy every active brick except the last one, returning the
 // surviving brick's pool index (the win must be triggered by the
-// caller, on exactly one final kill).
+// caller, on exactly one final kill). The survivor must be a
+// BREAKABLE brick — a fixed brick would make the final kill a
+// no-op and stall the level (ticket #43).
 function clearAllButLast(g) {
   return g.q(`(function () {
     var i;
     for (i = 0; i < bricks.length && bricksLeft > 1; i += 1) {
       if (bricks[i].active) destroyBrick(i);
     }
-    for (i = 0; i < bricks.length; i += 1) if (bricks[i].active) return i;
+    for (i = 0; i < bricks.length; i += 1) if (bricks[i].active && !bricks[i].unbreakable) return i;
     return -1;
   })()`);
 }
@@ -288,8 +291,12 @@ check("the brick pool is fixed-size: its length never changes across level trans
   winLevel(g); // level 3
   assert(g.poolLen() === len0,
     `the pool must still hold ${len0} slots at level 3, got ${g.poolLen()}`);
-  assert(g.activeCount() === g.grid(),
-    `the level-3 grid must refill the same pool, active=${g.activeCount()}`);
+  // Pattern-aware (ticket #43): level 3 is LEVEL_PATTERNS[2] (checker
+  // scatter), not a full grid — its occupancy, not grid size, is the
+  // refill invariant.
+  const occ3 = g.patterns()[2].join("").replace(/\./g, "").length;
+  assert(g.activeCount() === occ3,
+    `the level-3 pattern must occupy exactly its own cells, active=${g.activeCount()} want ${occ3}`);
 });
 
 check("at least three brick colours map to named per-colour point constants", () => {
@@ -651,8 +658,11 @@ check("a level win spawns the next level's layout into the same fixed pool", () 
   start(g);
   const tierBefore = g.brickAt(0, 0).tier;
   winLevel(g);
-  assert(g.activeCount() === g.grid(),
-    `the new level must refill the grid, active=${g.activeCount()}`);
+  // Pattern-aware (ticket #43): level 2 is LEVEL_PATTERNS[1] (gated
+  // fort) — its occupancy, not the full grid, is the refill invariant.
+  const occ2 = g.patterns()[1].join("").replace(/\./g, "").length;
+  assert(g.activeCount() === occ2,
+    `the new level's pattern must occupy exactly its own cells, active=${g.activeCount()} want ${occ2}`);
   const tierAfter = g.brickAt(0, 0).tier;
   assert(tierAfter !== tierBefore,
     `the next level's layout must differ (top-row tier ${tierBefore} -> ${tierAfter})`);

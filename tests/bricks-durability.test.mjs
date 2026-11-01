@@ -200,6 +200,7 @@ function boot(width = 960, height = 600) {
     activeCount: () =>
       q("bricks.reduce((n, b) => n + (b.active ? 1 : 0), 0)"),
     grid: () => q("BRICK_ROWS * BRICK_COLS"),
+    patterns: () => q("LEVEL_PATTERNS.map((p) => p.slice())"),
     brickAt(row, col) {
       const cols = q("BRICK_COLS");
       return q(`(() => {
@@ -290,23 +291,32 @@ check("BRICK_TIERS rows carry an hp field: A=3, B=2, C=1 via named constants, co
   start(g);
   const hps = g.q("BRICK_TIERS.map((t) => t.hp)");
   const want = [g.q("HP_BRICK_A"), g.q("HP_BRICK_B"), g.q("HP_BRICK_C")];
-  assert(hps.length === 3, `the three tiers must each have an hp, got ${JSON.stringify(hps)}`);
-  for (let t = 0; t < 3; t += 1) {
-    assert(Number.isInteger(want[t]) && want[t] >= 1,
-      `HP_BRICK_${"ABC"[t]} must be a positive integer, got ${want[t]}`);
-    assert(hps[t] === want[t],
-      `tier ${"ABC"[t]} must carry hp = HP_BRICK_${"ABC"[t]} (${want[t]}), got ${hps[t]}`);
-  }
   assert(g.q("HP_BRICK_A") === 3 && g.q("HP_BRICK_B") === 2 && g.q("HP_BRICK_C") === 1,
     `the chosen durability curve is A=3, B=2, C=1, got ${JSON.stringify(want)}`);
+  assert(hps.length >= 3, `the three breakable tiers must each carry an hp, got ${JSON.stringify(hps)}`);
+  for (let t = 0; t < 3; t += 1) {
+    assert(hps[t] === want[t] && want[t] >= 1,
+      `tier ${"ABC"[t]} must carry hp = HP_BRICK_${"ABC"[t]} (${want[t]}), got ${hps[t]}`);
+  }
   assert(hps[0] > 1, "the top tier must be multi-hit");
   assert(hps[2] === 1, "the base tier must stay one-hit");
+  // The optional fourth row is the unbreakable fixed tier (ticket #43):
+  // hp 0, no points, flagged — it can never be charged.
+  if (hps.length > 3) {
+    assert(hps[3] === 0 && g.q("BRICK_TIERS[3].unbreakable") === true,
+      `a fourth tier row must be the zero-hp unbreakable fixed tier, got ${JSON.stringify(hps[3])}`);
+    assert(g.q("BRICK_TIERS[3].points") === 0, "the fixed tier must credit no points");
+  }
   const colors = g.q("BRICK_TIERS.map((t) => t.color)");
   const points = g.q("BRICK_TIERS.map((t) => t.points)");
-  assert(colors.join() === [g.q("COLOR_BRICK_A"), g.q("COLOR_BRICK_B"), g.q("COLOR_BRICK_C")].join(),
-    "the tier colours must be unchanged");
-  assert(points.join() === "30,20,10",
-    `the tier points must be unchanged (30,20,10), got ${JSON.stringify(points)}`);
+  assert(
+    colors.slice(0, 3).join() === [g.q("COLOR_BRICK_A"), g.q("COLOR_BRICK_B"), g.q("COLOR_BRICK_C")].join(),
+    "the tier colours must be unchanged"
+  );
+  assert(
+    points.slice(0, 3).join() === "30,20,10",
+    `the tier points must be unchanged (30,20,10), got ${JSON.stringify(points)}`
+  );
 });
 
 check("spawnLevel stores the tier's hp on every pool entry without resizing the pool", () => {
@@ -498,7 +508,9 @@ function clearAllButLast(g) {
     for (i = 0; i < bricks.length && bricksLeft > 1; i += 1) {
       if (bricks[i].active) destroyBrick(i);
     }
-    for (i = 0; i < bricks.length; i += 1) if (bricks[i].active) return i;
+    // The survivor must be BREAKABLE: a fixed brick would make the
+    // caller's final kill a no-op and stall the level (ticket #43).
+    for (i = 0; i < bricks.length; i += 1) if (bricks[i].active && !bricks[i].unbreakable) return i;
     return -1;
   })()`);
 }
@@ -506,13 +518,17 @@ function clearAllButLast(g) {
 check("mid-run A brick destroyed + board cleared: the new board's A bricks spawn at full hp", () => {
   const g = boot(960, 600);
   start(g);
-  const grid = g.grid();
   g.q("destroyBrick(0)"); // a mid-run kill of the top-row A brick
   assert(g.brickAt(0, 0).active === false, "setup: the A brick must be gone");
   const last = clearAllButLast(g);
   assert(last >= 0, "setup: exactly one brick must survive");
   g.q(`destroyBrick(${last})`); // level cleared
-  assert(g.activeCount() === grid, `the new board must refill the grid, active=${g.activeCount()}`);
+  // Pattern-aware (ticket #43): the cleared level-1 board advances to
+  // level 2 = LEVEL_PATTERNS[1] (gated fort), whose occupancy — not
+  // the full grid — is the refill invariant.
+  const occ2 = g.patterns()[1].join("").replace(/\./g, "").length;
+  assert(g.activeCount() === occ2,
+    `the new board must match level 2's pattern, active=${g.activeCount()} want ${occ2}`);
   const bad = g.q("bricks.filter((b) => b.active && (typeof b.hp !== 'number' || b.hp !== BRICK_TIERS[b.tier].hp)).length");
   assert(bad === 0, `every brick on the new board must be at full hp, ${bad} are not`);
   const aBad = g.q(

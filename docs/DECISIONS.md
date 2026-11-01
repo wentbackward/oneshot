@@ -1275,3 +1275,40 @@
   / nudge wedged balls out along `vy` (rejected — heuristic nudges
   couple to fixture geometry and still admit other non-convergent
   pin pairs).
+## 2026-11-01 — Ticket #43: pattern tables, fixed bricks and the tunnel reading
+
+- **`LEVEL_PATTERNS[0]` (level 1) stays a full 5×10 grid with the historic
+  tier rows (A/B/C/A/B), and its letter order is chosen so that the three
+  probe cells of the grid suite — (4,5)=B, (0,0)=A, (2,9)=C — remain three
+  distinct colours, and every bottom-row cell the six sibling suites kill by
+  coordinate stays live.** The other three patterns carry the variation:
+  a gated fort (fixed top wall + two-column gate), a checker scatter and a
+  fixed-slab overhang. Alternatives: vary level 1 too (rejected — six
+  suites address concrete level-1 cells; rewriting them all would churn
+  tests whose subject is not this ticket), or derive patterns from the
+  old row-shift (rejected — the ticket names a literal row-string table).
+- **The fixed brick is the fourth `BRICK_TIERS` entry
+  (`COLOR_BRICK_FIXED`, 0 points, `unbreakable: true`) indexed by
+  `TIER_FIXED`, and each pooled brick carries an `unbreakable` flag set
+  from the pattern letter at spawn time.** `collideBricks` and
+  `destroyBrick` gate on the *brick's* flag rather than a tier lookup, so
+  the kill and reflect paths stay single-branch; `drawBricks` is
+  untouched — the fixed colour falls out of the existing tier-colour
+  lookup, keeping the draw pass branch-free as always. `bricksLeft`
+  counts non-X cells only, which is what makes "clear the breakables,
+  fixed bricks remain, win fires" fall out of the existing O(1) check.
+  Alternatives: special-case `TIER_FIXED` at every use site (rejected —
+  re-scatters one concept over the physics, scoring and draw passes),
+  or a separate `fixed` pool (rejected — doubles the pool the ticket
+  pins to `BRICK_ROWS * BRICK_COLS`).
+- **The tunnel criterion's "topmost occupied row" is read as the
+  pattern's minimum occupied row** (the row from which the ball's pocket
+  behind the wall is measured): a qualifying pair needs zero breakable
+  cells in both columns on every row below it. Pattern 1 qualifies with
+  columns 4–5 — entirely empty below its fixed top wall, so the ball is
+  guided up through the gate and back down the same channel. The check
+  counts breakable cells only, per the ticket's literal wording; the
+  shipped patterns additionally keep the whole channel empty of fixed
+  bricks, so the corridor is physically passable. Alternative reading
+  (per-pair topmost occupied row) would make a fully empty pair
+  ill-defined — rejected as the weaker specification.

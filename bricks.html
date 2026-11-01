@@ -233,14 +233,40 @@ var POINTS_BRICK_B = 20;
 var COLOR_BRICK_C = "#4fc1e9";
 var POINTS_BRICK_C = 10;
 // Per-tier hit points to break (ticket #42): the top tier takes the
-// most hits, the base tier still dies in one.
+// most hits, the base tier still dies in one. The fixed tier scores
+// zero and can never be charged (unbreakable); its hp of 0 keeps
+// the damage-rendering comparison (hp < tier hp) permanently false.
 var HP_BRICK_A = 3;
 var HP_BRICK_B = 2;
 var HP_BRICK_C = 1;
+var HP_BRICK_FIXED = 0;
+// Fixed bricks (ticket #43): unbreakable, worth nothing — a ball
+// must get behind them, not break them. The tier is a table entry
+// like the others so the draw pass stays a plain colour lookup.
+var COLOR_BRICK_FIXED = "#8b93a7";
+var POINTS_BRICK_FIXED = 0;
 var BRICK_TIERS = [
   { color: COLOR_BRICK_A, points: POINTS_BRICK_A, hp: HP_BRICK_A },
   { color: COLOR_BRICK_B, points: POINTS_BRICK_B, hp: HP_BRICK_B },
-  { color: COLOR_BRICK_C, points: POINTS_BRICK_C, hp: HP_BRICK_C }
+  { color: COLOR_BRICK_C, points: POINTS_BRICK_C, hp: HP_BRICK_C },
+  { color: COLOR_BRICK_FIXED, points: POINTS_BRICK_FIXED, hp: HP_BRICK_FIXED, unbreakable: true }
+];
+var TIER_FIXED = BRICK_TIERS.length - 1; // index of the unbreakable tier
+// Level layout table (ticket #43): BRICK_ROWS row-strings of
+// BRICK_COLS cells — '.' = empty, 'A'/'B'/'C' = the matching tier
+// letter, 'X' = fixed brick. Level k takes
+// LEVEL_PATTERNS[(k - 1) % LEVEL_PATTERNS.length], cycling forever.
+var CELL_TIER = { A: 0, B: 1, C: 2, X: TIER_FIXED };
+var LEVEL_PATTERNS = [
+  // 0 — tiered wall: the solid classic grid
+  [ "AAAAAAAAAA", "BBBBBBBBBB", "CCCCCCCCCC", "AAAAAAAAAA", "BBBBBBBBBB" ],
+  // 1 — gated fort: fixed top wall with a two-column gate the ball
+  //   is guided up (and back down) to the pocket behind the wall
+  [ "XXXX..XXXX", "AAAA..AAAA", "BBBB..BBBB", "CCCC..CCCC", "BBBB..BBBB" ],
+  // 2 — checker scatter: sparse alternating cells with an open rim
+  [ "A.C.C.C.C.", "B.A.B.A.B.", "C.B.C.B.C.", "A.B.A.B.A.", "B.C.B.C.B." ],
+  // 3 — overhang: a fixed slab hovering above an open field
+  [ "AAAAAAAAAA", "CC.XXXX.CC", "BB.XX...BB", "BB......BB", "CCCC.CCCCC" ]
 ];
 // Damaged fill of a tier colour: a non-lethal hit dims the brick in
 // place. Channels scaled down by BRICK_DARK_FACTOR, computed once at
@@ -426,7 +452,7 @@ var stickyUntil = -1;              // simTime at which the sticky catch expires;
 // update() clears it at frame end.
 var bricks = [];
 for (var i = 0; i < BRICK_ROWS * BRICK_COLS; i += 1) {
-  bricks.push({ active: false, tier: 0, hp: 0, charged: false, x: 0, y: 0, w: 0, h: 0 });
+  bricks.push({ active: false, tier: 0, hp: 0, charged: false, unbreakable: false, x: 0, y: 0, w: 0, h: 0 });
 }
 var bricksLeft = 0;               // live bricks, kept as an O(1) win check
 // Runtime serve speed: reset to BALL_SERVE_SPEED at (re)start, grown
@@ -594,27 +620,48 @@ function layoutBricks() {
     bricks[i].h = BRICK_HEIGHT;
   }
 }
-// Activate the whole pool for the current level (module global):
-// the colour/value rows cycle by one tier per level, so every
-// level presents a shifted layout.
+// Activate the pattern assigned to the current level (module
+// global) into the fixed pool in place: level k takes
+// LEVEL_PATTERNS[(k - 1) % LEVEL_PATTERNS.length], so the table
+// cycles forever and a spawn never allocates. '.' leaves a cell
+// dormant, a tier letter arms the matching one-hit tier, 'X' arms
+// the unbreakable fixed tier. bricksLeft counts breakable bricks
+// only, so fixed bricks never block a win.
 function spawnLevel() {
-  var shift = (level - 1) % BRICK_TIERS.length;
+  var pattern = LEVEL_PATTERNS[(level - 1) % LEVEL_PATTERNS.length];
+  var left = 0;
   for (var i = 0; i < bricks.length; i += 1) {
     var row = Math.floor(i / BRICK_COLS);
-    bricks[i].tier = (row + shift) % BRICK_TIERS.length;
-    bricks[i].hp = BRICK_TIERS[bricks[i].tier].hp; // full durability
-    bricks[i].charged = false;
-    bricks[i].active = true;
+    var col = i % BRICK_COLS;
+    var line = pattern[row];
+    var ch = line ? line.charAt(col) : "";
+    if (ch === "") ch = ".";
+    var b = bricks[i];
+    b.charged = false; // new board: frame damage flags reset
+    if (ch === ".") {
+      b.active = false;
+      b.tier = 0; // dormant cells carry no tier: the pool's state
+                  // stays a pure function of the current pattern
+      b.unbreakable = false;
+    } else {
+      b.active = true;
+      b.tier = CELL_TIER[ch];
+      b.unbreakable = ch === "X";
+      b.hp = BRICK_TIERS[b.tier].hp; // full durability
+      if (ch !== "X") left += 1;
+    }
   }
-  bricksLeft = bricks.length;
+  bricksLeft = left;
   layoutBricks();
 }
 // One kill path shared by the lethal physics hit and console
-// access: a brick is destroyed outright, credits exactly its
-// tier's points, and the final brick wins the level.
+// access: a brick whose durability the hit drained to zero is
+// destroyed outright, credits exactly its tier's points, and the
+// final brick wins the level. Fixed bricks are immune — a kill
+// attempt on them is a silent no-op.
 function destroyBrick(index) {
   var b = bricks[index];
-  if (!b.active) return;
+  if (!b.active || b.unbreakable) return;
   b.active = false;
   bricksLeft -= 1;
   score += BRICK_TIERS[b.tier].points;
@@ -860,7 +907,10 @@ function collideBricks(b) {
         ? k.y - BALL_RADIUS - BRICK_PIN_EPS
         : k.y + k.h + BALL_RADIUS + BRICK_PIN_EPS;
     }
-    if (!k.charged) {
+    // Unbreakable bricks only reflect: no destroy, no score, no
+    // drop, no bricksLeft effect — the per-frame damage charge is
+    // spent on breakable bricks only (the win counts breakables).
+    if (!k.unbreakable && !k.charged) {
       k.charged = true; // spent this frame's single damage charge
       k.hp -= 1;
       if (k.hp <= 0) destroyBrick(i);
@@ -891,7 +941,7 @@ function restartRun() {
   beginRun();
 }
 // One reset path shared by first start and restart: a fresh
-// attached serve, a fully live brick grid (spawnLevel below), and a
+// attached serve, the level-1 pattern grid (spawnLevel below), and a
 // drained power-up state (no capsule or widen carries over).
 function beginRun() {
   score = 0;
