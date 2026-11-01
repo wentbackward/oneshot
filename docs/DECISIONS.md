@@ -1312,3 +1312,32 @@
   bricks, so the corridor is physically passable. Alternative reading
   (per-pair topmost occupied row) would make a fully empty pair
   ill-defined — rejected as the weaker specification.
+## 2026-11-01 — Ticket #44: persisted difficulty selector (presets, run snapshot, expand baseline)
+
+- **Preset values are the author's choice** (the ticket names the knobs, not
+  their numbers): easy `{serveSpeed 400, paddleWidth 150, dropRate 0.35}`,
+  hard `{560, 96, 0.15}`, and `normal` references the existing named
+  constants (`BALL_SERVE_SPEED`, `BASE_PADDLE_W`, `POWERUP_DROP_RATE`) so
+  the default experience is byte-identical to before and the constants
+  stay the single source of truth. Symmetric ±~20% spread around legacy.
+  Alternatives: percentage deltas (rejected — opaque at the tuning site),
+  keeping three literal copies (rejected — normal drifting from the
+  constants would fork the legacy tuning).
+- **Direction: easier = slower serve, wider paddle, MORE capsules; harder
+  = faster, narrower, fewer.** Capsules are player aids (expand, extra
+  ball, sticky), so generosity scales with ease. Alternative: hard gets
+  more capsules as "extra reward" (rejected — contradicts the aid
+  framing).
+- **The expand power-up now widens from the RUN's base width**, a new
+  `basePaddleW` state snapshotted in `beginRun()`, instead of the raw
+  `BASE_PADDLE_W` constant — otherwise an expand caught on easy/hard
+  would relax back to the wrong (normal) width. Alternatives: recomputing
+  from the preset on expiry (rejected — re-reads selection that could
+  legitimately differ from the running preset) or leaving it (rejected —
+  a real correctness bug for non-normal presets, covered by a test).
+- **Selection persists on change only**: clicking the already-active
+  option is a no-op, so an idle screen never chatters localStorage
+  writes. Stored values are validated against the table keys and the
+  string type; anything else (unknown name, corrupt JSON, non-string)
+  falls back to `normal` so a botched write can never break boot — the
+  same posture as `loadHighScore`.
