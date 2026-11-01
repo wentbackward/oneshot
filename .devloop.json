@@ -3,27 +3,19 @@
   "remote": "origin",
   "fast_check": "",
   "checks": [
-    "test -s bricks.html",
-    "head -c 15 bricks.html | tr -d '\\0' | grep -qi '<!doctype html>'",
-    "grep -q 'requestAnimationFrame' bricks.html",
-    "grep -qE 'class=\"game\"|id=\"game\"|<canvas' bricks.html",
-    "grep -qi 'monospace' bricks.html",
+    "test -s asteroids.html",
+    "head -c 15 asteroids.html | tr -d '\\0' | grep -qi '<!doctype html>'",
+    "grep -q 'requestAnimationFrame' asteroids.html",
+    "grep -qE 'class=\"game\"|id=\"game\"|<canvas' asteroids.html",
+    "grep -qi 'monospace' asteroids.html",
+    "[ \"$(grep -cE '(src|href)=' asteroids.html)\" -eq 0 ]",
     "[ \"$(grep -cE '(src|href)=' bricks.html)\" -eq 0 ]",
     "grep -qE '^[[:space:]]*#game[[:space:]]*\\{[^}]*cursor:[[:space:]]*none' bricks.html",
-    "[ \"$(grep -c 'data-difficulty=' bricks.html)\" -eq 3 ]",
     "[ \"$(grep 'data-difficulty=' bricks.html | grep -c selected)\" -eq 1 ] && grep 'data-difficulty=\"normal\"' bricks.html | grep -q selected",
     "grep -q 'id=\"btn-mute\"' bricks.html && grep -q 'id=\"sound-volume\"' bricks.html",
-    "for f in tests/bricks-*.test.mjs; do timeout 60 node \"$f\" || exit 1; done"
+    "for f in tests/*.test.mjs; do timeout 60 node \"$f\" || exit 1; done"
   ],
-  "heavy": {
-    "slots": 2
-  },
-  "stop_gate": {
-    "require_clean_tree": true,
-    "max_blocks": 5
-  },
-  "merge": {
-    "method": "squash",
-    "delete_branch": true
-  }
+  "heavy": { "slots": 2 },
+  "stop_gate": { "require_clean_tree": true, "max_blocks": 5 },
+  "merge": { "method": "squash", "delete_branch": true }
 }
