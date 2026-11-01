@@ -247,11 +247,12 @@ var BRICK_TIERS = [
 // module load — the hit and draw paths never allocate.
 var BRICK_DARK_FACTOR = 0.45;
 function darkenHex(hex, factor) {
-  var chan = function (i) {
-    return Math.round(parseInt(hex.slice(i, i + 2), 16) * factor)
+  var out = "#";
+  for (var i = 1; i < hex.length; i += 2) {
+    out += Math.round(parseInt(hex.slice(i, i + 2), 16) * factor)
       .toString(16).padStart(2, "0");
-  };
-  return "#" + chan(1) + chan(3) + chan(5);
+  }
+  return out;
 }
 BRICK_TIERS.forEach(function (t) { t.dark = darkenHex(t.color, BRICK_DARK_FACTOR); });
 // Power-ups (PRD section 4): capsules released by destroyed bricks

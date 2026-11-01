@@ -172,6 +172,10 @@ function boot(width = 960, height = 600) {
   };
   const context = vm.createContext(sandbox);
   vm.runInContext(gameSource, context);
+  // Pin the game's mutable `random` hook ABOVE POWERUP_DROP_RATE so
+  // lethal hits never roll a capsule: the suite isolates durability
+  // and the capsule path is provably inert (strict determinism).
+  vm.runInContext("random = () => 1 - 1e-9", context);
 
   let nowMs = 0;
   const FRAME_MS = 1000 / 60;
