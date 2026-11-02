@@ -805,6 +805,17 @@ var SFX_BRICK_BREAK   = { wave: WAVE_NOISE,  freq: 900, dur: 0.09 };
 // so the recipe's initial freq cannot drift from the table.
 var SFX_BRICK_CHIP_FREQ = [0, 440, 550, 660];
 var SFX_BRICK_CHIP    = { wave: WAVE_SINE,   freq: SFX_BRICK_CHIP_FREQ[3], dur: 0.04 };
+// Wall-bounce cue (ticket #96): a short, LOW square blip scheduled
+// on the same bus. Deliberately distinct and quieter than the brick
+// chip/pop — a different wave (square, not the chip's sine or the
+// pop's noise), a frequency below every chip pitch and the pop,
+// and its OWN envelope peak (SFX_WALL_BOUNCE_PEAK) at half the
+// standard SFX_PEAK, so rapid wall rattle reads as quiet texture
+// instead of competing with brick sounds. The optional `peak` field
+// makes scheduleSound() honour a per-recipe level; recipes without
+// one keep peaking at SFX_PEAK exactly as before.
+var SFX_WALL_BOUNCE_PEAK = 0.25;      // half of SFX_PEAK: the rattle stays quiet
+var SFX_WALL_BOUNCE = { wave: WAVE_SQUARE, freq: 170, dur: 0.05, peak: SFX_WALL_BOUNCE_PEAK };
 var SFX_POWERUP_CATCH = { wave: WAVE_SQUARE, freq: 660, dur: 0.12 };
 // EXCITING-mode capture blips (ticket #75): each new capsule gets a
 // small blip distinct from the legacy catch blip and from its
@@ -814,7 +825,7 @@ var SFX_CATCH_INVULNERABLE = { wave: WAVE_SINE,   freq: 880,  dur: 0.10 };
 var SFX_CATCH_MULTIBALL    = { wave: WAVE_SQUARE, freq: 990,  dur: 0.12 };
 var SFX_CATCH_BLAST        = { wave: WAVE_NOISE,  freq: 1200, dur: 0.15 };
 var SFX_GAME_OVER     = { wave: WAVE_SINE,   freq: 110, dur: 0.50 };
-var SFX_PEAK = 0.5;                    // every envelope peaks here; the bus scales it
+var SFX_PEAK = 0.5;                    // envelope peak for every recipe that carries no own `peak` (SFX_WALL_BOUNCE peaks lower); the bus scales it
 var SFX_DECAY_FLOOR = 0.001;           // decay target: exp ramps cannot reach exact 0
 var SFX_EXP_EPS = 1e-4;                // exp-ramp guard: start and target stay positive
 var SFX_NOISE_BUFFER_SECONDS = 0.25;   // shared noise source length
@@ -843,16 +854,19 @@ function ensureAudio() {
 // Schedule one shot of a named recipe: the source — an oscillator for
 // sine/square, or the shared noise buffer through a lowpass at the
 // recipe frequency for noise — feeds a freshly shaped envelope gain,
-// which connects to the single MASTER_BUS. The envelope peaks at
-// SFX_PEAK, then decays to SFX_DECAY_FLOOR at the recipe duration,
-// so the node's audio is bounded. Both ramp values are clamped to
-// SFX_EXP_EPS (exp ramps must stay positive); the start is set at the
-// schedule time, so a console zeroed SFX_PEAK/SFX_DECAY_FLOOR can
+// which connects to the single MASTER_BUS. The envelope peaks at the
+// recipe's own `peak` when it carries one (SFX_WALL_BOUNCE's quiet
+// rattle level), else SFX_PEAK, then decays to SFX_DECAY_FLOOR at
+// the recipe duration, so the node's audio is bounded. Both ramp
+// values are clamped to SFX_EXP_EPS (exp ramps must stay positive);
+// the start is set at the schedule time, so a console zeroed
+// SFX_PEAK / SFX_DECAY_FLOOR / SFX_WALL_BOUNCE_PEAK can
 // never make the scheduler throw.
 function scheduleSound(recipe) {
   if (!audioCtx) return; // audio not enabled yet: silent no-op
   var t0 = audioCtx.currentTime;
   MASTER_BUS.gain.value = MASTER_GAIN; // live console retunes apply
+  var peak = recipe.peak === undefined ? SFX_PEAK : recipe.peak;
   var input = null; // node feeding the envelope
   if (recipe.wave === WAVE_NOISE) {
     input = audioCtx.createBiquadFilter();
@@ -869,7 +883,7 @@ function scheduleSound(recipe) {
     input.frequency.value = recipe.freq;
   }
   var env = audioCtx.createGain();
-  env.gain.setValueAtTime(Math.max(SFX_PEAK, SFX_EXP_EPS), t0);
+  env.gain.setValueAtTime(Math.max(peak, SFX_EXP_EPS), t0);
   env.gain.exponentialRampToValueAtTime(
     Math.max(SFX_DECAY_FLOOR, SFX_EXP_EPS), t0 + recipe.dur);
   input.connect(env);
@@ -2057,19 +2071,26 @@ function updateBalls(dt) {
     }
   }
 }
-// Walls: mirror the velocity component, pin to the inner edge. The
-// bottom is open — that is how a life is lost.
+// Walls: mirror the velocity component, pin to the inner edge. Each
+// real crossing schedules the quiet wall-bounce blip (ticket #96)
+// through the shared recipe — no per-bounce allocation. A ball that
+// is already pinned at the inner edge no longer satisfies the
+// crossing test, so resting balls do not rattle. The bottom is
+// open — that is how a life is lost.
 function bounceWalls(b) {
   if (b.x - BALL_RADIUS < 0) {
     b.x = BALL_RADIUS;
     b.vx = Math.abs(b.vx);
+    scheduleSound(SFX_WALL_BOUNCE);
   } else if (b.x + BALL_RADIUS > canvas.width) {
     b.x = canvas.width - BALL_RADIUS;
     b.vx = -Math.abs(b.vx);
+    scheduleSound(SFX_WALL_BOUNCE);
   }
   if (b.y - BALL_RADIUS < 0) {
     b.y = BALL_RADIUS;
     b.vy = Math.abs(b.vy);
+    scheduleSound(SFX_WALL_BOUNCE);
   }
 }
 // Circle vs brick overlap resolved along the shallowest axis; the
