@@ -37,8 +37,9 @@ const KEY = "brickbreaker.theme";
 const NAMES = ["classic", "neon", "minimal"];
 const HEX = /^#[0-9a-f]{6}$/i;
 
-// Local copy of the game's damage-dimming rule (BRICK_DARK_FACTOR),
-// used to recompute the expected tier `dark` values after an apply.
+// Local copy of the game's damage-wear rule (BRICK_WEAR_STEP),
+// used to recompute the expected tier wear-ramp stages after an
+// apply (ticket #71 replaces the single dark variant).
 function darkenHex(hex, factor) {
   let out = "#";
   for (let i = 1; i < hex.length; i += 2) {
@@ -47,6 +48,7 @@ function darkenHex(hex, factor) {
   }
   return out;
 }
+const wearFactor = (step, d) => Math.min(1, Math.max(0, 1 - step * d));
 
 // ---------- tiny test harness ----------
 let passed = 0;
@@ -370,11 +372,18 @@ check("clicking neon applies the neon CSS triple (exact recorded setProperty cal
   assert(g.q("COLOR_BALL") === row.palette.ball,
     `COLOR_BALL must be the neon ball ${row.palette.ball}, got ${g.q("COLOR_BALL")}`);
   const tiers = g.q("BRICK_TIERS");
+  const wearStep = g.q("BRICK_WEAR_STEP");
   row.palette.bricks.forEach((color, i) => {
     assert(tiers[i].color === color,
       `BRICK_TIERS[${i}].color must be the neon tier colour ${color}, got ${tiers[i].color}`);
-    assert(tiers[i].dark === darkenHex(color, g.q("BRICK_DARK_FACTOR")),
-      `BRICK_TIERS[${i}].dark must be the dimmed neon colour, got ${tiers[i].dark}`);
+    const stages = tiers[i].unbreakable ? 1 : tiers[i].hp;
+    assert(tiers[i].ramp.length === stages,
+      `BRICK_TIERS[${i}].ramp must hold ${stages} stages, got ${tiers[i].ramp.length}`);
+    for (let d = 0; d < stages; d += 1) {
+      const want = d === 0 ? color : darkenHex(color, wearFactor(wearStep, d));
+      assert(tiers[i].ramp[d] === want,
+        `BRICK_TIERS[${i}].ramp[${d}] must be wear stage ${d} of the neon colour, got ${tiers[i].ramp[d]}`);
+    }
   });
   const o = opts(g);
   assert(isMarked(o.neon) && !isMarked(o.classic) && !isMarked(o.minimal),
