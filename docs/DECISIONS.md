@@ -2101,3 +2101,67 @@ arcade physics).
   canvas/render-state only (the mode buttons from ticket #74 already
   exist), so none of the sibling suites' element stub maps needed
   additions; the house trap was checked and does not apply.
+## 2026-11-02 — Ticket #76: ALLEYWAY mode — portrait 480×800 arena with its own level patterns
+
+- **`GAME_W`/`GAME_H` became the RUNTIME stage size, initialised from new
+  named `CLASSIC_W`/`CLASSIC_H` (960/600) and `ALLEYWAY_W`/`ALLEYWAY_H`
+  (480/800) vars; `BRICK_ROWS`/`BRICK_COLS` likewise from
+  `CLASSIC_BRICK_ROWS/COLS` (5/10) and `ALLEYWAY_BRICK_ROWS/COLS` (10/5).
+  `beginRun()` re-sets all four from `runMode` and re-runs
+  `resizeCanvas()`, so the backing store, the CSS letterbox fit and the
+  rect-mapped pointer math follow the mode with zero new branches in
+  the hot path.** The ticket names the stage-size vars as the seam
+  ("the stage-size vars switch per mode at run start and restore on
+  returning to menu"); making the EXISTING `GAME_W`/`GAME_H`/
+  `BRICK_ROWS`/`BRICK_COLS` the switched pair means every geometry
+  reader (`resizeCanvas`, `fitStageCss`, `setPaddleX`, `bounceWalls`,
+  `layoutBricks`, `spawnLevel`, the draw pass) already consumes the
+  right value — no call site changes. Alternatives rejected:
+  a `stageDims(mode)` accessor (scatters a mode branch into every
+  geometry read, per-call allocation-free but per-site noisier);
+  a parallel `ALLEYWAY_GAME_W` consulted ad hoc (two sources of truth
+  for the same quantity).
+- **Portrait patterns are a SEPARATE table
+  (`ALLEYWAY_LEVEL_PATTERNS`, two patterns: "spine" and "slalom"),
+  not the landscape table transposed.** Transposing the 5×10
+  landscape strings onto the 10×5 portrait grid preserves the WIDE-WALL
+  proportions — a transposed "tiered wall" is ten stacked rows that
+  reads as a stretched landscape board, which the ticket calls out
+  explicitly. The portrait table is designed for the tall field:
+  vertical corridors, offset fixed slabs. Every pattern reuses the
+  tier system (A/B/C + fixed X) and is provably clearable — the suite
+  flood-fills each pattern from the bottom row (X impassable) and
+  asserts every breakable cell is reachable, so a future edit cannot
+  ship an uncleareable level. Alternatives rejected: transposed
+  landscape table (proportions); a third shared generator function
+  (more moving parts for two fixed patterns — a table row is the
+  house convention, cf. `LEVEL_PATTERNS`).
+- **The portrait 5×10 grid reuses the single 50-cell brick pool**
+  (10×5 = 5×10, same product as the landscape 5×10), so the pool
+  allocation, the precomputed `CRACK_POINTS` table and the
+  `MAX_BRICK_RESCANS_PER_SUBSTEP` cap all stay untouched; `spawnLevel`
+  and `layoutBricks` just re-index with the runtime `BRICK_COLS`.
+  Alternative rejected: a second pool for the portrait grid (double
+  the memory for identical capacity, and every collision/draw/clear
+  loop would need a mode branch to pick it).
+- **The alleyway mode row carries only `dropFactor: 1.0`** — its
+  geometry lives in the named `ALLEYWAY_*` vars, not on the row, so
+  the `MODES` table stays the pure drop-economy snapshot (the
+  ticket's "classic rules, classic drop rate") and future modes that
+  need knobs get a row field, not a bag of heterogeneous types.
+  Alt. rejected: `{ w, h, rows, cols, dropFactor }` on the row (mixes
+  structural geometry into the economy table and forces the
+  classic/exciting rows to duplicate 960/600/5/10).
+- **`beginRun()` clamps the paddle AFTER the resize** — a landscape
+  run can park the paddle at x≈900 (stage px), which is outside the
+  portrait field; clamping pre-resize would clamp against the stale
+  width. Combined with the existing `clampPaddle` in the pointer/
+  keyboard paths this closes the "paddle clamped to the narrower
+  width" criterion.
+- **NEW BOOT-TIME DOM ELEMENT: `mode-alleyway` was added to ALL
+  twenty-one bricks suites' element stub maps** (verified by grep:
+  one stub line per suite), not just the new `tests/bricks-
+  alleyway.test.mjs` — the house trap from the last wave, applied
+  once, exhaustively. `tests/bricks-modes.test.mjs`'s static
+  assertions were widened from "two data-mode nodes" to three
+  (classic|exciting|alleyway) as the scaffold absorbed the button.

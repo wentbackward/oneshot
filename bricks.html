@@ -924,7 +924,7 @@ var lives = PLAYER_LIVES;         // (re)start-time snapshot of PLAYER_LIVES
 var resizePending = false;
 var lastFrameTime = null;
 // Paddle position is its centre x; the top-edge y derives from the
-// (constant) stage height.
+// run's stage height (constant within a run; beginRun() picks it per mode).
 var paddle = { x: 0 };
 // Runtime paddle width: widened while an expand capsule's effect is
 // live, otherwise the run's base width.
@@ -1578,9 +1578,10 @@ window.addEventListener("touchmove", function (e) {
 }, { passive: false });
 
 // ---- Bricks (fixed-size pool, mutated in place across levels) ----
-// Geometry derives from the constant stage size (the backing store
-// never changes after boot), so one layout is stable for the whole
-// run and never needs a re-fit.
+// Geometry derives from the run's stage size (the backing store is
+// fixed FOR A RUN — beginRun() picks it per mode and it holds for
+// the whole run), so one layout is stable for the run and never
+// needs a re-fit.
 function layoutBricks() {
   var bw = (canvas.width - 2 * BRICK_SIDE_MARGIN - (BRICK_COLS - 1) * BRICK_GAP) / BRICK_COLS;
   for (var i = 0; i < bricks.length; i += 1) {
