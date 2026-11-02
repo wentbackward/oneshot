@@ -2423,7 +2423,6 @@ arcade physics).
   suite (`tests/bricks-serve-jitter.test.mjs`). Widening the epsilon
   would have turned exact-law assertions into fuzzy ones.
 
-<<<<<<< HEAD
 ## 2026-11-02 — Ticket #98: widen the brick field side inset (angle reach)
 
 - **`BRICK_SIDE_MARGIN` raised from 24 to 40 canvas px (single value,
@@ -2462,7 +2461,6 @@ arcade physics).
   suites (bricks-grid, bricks-alleyway, bricks-level-layouts) derive
   positions from the named vars, so they track the new inset with
   no edits.
-=======
 ## 2026-11-02 — Ticket #100: double the timed powerup durations
 
 - **Doubling the five named durations is the fix, not a base-speed
@@ -2491,4 +2489,3 @@ arcade physics).
   kind.
 - **Extra/Life remain instant** (no duration var exists or is added),
   per the ticket.
->>>>>>> 1116291 (docs(decisions): ticket #100 — doubled durations, base speed deliberately untouched (Refs #100))
