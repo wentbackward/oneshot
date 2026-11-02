@@ -1710,3 +1710,47 @@ the initializer CONTRACT — if a future reordering hit-tested before
 `updateLasers`, the stale step would resurface, and the suite would
 catch it rather than shipping a rock that scores before the beam
 visibly reaches it.
+
+### 2026-11-02 — Bricks: playfield boundary render gating (ticket #69)
+
+The ticket listed the game-over screen among screens where the walls
+must NOT be drawn, but parenthetically instructed us to "match
+whatever the current 'playing field visible' render gating is".
+Verified against the code: `draw()` hides the field on the start
+screen only — on "paused" and "gameover" it deliberately renders the
+frozen field behind the overlay (documented in `enterGameOver`:
+"the frozen field behind the overlay shows the ball at rest").
+Decision: gate `drawBoundary()` with exactly that existing guard
+(`gameState === "start"` early-return), so walls appear in
+playing/paused/gameover frames and never on the start screen.
+
+Rejected alternative: drawing the walls only in "playing"/"paused" —
+it would leave the game-over field with bricks, paddle and ball but
+no boundary, a visually inconsistent state the ticket's own
+"match the current gating" instruction rules out.
+
+### 2026-11-02 — Bricks: boundary colours as two explicit palette keys (ticket #69)
+
+`THEMES[name].palette` gains `wall` and `danger` alongside
+bg/paddle/ball/bricks, mirrored onto `COLOR_WALL`/`COLOR_DANGER` in
+`applyTheme` (same write-through pattern). Values reuse existing
+palette hues so each theme's pair reads as native: classic
+`#5cf2b0` (accent) / `#ef5d62` (brick-A red), neon `#00f0ff` (accent)
+/ `#ff2d78` (neon magenta brick), minimal `#14141a` (ink) /
+`#57534e` (darkest stone brick). Rejected alternatives: one key plus
+a `globalAlpha` fade for the danger line (the dash already provides
+the "subtle" distinction; alpha would muddy the minimal theme's
+near-monochrome ground) and reading the CSS `--accent` value (canvas
+mirrors are the established palette source for the draw pass).
+
+### 2026-11-02 — Bricks: dash arguments prebuilt at module load (ticket #69)
+
+`DANGER_DASH = [12, 10]` and `NO_DASH = []` are module-load globals;
+`drawBoundary` passes those same references to `setLineDash` every
+frame (pattern, then reset). Writing a fresh array literal per frame
+would be per-frame allocation in the hot path — banned by house rule.
+Rejected alternative: setting the dash once at boot (a future caller
+could clobber the state; explicit reset each frame keeps the draw
+pass self-contained at negligible cost). The boundary suite pins the
+reference identity across frames, so a regression to a per-frame
+literal fails the suite.
