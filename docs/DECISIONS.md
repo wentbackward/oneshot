@@ -2423,6 +2423,7 @@ arcade physics).
   suite (`tests/bricks-serve-jitter.test.mjs`). Widening the epsilon
   would have turned exact-law assertions into fuzzy ones.
 
+<<<<<<< HEAD
 ## 2026-11-02 — Ticket #98: widen the brick field side inset (angle reach)
 
 - **`BRICK_SIDE_MARGIN` raised from 24 to 40 canvas px (single value,
@@ -2461,3 +2462,33 @@ arcade physics).
   suites (bricks-grid, bricks-alleyway, bricks-level-layouts) derive
   positions from the named vars, so they track the new inset with
   no edits.
+=======
+## 2026-11-02 — Ticket #100: double the timed powerup durations
+
+- **Doubling the five named durations is the fix, not a base-speed
+  change.** The complaint is "the effect is gone before the ball
+  finishes its round trip" — that is a window-length problem, so the
+  window is doubled in place: `PADDLE_EXPAND_DURATION_S` 6→12,
+  `STICKY_DURATION_S` 6→12, `MULT_DURATION_S` 6→12,
+  `INVULNERABLE_DURATION_S` 6→12, `BLAST_DURATION_S` 5→10. The
+  operator floated "maybe the base game speed is too slow also?" —
+  that is a QUESTION, and acting on it would silently retime the whole
+  game (serve, ball growth, collisions) on every preset and difficulty
+  row, for a complaint the duration doubling already resolves. The
+  BALL SPEED slider (50–150%, tickets #73/#89/#90) already exposes
+  tempo to the player and scales the whole speed curve, so it stays
+  the escape hatch if the base tempo is ever judged wrong.
+  Alternatives rejected: lowering `BALL_SERVE_SPEED` / the level speed
+  curve (global retime, out of scope); scaling durations by the
+  ball-speed percent (couples two already-linked systems, and at 50%
+  the player deliberately chose slower balls AND shorter windows).
+- **The values stay top-level `var` knobs (console-retunable, house
+  style)** — only the initialisers moved. Expiry bookkeeping
+  (`*Until = simTime + DURATION`, cleared in `updatePowerups()`) is
+  untouched, so every existing dynamic test stays valid and the new
+  suite `tests/bricks-powerup-durations.test.mjs` pins the exact
+  doubled values plus the holds-at-T+D/2 / gone-at-T+D semantics per
+  kind.
+- **Extra/Life remain instant** (no duration var exists or is added),
+  per the ticket.
+>>>>>>> 1116291 (docs(decisions): ticket #100 — doubled durations, base speed deliberately untouched (Refs #100))
