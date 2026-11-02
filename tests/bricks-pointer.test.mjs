@@ -1,10 +1,14 @@
 #!/usr/bin/env node
 // ================================================================
-// Unit tests — bricks.html pointer steering outside the stage rect
-// (ticket #91): a pointer whose position falls OUTSIDE the stage's
-// fitted bounding rect must HOLD the paddle (no edge-pin), and every
-// pointer event must move the paddle at most POINTER_MAX_STEP,
-// inside the rect too. Supersedes the ticket #40 edge-clamp.
+// Unit tests — bricks.html pointer steering (ticket #95,
+// redesigning the #91 rules): a pointer maps its clientX THROUGH
+// the stage's fitted bounding rect onto the paddle's reachable
+// range and the paddle is SET there in ONE event — instant 1:1
+// positional tracking, no per-event displacement cap. Off the
+// stage the paddle HUGS the corresponding wall (left/right of the
+// rect → left/right wall; above/below → still tracks by the
+// horizontal position). The #91 POINTER_MAX_STEP cap and the
+// out-of-rect hold are GONE.
 //
 // Same harness style as tests/bricks-paddle.test.mjs: runs the REAL
 // <script> from bricks.html in a sandboxed vm context with stubbed
@@ -191,8 +195,7 @@ function boot(width = 960, height = 600) {
     for (const cb of winListeners[type] ?? []) cb(ev);
   };
   const q = (expr) => vm.runInContext(expr, context);
-  // An omitted clientY sits at the rect's vertical midline (inside
-  // the rect) — a cursor dragged at mid-height.
+  // An omitted clientY sits at the rect's vertical midline.
   const midY = () => canvas.rect.top + canvas.rect.height / 2;
   return {
     els,
@@ -204,12 +207,11 @@ function boot(width = 960, height = 600) {
       Object.assign(canvas.rect, parts);
     },
     paddleX: () => q("typeof paddle === 'undefined' ? NaN : paddle.x"),
-    // Park the paddle at an exact x, then any single event within
-    // the cap lands deterministically.
+    // Park the paddle at an exact x so the next event's landing is
+    // a pure function of the mapping.
     park(x) {
       q("paddle.x = " + x + ";");
     },
-    cap: () => q("typeof POINTER_MAX_STEP === 'undefined' ? NaN : POINTER_MAX_STEP"),
     mouseMove(clientX, clientY) {
       fireWin("mousemove", {
         clientX,
@@ -235,223 +237,221 @@ const start = (g) => {
 const FULL_RECT = { left: 0, top: 0, width: 960, height: 600 };
 
 // ================================================================
-// The cap knob: a named top-level `var`, console-retunable, whose
-// default is ~1.5× the keyboard paddle's per-frame travel
-// (PADDLE_SPEED / 60).
+// The regression itself: the #91 per-event speed cap is GONE.
 // ================================================================
-check("POINTER_MAX_STEP is a named top-level numeric var, defaulting to 1.5× the keyboard per-frame travel (18 px)", () => {
+check("the #91 POINTER_MAX_STEP cap knob no longer exists in the game", () => {
   const g = boot(960, 600);
-  const cap = g.cap();
-  assert(g.q("typeof POINTER_MAX_STEP") === "number",
-    `POINTER_MAX_STEP must be a top-level numeric var, got ${g.q("typeof POINTER_MAX_STEP")}`);
-  assert(cap > 0 && Number.isFinite(cap), `the cap must be positive and finite, got ${cap}`);
-  assert(cap === 1.5 * (g.q("PADDLE_SPEED") / 60),
-    `the default cap must be 1.5× PADDLE_SPEED/60 (${1.5 * (g.q("PADDLE_SPEED") / 60)}), got ${cap}`);
-  assert(cap === 18, `with the shipped PADDLE_SPEED the cap must be 18 px, got ${cap}`);
+  const kind = g.q("typeof POINTER_MAX_STEP");
+  assert(kind === "undefined",
+    `POINTER_MAX_STEP must be deleted with all its usages, got ${kind}`);
+  assert(!html.includes("POINTER_MAX_STEP"),
+    "no trace of POINTER_MAX_STEP may remain in bricks.html");
 });
 
 // ================================================================
-// Criterion 1: an in-rect pointer follows the paddle through the
-// rect mapping, still clamped to the field — the follow rule is
-// unchanged; only the per-event step is now capped.
+// Criterion 1: responsive 1:1 tracking — an in-rect pointer's
+// rect-mapped x is SET on the paddle in ONE event, however far
+// away it is. No cap, no convergence walk.
 // ================================================================
-check("AC1: an in-rect pointer steers the paddle to the rect-mapped cursor x (exact, within the cap)", () => {
+check("AC1: a FAR in-rect event lands the paddle at the rect-mapped cursor x in a SINGLE event (no cap, no crawl)", () => {
   const g = boot(960, 600);
   start(g);
-  assert(g.canvas.rect.left === FULL_RECT.left, "sanity: the boot rect fills the viewport");
-  g.park(955);
-  g.mouseMove(485); // maps to (485/960)·1920 = 970, 15 px away — under the cap
-  assertClose(g.paddleX(), 970, 0.01,
-    `an in-rect mousemove at clientX 485 must land the paddle at 970, got ${g.paddleX()}`);
+  g.park(960); // centre — 760 px from the target
+  g.mouseMove(100); // maps to (100/960)·1920 = 200
+  assertClose(g.paddleX(), 200, 1e-9,
+    `one in-rect event 760 px away must land the paddle at 200 in that same event, got ${g.paddleX()}`);
 });
 
-check("AC1: a cursor at the rect's left edge still reaches the left wall — full wall-to-wall reach is preserved", () => {
+check("AC1: tracking is 1:1 across the whole reachable range — a sequence of in-rect events puts the paddle exactly under each cursor x", () => {
+  const g = boot(960, 600);
+  start(g);
+  // Every sample maps into the paddle's reachable range
+  // [paddleW/2, canvas.width − paddleW/2] = [60, 1860], so the
+  // landing is the raw rect mapping, uncapped and unclamped.
+  const samples = [31, 123, 480, 777, 920, 40, 900];
+  for (const c of samples) {
+    g.mouseMove(c); // maps to (c/960)·1920
+    assertClose(g.paddleX(), (c / 960) * g.canvas.width, 1e-9,
+      `an in-rect event at clientX ${c} must sit the paddle exactly at ${(c / 960) * g.canvas.width}, got ${g.paddleX()}`);
+  }
+});
+
+check("AC1: an in-rect event at the rect's left rim clamps to the left wall and its right-rim twin to the right wall (rim reach, both walls)", () => {
   const g = boot(960, 600);
   start(g);
   g.setRect(FULL_RECT);
-  g.park(g.q("paddleW / 2") + 5); // 65: just off the left wall
-  g.mouseMove(FULL_RECT.left); // maps to 0 → clamps to the wall
+  g.park(g.q("canvas.width - paddleW / 2")); // far from the left wall
+  g.mouseMove(FULL_RECT.left); // maps to 0 → clamps to the left wall
   assert(g.paddleX() === g.q("paddleW / 2"),
-    `a cursor at the rect's left edge must bring the paddle to the left wall, got ${g.paddleX()}`);
+    `a cursor on the rect's left rim must land the paddle exactly on the left wall in one event, got ${g.paddleX()}`);
+  g.park(g.q("paddleW / 2")); // far from the right wall
+  g.mouseMove(FULL_RECT.left + FULL_RECT.width); // maps to 1920 → right wall
+  assert(g.paddleX() === g.q("canvas.width - paddleW / 2"),
+    `a cursor on the rect's right rim must land the paddle exactly on the right wall in one event, got ${g.paddleX()}`);
+});
+
+check("AC1: deterministic — repeating the same in-rect event lands the paddle at the same x every time", () => {
+  const g = boot(960, 600);
+  start(g);
+  const seen = new Set();
+  for (let i = 0; i < 3; i += 1) {
+    g.park(960);
+    g.mouseMove(100);
+    assertClose(g.paddleX(), 200, 1e-9,
+      `event #${i}: the landing must be the rect-mapped 200, got ${g.paddleX()}`);
+    seen.add(g.paddleX());
+  }
+  assert(seen.size === 1,
+    `every repetition must land bitwise on the same x, saw ${seen.size} distinct values`);
 });
 
 // ================================================================
-// Criterion 2: a pointer OUTSIDE the rect (left, right, above,
-// below, including the deep letterbox bars) must NOT steer — the
-// paddle HOLDS its last position across subsequent frames instead
-// of pinning to the nearest edge (supersedes #40's edge-clamp).
+// Criterion 2: wall-hug — a cursor LEFT or RIGHT of the stage rect
+// (letterbox bar, HUD, off-window) sets the paddle to the matching
+// wall instead of freezing it (the #91 hold) or crawling there
+// (the #91 cap).
 // ================================================================
-check("AC2: a pointer left of the rect holds the paddle — no edge-pin, across subsequent frames", () => {
+check("AC2: a cursor LEFT of the stage rect hugs the LEFT wall — controllable, no freeze", () => {
   const g = boot(960, 600);
   start(g);
   // Letterboxed stage: a 480×300 rect centred in a wider viewport.
   g.setRect({ left: 240, top: 0, width: 480, height: 300 });
-  const x0 = g.paddleX();
-  assert(x0 === 960, `sanity: the paddle boots centred, got ${x0}`);
-  g.mouseMove(-10000); // deep in the left letterbox bar
+  g.park(1400); // somewhere mid-stage, far from the left wall
   g.mouseMove(239); // 1 px short of the rect's left edge
-  g.tick(10); // in-range play frames
-  assert(g.paddleX() === x0,
-    `a pointer left of the rect must hold the paddle at ${x0}, got ${g.paddleX()}`);
-  assert(g.paddleX() !== g.q("paddleW / 2"),
-    `the paddle must NOT be pinned to the left wall, got ${g.paddleX()}`);
+  g.tick(10); // in-range play frames: the hug must STICK
+  assert(g.paddleX() === g.q("paddleW / 2"),
+    `a cursor 1 px left of the rect must hug the left wall and hold it, got ${g.paddleX()}`);
+  g.mouseMove(-10000); // deep in the left letterbox bar: still the wall
+  assert(g.paddleX() === g.q("paddleW / 2"),
+    `a cursor deep in the left letterbox must keep hugging the left wall, got ${g.paddleX()}`);
 });
 
-check("AC2: a pointer right of the rect holds the paddle — no edge-pin", () => {
+check("AC2: a cursor RIGHT of the stage rect hugs the RIGHT wall — controllable, no freeze", () => {
   const g = boot(960, 600);
   start(g);
   g.setRect({ left: 240, top: 0, width: 480, height: 300 });
-  const x0 = g.paddleX();
+  g.park(500); // somewhere mid-stage, far from the right wall
   g.mouseMove(721); // 1 px past the rect's right edge
-  g.mouseMove(10000); // deep in the right letterbox bar
   g.tick(10);
-  assert(g.paddleX() === x0,
-    `a pointer right of the rect must hold the paddle at ${x0}, got ${g.paddleX()}`);
-  assert(g.paddleX() !== g.q("canvas.width - paddleW / 2"),
-    `the paddle must NOT be pinned to the right wall, got ${g.paddleX()}`);
+  assert(g.paddleX() === g.q("canvas.width - paddleW / 2"),
+    `a cursor 1 px right of the rect must hug the right wall and hold it, got ${g.paddleX()}`);
+  g.mouseMove(10000); // deep in the right letterbox bar: still the wall
+  assert(g.paddleX() === g.q("canvas.width - paddleW / 2"),
+    `a cursor deep in the right letterbox must keep hugging the right wall, got ${g.paddleX()}`);
 });
 
-check("AC2: a pointer above or below the rect (the vertical letterbox bars) holds the paddle", () => {
+check("AC2: the hug is a CONTINUOUS command — a cursor sliding outward stays glued, and pulling it back in hands control over immediately", () => {
+  const g = boot(960, 600);
+  start(g);
+  g.setRect({ left: 240, top: 0, width: 480, height: 300 });
+  g.mouseMove(0); // far left: hug the left wall
+  assert(g.paddleX() === g.q("paddleW / 2"),
+    `an off-rect-left cursor must hug the left wall, got ${g.paddleX()}`);
+  g.mouseMove(900); // far right: the wall flips in one event
+  assert(g.paddleX() === g.q("canvas.width - paddleW / 2"),
+    `swinging the cursor to the right letterbox must flip to the right wall in one event, got ${g.paddleX()}`);
+  g.mouseMove(480); // back inside, mid-rect: 1:1 resumes instantly
+  assertClose(g.paddleX(), ((480 - 240) / 480) * g.canvas.width, 1e-9,
+    `a cursor pulled back inside must hand over 1:1 tracking in one event, got ${g.paddleX()}`);
+});
+
+// ================================================================
+// Criterion 3: above/below the rect (the vertical letterbox bars,
+// the HUD) does NOT freeze or wall-hug vertically — the paddle
+// still tracks the cursor's HORIZONTAL position.
+// ================================================================
+check("AC3: a cursor ABOVE the rect but within its horizontal span still tracks horizontally", () => {
   const g = boot(960, 600);
   start(g);
   g.setRect({ left: 240, top: 100, width: 480, height: 300 });
-  const x0 = g.paddleX();
-  const midX = 240 + 480 / 2; // 480: inside the rect horizontally
-  g.mouseMove(midX, 99); // 1 px above the rect
-  g.mouseMove(midX, -10000); // deep in the top letterbox bar
-  g.mouseMove(midX, 401); // 1 px below the rect
-  g.mouseMove(midX, 10000); // deep in the bottom letterbox bar
-  g.tick(10);
-  assert(g.paddleX() === x0,
-    `a pointer above/below the rect must hold the paddle at ${x0}, got ${g.paddleX()}`);
-});
-
-check("AC2: the containment test is inclusive on all four edges — a pointer exactly ON a rect edge still steers", () => {
-  const g = boot(960, 600);
-  start(g);
-  g.setRect(FULL_RECT);
-  const cap = g.cap();
-  g.park(950);
-  g.mouseMove(FULL_RECT.left, 300); // exactly on the left edge → target 0, capped step
-  assert(g.paddleX() === 950 - cap,
-    `a pointer on the left edge is inside: the paddle must step ${cap} px left, got ${g.paddleX()}`);
-  g.park(950);
-  g.mouseMove(FULL_RECT.left + FULL_RECT.width, 300); // exactly on the right edge → target 1920, capped step
-  assert(g.paddleX() === 950 + cap,
-    `a pointer on the right edge is inside: the paddle must step ${cap} px right, got ${g.paddleX()}`);
-  g.park(950);
-  g.mouseMove(480, FULL_RECT.top); // exactly on the top edge → target 960
-  assert(g.paddleX() === 960,
-    `a pointer on the top edge is inside: the paddle must land at 960, got ${g.paddleX()}`);
-  g.park(950);
-  g.mouseMove(480, FULL_RECT.top + FULL_RECT.height); // exactly on the bottom edge → target 960
-  assert(g.paddleX() === 960,
-    `a pointer on the bottom edge is inside: the paddle must land at 960, got ${g.paddleX()}`);
-});
-
-check("AC2: when the pointer re-enters the rect, following resumes immediately", () => {
-  const g = boot(960, 600);
-  start(g);
   g.park(960);
-  g.mouseMove(-5000); // outside: holds at 960
-  assert(g.paddleX() === 960, `the outside event must hold the paddle at 960, got ${g.paddleX()}`);
-  g.mouseMove(475); // back inside: maps to 950, 10 px away — under the cap
-  assertClose(g.paddleX(), 950, 0.01,
-    `a pointer re-entering the rect must resume following and land at 950, got ${g.paddleX()}`);
+  g.mouseMove(400, 99); // 1 px above the rect, x inside the span
+  assertClose(g.paddleX(), ((400 - 240) / 480) * g.canvas.width, 1e-9,
+    `a cursor 1 px above the rect must still track its horizontal position, got ${g.paddleX()}`);
+  g.mouseMove(10000, -10000); // deep in the top bar, x far past the right span
+  assert(g.paddleX() === g.q("canvas.width - paddleW / 2"),
+    `a cursor deep above, horizontally past the right span, must hug the right wall, got ${g.paddleX()}`);
 });
 
-// ================================================================
-// Criterion 3: a single pointer event may move the paddle AT MOST
-// POINTER_MAX_STEP — deterministically asserted, inside the rect,
-// in both directions; the cap is the named var and is
-// console-retunable.
-// ================================================================
-check("AC3: one event landing far inside the rect moves the paddle AT MOST the cap, toward the cursor (left)", () => {
-  const g = boot(960, 600);
-  start(g);
-  const cap = g.cap();
-  g.park(960);
-  g.mouseMove(100); // maps to 200: 760 px away, far beyond the cap
-  assert(g.paddleX() === 960 - cap,
-    `one event may move the paddle at most ${cap} px toward the cursor, got ${g.paddleX()} (want ${960 - cap})`);
-  assert(g.paddleX() !== 200,
-    `the paddle must NOT teleport to the cursor position, got ${g.paddleX()}`);
-});
-
-check("AC3: one event landing far inside the rect moves the paddle AT MOST the cap, toward the cursor (right)", () => {
-  const g = boot(960, 600);
-  start(g);
-  const cap = g.cap();
-  g.park(960);
-  g.mouseMove(860); // maps to 1720: 760 px to the right
-  assert(g.paddleX() === 960 + cap,
-    `one event may move the paddle at most ${cap} px right, got ${g.paddleX()} (want ${960 + cap})`);
-});
-
-check("AC3: repeated far events step at most the cap per event and converge exactly on the cursor", () => {
-  const g = boot(960, 600);
-  start(g);
-  const cap = g.cap();
-  g.park(960);
-  for (let i = 0; i < 5; i += 1) g.mouseMove(100); // still 760−5·cap away: full cap each
-  assert(g.paddleX() === 960 - 5 * cap,
-    `five far events must step exactly ${cap} px each (want ${960 - 5 * cap}), got ${g.paddleX()}`);
-  for (let i = 0; i < 200; i += 1) g.mouseMove(100); // eventually converges
-  assertClose(g.paddleX(), 200, 0.01,
-    `sustained events must converge exactly on the cursor position 200, got ${g.paddleX()}`);
-});
-
-check("AC3: POINTER_MAX_STEP is console-retunable — raising it from the console lets one event make the full jump", () => {
-  const g = boot(960, 600);
-  start(g);
-  g.park(960);
-  g.q("POINTER_MAX_STEP = 100000;"); // console retune: lift the cap
-  g.mouseMove(100); // maps to (100/960)·1920 = 200
-  assertClose(g.paddleX(), 200, 0.01,
-    `with the cap raised from the console the event must make the full jump to 200, got ${g.paddleX()}`);
-});
-
-// ================================================================
-// Criterion 4: the touch path obeys the SAME rules — asserted
-// through the same window-level touchmove handler: outside the
-// rect holds, inside follows, and the per-event cap applies.
-// ================================================================
-check("AC4: touchmove outside the rect (horizontally) holds the paddle — same rule as mouse", () => {
+check("AC3: a cursor BELOW the rect but within its horizontal span still tracks horizontally", () => {
   const g = boot(960, 600);
   start(g);
   g.setRect({ left: 240, top: 100, width: 480, height: 300 });
-  const x0 = g.paddleX();
+  g.park(960);
+  g.mouseMove(320, 401); // 1 px below the rect, x inside the span
+  assertClose(g.paddleX(), ((320 - 240) / 480) * g.canvas.width, 1e-9,
+    `a cursor 1 px below the rect must still track its horizontal position, got ${g.paddleX()}`);
+  g.mouseMove(200, 10000); // deep in the bottom bar, x left of the span
+  assert(g.paddleX() === g.q("paddleW / 2"),
+    `a cursor deep below, horizontally left of the span, must hug the left wall, got ${g.paddleX()}`);
+});
+
+// ================================================================
+// Criterion 4: the touch path obeys the SAME rules — instant
+// rect-mapped 1:1 in-rect, wall-hug off-rect.
+// ================================================================
+check("AC4: an in-rect touch lands the paddle at the rect-mapped x in one event, exactly like mouse", () => {
+  const g = boot(960, 600);
+  start(g);
+  g.setRect({ left: 240, top: 100, width: 480, height: 300 });
+  g.park(960);
+  g.touchDrag(270, 250); // maps to ((270−240)/480)·1920 = 120
+  assertClose(g.paddleX(), 120, 1e-9,
+    `a single in-rect touch 840 px away must land the paddle at the rect-mapped 120, got ${g.paddleX()}`);
+});
+
+check("AC4: a touch left of / right of the rect hugs the matching wall, above/below still tracks — same rules as mouse", () => {
+  const g = boot(960, 600);
+  start(g);
+  g.setRect({ left: 240, top: 100, width: 480, height: 300 });
+  g.park(g.q("canvas.width / 2"));
   g.touchDrag(239, 250); // 1 px left of the rect
-  g.touchDrag(10000, 250); // deep in the right letterbox bar
-  g.tick(5);
-  assert(g.paddleX() === x0,
-    `touches left of / right of the rect must hold the paddle at ${x0}, got ${g.paddleX()}`);
+  assert(g.paddleX() === g.q("paddleW / 2"),
+    `a touch left of the rect must hug the left wall, got ${g.paddleX()}`);
+  g.touchDrag(721, 250); // 1 px right of the rect
+  assert(g.paddleX() === g.q("canvas.width - paddleW / 2"),
+    `a touch right of the rect must hug the right wall, got ${g.paddleX()}`);
+  g.touchDrag(480, 99); // above the rect, mid-span
+  assertClose(g.paddleX(), ((480 - 240) / 480) * g.canvas.width, 1e-9,
+    `a touch above the rect must still track its horizontal position, got ${g.paddleX()}`);
 });
 
-check("AC4: touchmove above/below the rect holds the paddle — same rule as mouse", () => {
+// ================================================================
+// Criterion 5: the surviving guards — a degenerate (zero-width)
+// rect and a missing/NaN clientX are IGNORED: they can never
+// poison paddle.x.
+// ================================================================
+check("AC5: a degenerate (zero-width) rect is ignored — no divide-by-zero poisoning, and the paddle resumes tracking once the rect recovers", () => {
   const g = boot(960, 600);
   start(g);
-  g.setRect({ left: 240, top: 100, width: 480, height: 300 });
-  const x0 = g.paddleX();
-  g.touchDrag(480, 99); // 1 px above the rect
-  g.touchDrag(480, 401); // 1 px below the rect
-  g.tick(5);
-  assert(g.paddleX() === x0,
-    `touches above/below the rect must hold the paddle at ${x0}, got ${g.paddleX()}`);
+  g.mouseMove(100);
+  const before = g.paddleX();
+  assert(Number.isFinite(before), `sanity: the paddle must be finite after a normal move, got ${before}`);
+  g.setRect({ left: 0, top: 0, width: 0, height: 0 }); // e.g. rect queried while hidden
+  g.mouseMove(480); // naive mapping divides by rect.width → NaN
+  assert(Number.isFinite(g.paddleX()), `a width-0 rect must not NaN the paddle, got ${g.paddleX()}`);
+  assertClose(g.paddleX(), before, 1e-9,
+    `a degenerate-rect mousemove must leave the paddle alone, got ${g.paddleX()}, want ${before}`);
+  g.setRect({ left: 0, top: 0, width: 960, height: 600 }); // viewport reappears
+  g.park(1700);
+  g.mouseMove(100);
+  assertClose(g.paddleX(), 200, 1e-9,
+    `after the rect recovers the 1:1 tracking must work again (want 200), got ${g.paddleX()}`);
 });
 
-check("AC4: an in-rect touch follows, capped per event, exactly like mouse", () => {
+check("AC5: a missing/NaN clientX is ignored — the paddle is never poisoned by a malformed coordinate", () => {
   const g = boot(960, 600);
   start(g);
-  g.setRect({ left: 240, top: 100, width: 480, height: 300 });
-  const cap = g.cap();
-  g.park(960);
-  g.touchDrag(250, 250); // maps to ((250−240)/480)·1920 = 40: 920 px away
-  assert(g.paddleX() === 960 - cap,
-    `an in-rect touch far from the paddle must step exactly ${cap} px left, got ${g.paddleX()}`);
-  g.touchDrag(360, 250); // maps to 480: still 462 px away
-  assert(g.paddleX() === 960 - 2 * cap,
-    `the next in-rect touch must step another ${cap} px (want ${960 - 2 * cap}), got ${g.paddleX()}`);
+  g.mouseMove(100);
+  const before = g.paddleX();
+  g.mouseMove(NaN); // malformed coordinate (a browser always delivers a finite one)
+  assert(Number.isFinite(g.paddleX()), `a NaN clientX must not NaN the paddle, got ${g.paddleX()}`);
+  assertClose(g.paddleX(), before, 1e-9,
+    `a NaN-clientX mousemove must leave the paddle alone, got ${g.paddleX()}, want ${before}`);
+  g.park(1700);
+  g.mouseMove(100); // the mapping must still work afterwards
+  assertClose(g.paddleX(), 200, 1e-9,
+    `after a malformed event the 1:1 tracking must work again (want 200), got ${g.paddleX()}`);
 });
 
 // ---------- summary ----------
