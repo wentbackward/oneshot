@@ -244,7 +244,7 @@ check("expand applied at T: the paddle is widened at T+D/2 and back to base widt
   const widened = g.baseW() * g.q("PADDLE_EXPAND_FACTOR");
   const T = g.simTime();
   g.q("applyCapsule(KIND_EXPAND)");
-  assert(g.q("expandUntil") === T + D, `setup: expiry armd at T + D (${T + D}), got ${g.q("expandUntil")}`);
+  assert(g.q("expandUntil") === T + D, `setup: expiry armed at T + D (${T + D}), got ${g.q("expandUntil")}`);
   stepUntil(g, T + D / 2);
   assert(g.paddleW() === widened,
     `the paddle must still be widened at T+D/2 (sim ${g.simTime()}), got ${g.paddleW()}`);
