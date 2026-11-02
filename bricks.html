@@ -433,11 +433,22 @@ var LEVEL_PATTERNS = [
   // 3 — overhang: a fixed slab hovering above an open field
   [ "AAAAAAAAAA", "CC.XXXX.CC", "BB.XX...BB", "BB......BB", "CCCC.CCCCC" ]
 ];
-// Damaged fill of a tier colour: a non-lethal hit dims the brick in
-// place. Channels scaled down by BRICK_DARK_FACTOR, computed once at
-// module load — the hit and draw paths never allocate.
-var BRICK_DARK_FACTOR = 0.45;
+// Per-tier wear ramp (ticket #71): a PRECOMPUTED table of one fill
+// per damage stage, indexed by damage taken (0 = full hp = base
+// colour). Every stage darkens the tier's base colour by a further
+// BRICK_WEAR_STEP of RELATIVE channel factor (factor 1 - step*d),
+// so adjacent stages differ by a fixed lightness step well above
+// the ~15% perceivability floor for every theme palette; a 3-hp
+// brick therefore shows three distinct states (1.00 / 0.72 / 0.44
+// at the default step — the deepest stage matches the old single
+// dim's ~0.45). Rebuilt from each tier's CURRENT base colour at
+// module load and in applyTheme(), so the theme pass re-derives the
+// whole ramp in one shot and the draw path only ever indexes it:
+// tier.ramp[tier.hp - brick.hp]. Zero per-frame allocation.
+var BRICK_WEAR_STEP = 0.28;
 function darkenHex(hex, factor) {
+  if (factor > 1) factor = 1;   // console retunes stay in [0, 1]:
+  if (factor < 0) factor = 0;   // a negative factor would poison the hex
   var out = "#";
   for (var i = 1; i < hex.length; i += 2) {
     out += Math.round(parseInt(hex.slice(i, i + 2), 16) * factor)
@@ -445,7 +456,20 @@ function darkenHex(hex, factor) {
   }
   return out;
 }
-BRICK_TIERS.forEach(function (t) { t.dark = darkenHex(t.color, BRICK_DARK_FACTOR); });
+function buildTierRamps() {
+  for (var i = 0; i < BRICK_TIERS.length; i += 1) {
+    var t = BRICK_TIERS[i];
+    // The unbreakable tier cannot be damaged, so its ramp is just
+    // the base colour — its draw path stays the bare fill.
+    var stages = t.unbreakable ? 1 : t.hp;
+    var ramp = [];
+    for (var d = 0; d < stages; d += 1) {
+      ramp.push(d === 0 ? t.color : darkenHex(t.color, 1 - BRICK_WEAR_STEP * d));
+    }
+    t.ramp = ramp;
+  }
+}
+buildTierRamps();
 // Power-ups (PRD section 4): capsules released by destroyed bricks
 var POWERUP_DROP_RATE = 0.25;      // normal-preset baseline; the run rolls its snapshot
 var CAPSULE_FALL_SPEED = 200;      // descent speed, px/s
@@ -955,8 +979,8 @@ function applyTheme(name) {
   var tierColors = row.palette.bricks;
   for (var i = 0; i < BRICK_TIERS.length; i += 1) {
     BRICK_TIERS[i].color = tierColors[i];
-    BRICK_TIERS[i].dark = darkenHex(tierColors[i], BRICK_DARK_FACTOR);
   }
+  buildTierRamps(); // the wear stages track the new base colours
 }
 // Mark exactly one option button; called at boot (storage may
 // override the static classic default) and on every selection
@@ -1754,11 +1778,69 @@ function drawBricks() {
   for (var i = 0; i < bricks.length; i += 1) {
     var b = bricks[i];
     if (!b.active) continue;
-    // Damaged bricks (hp below the tier's full hp) paint the dimmed
-    // variant of their tier colour; full-hp bricks — including every
-    // one-hit brick — render exactly as before.
-    ctx.fillStyle = b.hp < BRICK_TIERS[b.tier].hp ? BRICK_TIERS[b.tier].dark : BRICK_TIERS[b.tier].color;
+    var tier = BRICK_TIERS[b.tier];
+    // Wear (ticket #71): the fill is the tier's precomputed ramp
+    // indexed by damage taken — full hp paints ramp[0], the base
+    // colour, exactly as before; the unbreakable tier (hp 0, delta
+    // 0) keeps the bare fill path with no crack strokes.
+    ctx.fillStyle = tier.ramp[tier.hp - b.hp];
     ctx.fillRect(b.x, b.y, b.w, b.h);
+    var dmg = tier.hp - b.hp;
+    if (dmg > 0) drawBrickCracks(i, b, tier, dmg);
+  }
+}
+// Crack overlay (ticket #71): at every intermediate damage stage a
+// brick also strokes short crack polylines — one per damage taken,
+// capped at CRACK_LINES_MAX, so a deeper crack keeps the stage-1
+// polyline untouched (prefix stability). Each polyline is three
+// points (near top / middle / near bottom of the brick). All
+// coordinates are NORMALISED [0,1] pairs precomputed ONCE at module
+// load from the brick's pool index by a fixed integer scramble — no
+// `random` hook, so a brick keeps its own crack forever, a respawn
+// inherits the same one, and the draw path only indexes:
+// zero per-frame allocation.
+var CRACK_LINE_W = 2;                 // crack stroke width, canvas px
+var CRACK_LINES_MAX = 2;              // polylines at the deepest stage
+var CRACK_POINTS_PER = 6;             // three normalised (x, y) points
+var CRACK_POINTS = [];                // per pool index: CRACK_LINES_MAX × 6 floats
+// Deterministic float in [0, 1) from a small integer seed: a fixed
+// multiply-XOR scramble, not the testable `random` hook.
+function crackScramble(seed) {
+  var h = (seed * 2654435761) >>> 0;
+  h = ((h ^ (h >>> 15)) * 2246822519) >>> 0;
+  return ((h >>> 13) & 0xffff) / 0xffff;
+}
+function buildCrackPoints() {
+  CRACK_POINTS.length = 0; // rebuild from scratch (module load)
+  for (var i = 0; i < BRICK_ROWS * BRICK_COLS; i += 1) {
+    var pts = [];
+    for (var line = 0; line < CRACK_LINES_MAX; line += 1) {
+      var seed = i * 73 + line * 191 + 1;
+      // Keep the ink inside the brick face: x in [0.15, 0.85].
+      pts.push(
+        0.15 + 0.7 * crackScramble(seed + 0), 0.05,
+        0.15 + 0.7 * crackScramble(seed + 1), 0.50,
+        0.15 + 0.7 * crackScramble(seed + 2), 0.95
+      );
+    }
+    CRACK_POINTS.push(pts);
+  }
+}
+buildCrackPoints();
+function drawBrickCracks(index, b, tier, dmg) {
+  var lines = dmg > CRACK_LINES_MAX ? CRACK_LINES_MAX : dmg;
+  var p = CRACK_POINTS[index];
+  // The crack ink is the tier's DEEPEST wear shade (a precomputed
+  // ramp entry, so theme-tracking and allocation-free alike).
+  ctx.strokeStyle = tier.ramp[tier.hp - 1];
+  ctx.lineWidth = CRACK_LINE_W;
+  for (var l = 0; l < lines; l += 1) {
+    var o = l * CRACK_POINTS_PER;
+    ctx.beginPath();
+    ctx.moveTo(b.x + p[o] * b.w, b.y + p[o + 1] * b.h);
+    ctx.lineTo(b.x + p[o + 2] * b.w, b.y + p[o + 3] * b.h);
+    ctx.lineTo(b.x + p[o + 4] * b.w, b.y + p[o + 5] * b.h);
+    ctx.stroke();
   }
 }
 function drawPowerups() {
