@@ -349,13 +349,38 @@ check("Enter on game over restarts cleanly: score 0, wave 1, full HP, zero live 
   const g = boot();
   g.press("Enter");
   suppressSpawns(g);
-  // Leave residue behind: two parked hazards plus the death burst.
+  // #80: pin the RNG for this scenario. Shatter headings/speeds and the
+  // death bursts all consume `random`, so the residue layout must be
+  // reproducible; the old count-based checkpoint drifted on the
+  // unpinned fragment velocities (see docs/DECISIONS.md).
+  // Value note: 0.25 sends every fragment straight DOWN (heading
+  // 0.25·2π = π/2), i.e. toward the ship at (480, ~300) from the parked
+  // rocks above it — the worst case for the leftover-fragment race, so
+  // the pin demonstrably covers the drifting path. A "neutral" value
+  // would let fragments drift past the ship and quietly restore count
+  // variance; do not "clean it up".
+  g.q("random = () => 0.25;");
+  // Leave residue behind: two parked hazards plus the death cascade.
   g.placeAst(100, 100);
   g.placeAst(820, 500);
   killShip(g, 3);
-  // #51: each of the three death-rocks shatters into 2 medium fragments
-  // on impact, so the residue is 2 parked hazards + 3 x 2 fragments.
-  assertClose(g.hazardCount(), 2 + 3 * 2, 0, "precondition: two parked hazards and the shatter residue are still in the field");
+  // #80: precondition anchored on the pin, not on a live count. Each
+  // hit rock shatters ON TOP of the ship, so its fragments spawn within
+  // the ship-overlap radius too: at the next invuln expiry checkShipHits
+  // (first overlapping slot wins) may consume a leftover fragment
+  // instead of the freshly parked rock, and the surviving rock stands
+  // in for the missing fragment pair — the live count at this
+  // checkpoint legally drifts between 6 and 8 UNPINNED. The pin above
+  // is what makes the checkpoint deterministic; the identity + floor
+  // assertions below (parked rocks by slot, residue bounded below) keep
+  // the precondition honest even if the pin were ever dropped, but they
+  // do not by themselves remove the count variance.
+  const parkedAlive = g.q("asteroids.slots.filter((a) => a.active && a.vx === 0 && a.vy === 0 && " +
+    "((a.x === 100 && a.y === 100) || (a.x === 820 && a.y === 500))).length");
+  assert(parkedAlive === 2,
+    "precondition: both parked hazards are still in the field (identified by slot, not by count)");
+  assert(g.hazardCount() >= 2 + 2,
+    "precondition: the death cascade's shatter residue is still in the field (2 parked rocks plus >= 2 fragments)");
   assert(g.particleCount() > 0, "precondition: the death burst is still animating");
   g.press("Enter");
   assertCleanRestart(g, "Enter restart");

@@ -1785,3 +1785,37 @@ no new draw-pass machinery.
 Rejected alternative: `ctx.fillText` in the draw loop — bricks.html has
 no canvas text infrastructure yet, and a floating canvas line would not
 track the overlay's layout.
+
+### 2026-11-02 — Asteroids: "Enter on game over restarts cleanly" flake is a count-based checkpoint, not game nondeterminism (ticket #80)
+
+tests/screens.test.mjs asserted an exact live hazard count (8) at the
+game-over checkpoint. That count is not a game invariant: killShip parks
+each hit rock on the ship, so a shattered rock's fragments spawn *within
+the ship-overlap radius* too (parent at 25 px centre distance, overlap
+radius 20+14=34 > fragment 12+14=26). Fragment headings/speeds come from
+`random`, which the test never pinned — so at each 200 ms invuln expiry,
+`checkShipHits` (first overlapping slot in slot order wins) legitimately
+consumed a leftover fragment instead of the freshly parked rock ~24% of
+runs (measured 400 replays: 95 runs at 6 hazards, 305 at 8). The
+freshly parked death rock thus survives at the ship while a leftover
+fragment is consumed instead; the game is deterministic given its RNG
+stream, and nothing in asteroids.html is non-deterministic.
+
+The checkpoint is now structural, per the ticket's fix direction: (a) the
+two parked hazards are identified by their parked coordinates and zero
+velocity, (b) the shatter residue is bounded *below* by the two
+fragments the first hit rock must always leave (it is the only
+overlapping hazard at its hit, and no later hit removes more residue
+than it leaves — the smallest tier shatters into nothing, higher tiers
+replace one hazard with two), and (c) the RNG is pinned to a constant for
+the scenario so the residue layout is byte-for-byte reproducible (with
+the pin the count settles deterministically at 6).
+
+Alternatives rejected: pinning the RNG alone (deterministic but still
+asserting a count that is not an invariant — it would break the moment a
+tier table or invuln window moves); freezing fragment velocities after
+each hit (does not help — frozen fragments still overlap the ship and
+still win the slot-order race, and fights the sim); a real-game
+change to make shatter fragments skip ship collision for a frame
+(rejected — AC3 forbids game changes and the behaviour is legitimate
+arcade physics).
