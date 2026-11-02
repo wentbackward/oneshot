@@ -468,7 +468,8 @@ check("the ball's bounce rectangle is the portrait field: a right-bound ball pin
     b.vx = 120;
     b.vy = 0;
   })()`);
-  g.tick(1);
+  g.tick(); // prime the frame clock: the first frame after boot has dt=0
+  g.tick(); // the driven frame
   const b = g.q("balls[0]");
   assert(b.x === g.canvas.width - g.q("BALL_RADIUS"),
     `after one frame the ball must be pinned to the portrait right wall, got x=${b.x}`);
@@ -520,7 +521,8 @@ check("serve → launch → wall bounce → clear: draining level 1 spawns the S
     b.vx = 120;
     b.vy = 0;
   })()`);
-  g.tick(1);
+  g.tick(); // prime the frame clock: the first frame after boot has dt=0
+  g.tick(); // the driven frame
   assert(g.q("balls[0].x") === g.canvas.width - g.q("BALL_RADIUS") && g.q("balls[0].vx") < 0,
     `the sequence frame must show a clean right-wall bounce`);
   // Beat 3 — clear the board through the game's own kill path.
