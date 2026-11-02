@@ -1696,8 +1696,8 @@ function draw() {
 // (it compares the ball against 0 / canvas.width for the sides and
 // 0 for the top, and reads canvas.width/height here too — no second
 // source of truth), and the dashed segment is the open bottom edge
-// where a life is lost (updateBalls drops the ball below
-// canvas.height). Decorative: one fixed path each, theme-indexed
+// where a life is lost (updateBalls drops the ball once it is fully
+// past the bottom edge: b.y - BALL_RADIUS > canvas.height). Decorative: one fixed path each, theme-indexed
 // colour lookups (COLOR_WALL/COLOR_DANGER follow applyTheme), and
 // the prebuilt DANGER_DASH/NO_DASH arrays — zero per-frame
 // allocation. Drawn under bricks/paddle/balls.

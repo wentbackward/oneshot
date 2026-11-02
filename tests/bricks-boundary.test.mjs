@@ -205,7 +205,8 @@ function strokedPaths(ops) {
     else if (name === "set:lineWidth") width = args[0];
     else if (name === "set:strokeStyle") style = args[0];
     else if (name === "beginPath") {
-      cur = null; // an abandoned open path (no stroke) is dropped
+      // a beginPath abandoned before a stroke is dropped:
+      // a fresh record replaces the previous one and is never flushed
       cur = { segments: [], dash, lineWidth: width, strokeStyle: style, from: null, stroked: false };
     } else if (name === "moveTo") {
       if (cur) cur.from = [args[0], args[1]];
