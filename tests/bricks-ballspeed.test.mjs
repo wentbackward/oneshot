@@ -225,6 +225,10 @@ function setSlider(g, v) {
 // elements do not model the DOM tree; in the real markup the
 // readout span sits INSIDE the row label, so a dblclick on it
 // bubbles to the label — model that single containment hop.
+// The slider is inside the label as well, but the game's handler
+// ignores dblclicks whose target is the input (a fine-adjust gesture,
+// not a reset), so the driver never needs to model a slider-
+// originated dblclick reaching the handler.
 const DBLCLICK_PARENTS = { "ball-speed-value": "ball-speed-label" };
 function dblClick(g, id) {
   let cur = id;
@@ -458,6 +462,19 @@ check("AC3: the double-click gesture works from the readout span too", () => {
   dblClick(g, "ball-speed-value");
   assert(g.q("ballSpeedPct") === 100 && g.els["ball-speed"].value === "100",
     `dblclick on the readout must reset the slider to 100, got state ${g.q("ballSpeedPct")} / value ${JSON.stringify(g.els["ball-speed"].value)}`);
+});
+
+check("a double-click ON THE SLIDER bubbles to the label but must NOT reset (fine-adjust gesture)", () => {
+  const g = boot(960, 600, { [KEY]: "125" });
+  // Model the real-browser bubble: the label's dblclick handler fires
+  // with e.target === the input (the slider sits inside the label).
+  for (const cb of g.els["ball-speed-label"].listeners["dblclick"] ?? []) {
+    cb({ type: "dblclick", target: g.els["ball-speed"] });
+  }
+  assert(g.q("ballSpeedPct") === 125 && g.els["ball-speed"].value === "125",
+    `a slider-targeted dblclick must not reset, got state ${g.q("ballSpeedPct")} / value ${JSON.stringify(g.els["ball-speed"].value)}`);
+  assert(g.storage.writes.length === 0,
+    `the swallowed reset must not persist, writes were ${JSON.stringify(g.storage.writes)}`);
 });
 
 check("a double-click reset already at 100 performs no write (no-op move invariant)", () => {

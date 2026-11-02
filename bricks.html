@@ -1493,7 +1493,11 @@ ballSpeedInput.addEventListener("input", function () {
 // the row label parks the slider at the 100% notch. Exactly one
 // persistence write; an already-100 gesture is a no-op that writes
 // nothing (the same invariant as a no-op slider move).
-function resetBallSpeed() {
+function resetBallSpeed(e) {
+  // A double-click on the SLIDER itself is a fine-adjust gesture, not a
+  // reset: the label wraps the input, so its double-clicks bubble up
+  // here — swallow those and honour the gesture on the text only.
+  if (e && e.target === ballSpeedInput) return;
   if (ballSpeedPct === DEFAULT_BALL_SPEED_PCT) return;
   ballSpeedPct = DEFAULT_BALL_SPEED_PCT;
   saveBallSpeed();

@@ -2230,6 +2230,12 @@ arcade physics).
   floor-snap (asymmetric, always ≤1 cell low — feels sluggish); drop the JS
   snap and rely on native step alone (unassertable in the harness, and
   programmatic `el.value` writes bypass native snapping in some engines).
+  Known cosmetic consequence: a hand-stored off-grid 123 boots with the
+  readout showing "123%" while a real browser's native step
+  sanitisation renders the thumb at the 125 stop until the user's first
+  move — the ticket's "don't rewrite a stored out-of-grid value unless
+  the user moves the slider" requirement makes the two views diverge
+  briefly; not a bug, do not "fix" by rewriting the stored value at boot.
 - **The live readout is a bare `<span id="ball-speed-value">` INSIDE the
   existing row `<label>`**, inheriting the shared `.vol` row-label treatment
   (size, letterspacing, uppercase, `--ink`) — zero new type rules; the flex
