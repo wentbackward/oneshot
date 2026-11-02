@@ -399,8 +399,9 @@ var COLOR_BRICK_C = "#4fc1e9";
 var POINTS_BRICK_C = 10;
 // Per-tier hit points to break (ticket #42): the top tier takes the
 // most hits, the base tier still dies in one. The fixed tier scores
-// zero and can never be charged (unbreakable); its hp of 0 keeps
-// the damage-rendering comparison (hp < tier hp) permanently false.
+// zero and can never be charged (unbreakable); its hp of 0 keeps its
+// wear depth (`tier.hp - b.hp`) at 0, so it always renders the base
+// ramp stage and never a crack.
 var HP_BRICK_A = 3;
 var HP_BRICK_B = 2;
 var HP_BRICK_C = 1;
@@ -964,8 +965,8 @@ function applyThemeCss(css) {
 }
 // The single apply path shared by boot and selection change: the
 // CSS triple, then every canvas palette mirror the draw pass
-// reads — including each brick tier's dimmed damage variant,
-// re-derived from the row's tier colours. The draw code itself
+// reads — including the full per-tier brick wear ramps, rebuilt from
+// the row's tier colours via buildTierRamps(). The draw code itself
 // never changes: it keeps reading the same variables (COLOR_*,
 // BRICK_TIERS), so theming adds no per-frame branches.
 function applyTheme(name) {

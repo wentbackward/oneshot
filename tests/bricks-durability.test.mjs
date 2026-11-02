@@ -20,9 +20,9 @@
 //   AC2 — second (lethal) hit: brick deactivated, score credited
 //         with exactly BRICK_TIERS[tier].points once, bricksLeft
 //         decremented once.
-//   AC3 — damage renders distinctly: drawBricks carries a branch
-//         keyed on `b.hp < BRICK_TIERS[b.tier].hp` (source +
-//         behaviour); one-hit bricks render exactly as before.
+//   AC3 — (superseded by #71: the old dim branch is gone; damage now
+//         renders via the precomputed per-hit shade ramp + crack
+//         overlay — see the CRITERION 3 block below)
 //   AC4 — spawnLevel()/beginRun() reset every pool entry's hp from
 //         the tier table (mid-run A brick destroyed, board cleared,
 //         new board at full hp).
@@ -524,6 +524,26 @@ check("wear ramp: each breakable tier carries a precomputed ramp of hp fills —
   const fixed = g.q("BRICK_TIERS[3]");
   assert(Array.isArray(fixed.ramp) && fixed.ramp.length === 1 && fixed.ramp[0] === fixed.color,
     "the unbreakable tier's ramp must be its single base colour (it cannot be damaged)");
+});
+
+check("wear floor holds under EVERY theme: each theme's rebuilt ramp keeps distinct, >=15%-stepped stages for all breakable tiers", () => {
+  const g = boot(960, 600);
+  for (const name of g.q("Object.keys(THEMES)")) {
+    g.q(`applyTheme(${JSON.stringify(name)})`); // rebuilds the ramps from the row's tier colours
+    for (let t = 0; t < 3; t += 1) {
+      const ramp = g.q(`BRICK_TIERS[${t}].ramp`);
+      const sums = ramp.map(rgbSum);
+      for (let d = 1; d < ramp.length; d += 1) {
+        for (let e = 0; e < ramp.length; e += 1) {
+          if (d !== e) assert(ramp[d] !== ramp[e],
+            `${name}: stages ${d} and ${e} of tier ${"ABC"[t]} must be distinct`);
+        }
+        const step = (sums[d - 1] - sums[d]) / sums[d - 1];
+        assert(step >= 0.15,
+          `${name}: stages ${d - 1} -> ${d} of tier ${"ABC"[t]} must differ by >=~15% relative lightness, got ${step.toFixed(3)}`);
+      }
+    }
+  }
 });
 
 check("crack table: CRACK_POINTS holds one fixed path per pool index — CRACK_LINES_MAX polylines of three normalised points each, reproducible from the brick index alone", () => {
