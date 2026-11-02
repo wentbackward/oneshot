@@ -2166,7 +2166,7 @@ arcade physics).
   assertions were widened from "two data-mode nodes" to three
   (classic|exciting|alleyway) as the scaffold absorbed the button.
 
-## 2026-11-02 — Ticket #91: pointer outside the stage rect holds the paddle; per-event displacement cap (supersedes the #40 edge-clamp)
+## 2026-11-02 — Ticket #91: pointer outside the stage rect holds the paddle; per-event displacement cap (supersedes the #40 edge-clamp) — SUPERSEDED by #95 (the step cap and the out-of-rect hold are both removed; instant rect-mapped tracking with wall-hug restored)
 
 - **SUPERSESSION: the pointer edge-clamp dating from tickets #21/#40
   (any pointer position outside the field mapped to the nearest
@@ -2217,6 +2217,41 @@ arcade physics).
   containment (a cursor in the TOP/BOTTOM letterbox bars would
   still steer, but the complaint is about the cursor leaving the
   game area, any bar).
+
+## 2026-11-02 — Ticket #95: pointer steering returns to instant 1:1 rect-mapped + clamped tracking (supersedes the #91 step cap and out-of-rect hold)
+
+- **Decision: `setPaddleX` maps the pointer's clientX through the
+  stage's fitted bounding rect, clamps the result to the paddle's
+  reachable range `[paddleW/2, canvas.width − paddleW/2]` (via the
+  existing `clampPaddle()`) and ASSIGNS it directly. `POINTER_MAX_STEP`
+  and the #91 four-edge containment hold are DELETED.** Both #91
+  protections broke play in the field: (a) the 18 px/event cap made
+  the paddle crawl and permanently lag a moving cursor; (b) the
+  outside-rect hold froze the paddle the instant the cursor left the
+  fitted stage (letterbox strip, HUD, just off-window) — "impossible
+  to play with mouse now, whether full screen or not". With a
+  rect-relative mapping plus a clamp, the #40-era "teleport"
+  complaint is moot: a large cursor jump lands the paddle exactly
+  where it aims, which is what aiming is for. Off-rect events are
+  no longer ignored either: a cursor left/right of the stage HUGS
+  the matching wall (a continuous, controllable command, not a
+  freeze), and a cursor above/below (the vertical letterbox bars —
+  the exact case #91 argued for ignoring) now steers by its
+  horizontal position, which the old code's four-edge test treated
+  as "outside" too. Surviving guards: the degenerate-rect (zero-
+  width) ignore, and the missing/NaN clientX reject via negated
+  comparison. Mouse and touch share the single path. No new DOM
+  ids, no new tuning knobs, hot path is primitives only (one rect
+  read, one division, one clamp — the same shape #91 had).
+- **Alternatives rejected:** a LARGER per-event cap (a velocity
+  cap can never track a moving cursor 1:1 — it only makes the
+  crawl faster); keeping the hold but widening the containment to
+  the viewport (still freezes whenever the cursor crosses into a
+  HUD strip or leaves the window, and couples steering to page
+  layout); per-frame interpolation toward the cursor (adds run
+  state and per-frame hot-path work, and #91 already rejected it
+  on the same grounds — at 60 fps, events and frames alternate,
+  so direct assignment IS the interpolator).
 ## 2026-11-02 — Ticket #90: ball-speed slider 5% snap, 100% notch, live readout, double-click reset
 
 - **Off-grid snap is NEAREST-stop (round), after clamp — not floor/truncation.**
