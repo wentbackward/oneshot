@@ -147,6 +147,7 @@ function boot(width, height, initialStore = {}) {
     "leaderboard-start": makeEl("leaderboard-start"),
     "screen-gameover": makeEl("screen-gameover"),
     "btn-restart": makeEl("btn-restart"),
+    "btn-menu": makeEl("btn-menu"),
     "leaderboard-gameover": makeEl("leaderboard-gameover"),
     "screen-pause": makeEl("screen-pause"),
     "btn-resume": makeEl("btn-resume"),

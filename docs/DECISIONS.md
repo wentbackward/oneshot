@@ -1754,3 +1754,34 @@ could clobber the state; explicit reset each frame keeps the draw
 pass self-contained at negligible cost). The boundary suite pins the
 reference identity across frames, so a regression to a per-frame
 literal fails the suite.
+### 2026-11-02 — bricks: main menu reachable from pause (M) and game over (ticket #70)
+
+Return to the menu is `quitToMenu()` — the existing shared reset
+`beginRun()` followed by `gameState = "start"` and `setScreen("start")`.
+The ticket mandates that BOTH exits (pause-M and game-over Menu) funnel
+through the one reset path first-start and restart already share, so
+there is exactly one state-clearing implementation; the menu state
+differs from a true boot only in that the level-1 board is spawned
+(dormant under the overlay: `draw()` early-returns in "start", so the
+field difference is invisible and the next Start click is an idempotent
+`beginRun()`).
+Rejected alternative: a dedicated boot-state reset (deactivate the
+whole brick pool, no spawn) — a second state-clearing code path the
+ticket explicitly forbids, and it buys nothing visible.
+
+`KeyM` is state-gated to `"paused"` alone, with NO `pauseKeys`-style
+edge tracking (unlike Escape/KeyP). M is a one-way transition, not a
+toggle: once the first press flips the state to "start", browser
+auto-repeat of the held key lands in a state where M is a no-op, so
+repeat presses cannot churn screens. Adding M to the edge-held set
+would be bookkeeping for a glitch the state gate already excludes.
+
+The pause hint line (`Esc resume · M menu`) is a second DOM `<p>` in
+`#screen-pause`, not canvas text: the existing pause copy is a DOM
+overlay element (the ticket's "drawn on canvas" parenthetical does not
+match the shipped implementation), so the hint rides the same
+display-gated section — visible while paused, hidden otherwise, with
+no new draw-pass machinery.
+Rejected alternative: `ctx.fillText` in the draw loop — bricks.html has
+no canvas text infrastructure yet, and a floating canvas line would not
+track the overlay's layout.
