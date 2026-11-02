@@ -1863,3 +1863,63 @@ arcade physics).
 - **The slider scales the run's PRESET serve speed (difficulty × percent), not only `BALL_SERVE_SPEED`.** The begin-run path already snapshots `DIFFICULTY[selectedDifficulty].serveSpeed` (whose normal row references `BALL_SERVE_SPEED`), so applying one `speedFactor = ballSpeedPct / 100` to the preset serve AND the `MAX_BALL_SPEED` ceiling yields the ticket's numbers at default difficulty (125% → 600 px/s launch, 1875 ceiling) while easy/hard runs stay consistent (their serves scale by the same factor — curve shape and relative tier speeds preserved). Alternatives: rewriting the global `BALL_SERVE_SPEED`/`MAX_BALL_SPEED` vars (rejected — the ticket says the `var` knobs are "scaled, never replaced", and the `DIFFICULTY.normal` row references them, so mutating them would poison the table); scaling only the normal preset (rejected — mixed scaled/unscaled difficulty tiers would be surprising).
 - **The ceiling is a per-run runtime var `serveCeiling`, snapshotted beside `serveSpeed` in `beginRun()`**, so `advanceLevel()` caps at `serveCeiling` and a mid-run slider move can never shift the live run. Alternative: computing `MAX_BALL_SPEED * ballSpeedPct/100` inside `advanceLevel()` (rejected — it would read the LIVE slider mid-run, violating the begin-run snapshot rule the ticket shares with difficulty/theme/sound).
 - **Persisted as a JSON integer under `brickbreaker.speed` (the high-score / difficulty / theme / sound encoding precedent).** The loader accepts only integers within `[MIN_BALL_SPEED_PCT, MAX_BALL_SPEED_PCT]` (50..150) and falls back to `DEFAULT_BALL_SPEED_PCT` (100) on absent, corrupt or out-of-range values; the input listener clamps programmatic out-of-range writes into range and treats non-integers as "keep current" (the volume-slider precedent). Alternatives: storing a JSON string (rejected — the ticket names an int percent); passing out-of-range stored values through (rejected — a botched write must never skew run speeds).
+## 2026-11-02 — Ticket #77: secret level-skip keys (Shift+L / Shift+K)
+
+- **Forward step (Shift+L) is the REAL `advanceLevel()` itself, not a
+  copy of its body.** "Exactly as if the current one were cleared" is
+  guaranteed by construction (same expression, same `MAX_BALL_SPEED`
+  cap, same respawn/serve/hud sequence), and there is no second
+  clear-progression path to drift. Alternatives rejected: duplicating
+  the three-line body (a future cap tweak would silently fork the
+  cheat and the real path); refactoring to a shared `setLevelTo(k)`
+  (larger blast radius for zero benefit while the forward step is a
+  pure increment).
+- **Backward recompute derives from a new runtime `var runServeBase`
+  snapshotted in `beginRun()` from the selected difficulty preset's
+  `serveSpeed` × the run's ball-speed percent (ticket #73's factor —
+  included so a back-step lands where a forward run stands under any
+  slider setting)** — the house-standard pattern (`serveSpeed`,
+  `dropRate` snapshot the same way), console-retunable, and immune to
+  mid-run `DIFFICULTY` edits. The target level's speed is
+  `min(runServeBase × LEVEL_SPEED_GROWTH^(target−1), serveCeiling)`,
+  i.e. the level's own legitimate speed against the run's scaled
+  ceiling, so stepping back after
+  forward skips (or after cap saturation) is exact and never a delta.
+  Alternatives rejected: recomputing from
+  `DIFFICULTY[selectedDifficulty].serveSpeed` at press time (would
+  silently change under console retunes and trusts the start-screen
+  state mid-run); dividing the drifted `serveSpeed` by the factor
+  (float division loses low bits versus the straight product —
+  `base·g²/g ≠ base·g` in IEEE 754 — and the cap is unrecoverable by
+  division).
+- **The combo is read as `e.shiftKey` on the letter's keydown only;
+  no Shift keyup bookkeeping.** Releasing Shift before the letter is
+  dispatched with `shiftKey: false` and is simply not a press of the
+  combo, which is exactly the leak the ticket forbids. Shift-then-
+  letter is the one supported ordering (documented nowhere, as
+  intended); a letter held down while Shift arrives is not retro-
+  triggered (browser-delivered, and no suite can rely on it either).
+  Alternative: tracking Shift in the held-sets and triggering on
+  Shift-down (adds keyup/blurred-window state for a combo nobody
+  asked for).
+- **Edge gating mirrors `pauseKeys`: a `levelSkipKeys` Set
+  (added on the triggering keydown, removed on keyup, cleared on
+  blur)** so browser auto-repeat of a held Shift+L advances exactly
+  once per physical press instead of walking every level at the OS
+  repeat rate. Alternatives rejected: no gating (hold-the-key level
+  walk is a footgun, not a feature); a `shiftedUntil` time window
+  (introduces wall-clock-ish state into a deterministic sim for no
+  gain over the existing set precedent).
+- **State gating is `gameState === "playing"` alone** — start, paused
+  and game-over presses are inert (asserted per state by
+  `tests/bricks-secret-skip.test.mjs`). The consumed-edge is added to
+  the set even when ignored out of play, so a press started on the
+  pause screen cannot fire later in the same physical press after
+  resume; the next fresh press works. Score, lives, leaderboard and
+  the multiplier window are untouched by design (the ticket: the
+  multiplier keeps running).
+- **No new boot-time DOM elements:** the keys live in `onKeyDown`/
+  `onKeyUp`/`onBlur` on existing handlers, so no existing suite's
+  element stub map gains an id (the house trap from the last wave is
+  vacuous here — verified: the new suite's stub map is byte-for-byte
+  the existing one).
