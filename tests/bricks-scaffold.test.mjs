@@ -5,8 +5,9 @@
 //
 // The playfield is a fixed GAME_W×GAME_H (16:10) logical stage whose
 // backing store never follows the viewport; the visible size is the
-// largest 16:10 rectangle fitting the viewport (letterbox fit, capped
-// at the native stage size so large monitors never upscale it),
+// largest 16:10 rectangle fitting the viewport (letterbox fit,
+// UNCAPPED since ticket #101 — on large viewports the stage
+// up-scales, on small ones it down-scales, aspect preserved),
 // written as CSS px and centered by CSS.
 //
 // Same harness style as tests/screens.test.mjs (campaign 1): runs
@@ -222,15 +223,16 @@ function boot(width, height, storedHigh = null, throwingStorage = false) {
 }
 
 // The fixed stage in internal canvas px, and the largest 16:10 CSS
-// size (integer px) that fits a vw×vh viewport, capped at the native
-// stage size (fit, never upscale) — the letterbox fit the resize pass
-// must write.
+// size (integer px) that fits a vw×vh viewport — the fit is UNCAPPED
+// (ticket #101): large viewports up-scale, small ones down-scale
+// (fit, never stretch) — the letterbox fit the resize pass must
+// write.
 const backing = (g) => ({
   width: g.q("GAME_W") * g.q("CANVAS_SCALE"),
   height: g.q("GAME_H") * g.q("CANVAS_SCALE"),
 });
 const fitted = (g, vw, vh) => {
-  const scale = Math.min(vw / g.q("GAME_W"), vh / g.q("GAME_H"), 1);
+  const scale = Math.min(vw / g.q("GAME_W"), vh / g.q("GAME_H"));
   return {
     width: Math.round(g.q("GAME_W") * scale),
     height: Math.round(g.q("GAME_H") * scale),
@@ -322,17 +324,17 @@ check("shrinking the viewport from 1920×1080 to 320×568 leaves the backing sto
 
 // ================================================================
 // Criterion: letterboxing — the visible size is the largest 16:10
-// rectangle fitting the viewport (fit, not stretch), capped at the
-// native stage size, written as CSS px on the next frame after the
-// resize event
+// rectangle fitting the viewport (fit, not stretch), UNCAPPED since
+// ticket #101 (large viewports up-scale the stage), written as CSS
+// px on the next frame after the resize event
 // ================================================================
-check("on boot the letterbox CSS size is capped at the native stage on a 1920×1080 viewport (960px × 600px)", () => {
+check("on boot the letterbox CSS size UP-SCALES on a 1920×1080 viewport (1728px × 1080px)", () => {
   const g = boot(1920, 1080);
   const want = fitted(g, 1920, 1080);
-  assert(want.width === 960 && want.height === 600,
-    `the 1920×1080 viewport must cap the fit at the native 960×600 stage, expected ${want.width}×${want.height}`);
+  assert(want.width === 1728 && want.height === 1080,
+    `the 1920×1080 viewport must up-scale the stage to 1728×1080 CSS (fit 1.8), expected ${want.width}×${want.height}`);
   assert(g.canvas.style.width === `${want.width}px` && g.canvas.style.height === `${want.height}px`,
-    `the recorded CSS size must be ${want.width}px × ${want.height}px (never upscaled past native), got ${g.canvas.style.width} × ${g.canvas.style.height}`);
+    `the recorded CSS size must be ${want.width}px × ${want.height}px (uncapped up-scale, ticket #101), got ${g.canvas.style.width} × ${g.canvas.style.height}`);
 });
 
 check("after shrinking to a 320×568 viewport the letterbox is 320px × 200px (tolerance 1px) and never exceeds the viewport", () => {
@@ -353,13 +355,13 @@ check("after shrinking to a 320×568 viewport the letterbox is 320px × 200px (t
 });
 
 check("a resize event updates the letterbox fit on the NEXT frame (deferred, not mid-event)", () => {
-  const g = boot(1920, 1080); // capped: 960px × 600px
-  assert(g.canvas.style.width === "960px" && g.canvas.style.height === "600px",
-    `the capped boot fit must be 960px × 600px, got ${g.canvas.style.width} × ${g.canvas.style.height}`);
+  const g = boot(1920, 1080); // uncapped: 1728px × 1080px
+  assert(g.canvas.style.width === "1728px" && g.canvas.style.height === "1080px",
+    `the uncapped boot fit must be 1728px × 1080px, got ${g.canvas.style.width} × ${g.canvas.style.height}`);
   g.win.innerWidth = 800;
   g.win.innerHeight = 500;
   g.resize();
-  assert(g.canvas.style.width === "960px" && g.canvas.style.height === "600px",
+  assert(g.canvas.style.width === "1728px" && g.canvas.style.height === "1080px",
     `resize must not refit mid-event (got ${g.canvas.style.width} × ${g.canvas.style.height})`);
   g.tick(1);
   const want = fitted(g, 800, 500);
@@ -383,7 +385,7 @@ check("a resize during live play updates only the letterbox fit, leaving the bac
 });
 
 check("a burst of resize events collapses to one letterbox fit per frame", () => {
-  const g = boot(1920, 1080); // capped: 960px × 600px
+  const g = boot(1920, 1080); // uncapped: 1728px × 1080px
   g.win.innerWidth = 768;
   g.win.innerHeight = 480;
   g.resize();
