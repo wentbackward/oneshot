@@ -629,7 +629,7 @@ check("pointer at the RIGHT EDGE of the portrait-fitted canvas lands the paddle 
   // inside the cap of the right wall so the single right-edge event
   // lands deterministically.
   g.q(`paddle.x = canvas.width - paddleW / 2 - ${Math.min(10, cap - 1)};`);
-  g.win.dispatch("mousemove", { clientX: rw }); // right edge
+  g.win.dispatch("mousemove", { clientX: rw, clientY: rh / 2 }); // right edge
   const rightEdge = g.q("paddle.x");
   assert(rightEdge === g.canvas.width - g.q("paddleW") / 2,
     `the right-edge clientX must map to the full-rect fraction and pin the paddle at the portrait right wall (${g.canvas.width - g.q("paddleW") / 2}), got ${rightEdge}`);
@@ -644,7 +644,7 @@ check("pointer at the RIGHT EDGE of the portrait-fitted canvas lands the paddle 
   let cur = g.q("paddle.x");
   do {
     prev = cur;
-    g.win.dispatch("mousemove", { clientX: rw / 2 }); // centre
+    g.win.dispatch("mousemove", { clientX: rw / 2, clientY: rh / 2 }); // centre
     cur = g.q("paddle.x");
     assert(++steps <= budget,
       `centre events must converge within ~distance/cap steps, took ${steps}`);
@@ -654,7 +654,7 @@ check("pointer at the RIGHT EDGE of the portrait-fitted canvas lands the paddle 
 
   // #91 supersedes the #40 edge-clamp: off-field holds, not clamps.
   const held = g.q("paddle.x");
-  g.win.dispatch("mousemove", { clientX: -100 }); // off-field left
+  g.win.dispatch("mousemove", { clientX: -100, clientY: rh / 2 }); // off-field left
   assert(g.q("paddle.x") === held,
     `an off-field position must HOLD the paddle at ${held} (not clamp to ${g.q("paddleW") / 2}), got ${g.q("paddle.x")}`);
 });
