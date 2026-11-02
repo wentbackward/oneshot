@@ -102,7 +102,8 @@
   }
   #btn-start,
   #btn-resume,
-  #btn-restart {
+  #btn-restart,
+  #btn-menu {
     font-family: inherit;
     font-size: 1rem;
     letter-spacing: 0.2em;
@@ -115,7 +116,8 @@
   }
   #btn-start:hover,
   #btn-resume:hover,
-  #btn-restart:hover {
+  #btn-restart:hover,
+  #btn-menu:hover {
     background: rgba(92, 242, 176, 0.12);
   }
   /* Start-screen difficulty selector (ticket #44): one group of
@@ -276,11 +278,13 @@
     <p id="gameover-final">Final score 0</p>
     <div class="leaderboard" id="leaderboard-gameover"></div>
     <button id="btn-restart" type="button">Try Again</button>
+    <button id="btn-menu" type="button">Menu</button>
   </section>
 
   <section class="screen" id="screen-pause">
     <h1>Paused</h1>
     <p>The board is holding &middot; Esc or P resumes</p>
+    <p>Esc resume &middot; M menu</p>
     <button id="btn-resume" type="button">Resume</button>
   </section>
 
@@ -646,6 +650,7 @@ var screenStart = document.getElementById("screen-start");
 var screenOver = document.getElementById("screen-gameover");
 var btnStart = document.getElementById("btn-start");
 var btnRestart = document.getElementById("btn-restart");
+var btnMenu = document.getElementById("btn-menu");
 var screenPause = document.getElementById("screen-pause");
 var btnResume = document.getElementById("btn-resume");
 var gameoverFinal = document.getElementById("gameover-final");
@@ -1117,6 +1122,12 @@ function onKeyDown(e) {
   ensureAudio(); // a keydown is a user gesture: build the audio graph once
   if (e.code === "Escape" || e.code === "KeyP") {
     onPauseKeyPress(e.code);
+  } else if (e.code === "KeyM") {
+    // Abandon a paused run to the start screen. Gated to "paused"
+    // alone: in every other state M is a no-op (no pause from start,
+    // no churn on game over), and browser auto-repeat of a held M
+    // lands in "start" after the first edge, so it is a no-op too.
+    if (gameState === "paused") quitToMenu();
   } else if (e.code === "ArrowLeft" || e.code === "KeyA") {
     keys.left.add(e.code);
     e.preventDefault();
@@ -1553,6 +1564,24 @@ function beginRun() {
 }
 btnStart.addEventListener("click", startGame);
 btnRestart.addEventListener("click", restartRun);
+// The one exit to the start screen, shared by the pause M-key and
+// the game-over Menu button: the run drains through beginRun() —
+// the same reset path first-start and restart already share, so
+// there is no second state-clearing path — and the game is left at
+// its boot position with the start overlay up. High score and
+// leaderboard are persistence, not run state: they stay put.
+function quitToMenu() {
+  beginRun();
+  gameState = "start";
+  setScreen("start");
+}
+// The game-over Menu CTA: state-gated like its sibling #btn-restart.
+function menuFromGameOver() {
+  ensureAudio(); // a click is a user gesture: build the audio graph once
+  if (gameState !== "gameover") return; // the button only lives on that screen
+  quitToMenu();
+}
+btnMenu.addEventListener("click", menuFromGameOver);
 btnResetHighScore.addEventListener("click", resetHighScoreAndLeaderboard);
 // Pause / resume (ticket #24): a state-gated toggle bridging only
 // "playing" <-> "paused"; every other state ignores the pause keys

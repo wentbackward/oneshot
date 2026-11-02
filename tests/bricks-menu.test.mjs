@@ -370,7 +370,9 @@ check("high score and leaderboard survive the return to the menu (M path)", () =
     `the live high score must survive the return, got ${g.q("highScore")}`);
   assert(g.store.get("brickbreaker.highScore") === "900",
     "the stored high score must survive the return");
-  assert(g.store.get("brickbreaker.leaderboard") === "[500,300]",
+  // Compare parsed content, not byte form: the game writes compact
+  // JSON, and the seeded value here carries a space after the comma.
+  assert(JSON.stringify(JSON.parse(g.store.get("brickbreaker.leaderboard"))) === "[500,300]",
     `the stored leaderboard must survive the return, got ${JSON.stringify(g.store.get("brickbreaker.leaderboard"))}`);
   assert(JSON.stringify(g.q("leaderboard")) === "[500,300]",
     "the in-memory leaderboard must survive the return");
