@@ -825,8 +825,8 @@ check("the chip recipe is a named recipe and the pitch table is named, strictly 
     assert(Number.isFinite(freqs[hp]) && freqs[hp] > 0,
       `SFX_BRICK_CHIP_FREQ[${hp}] must be a positive frequency, got ${freqs[hp]}`);
     if (hp > 1) {
-      assert(freqs[hp] < freqs[hp - 1],
-        `the pitch must descend with hp: tier-${hp} (${freqs[hp]}) must be lower than tier-${hp - 1} (${freqs[hp - 1]})`);
+      assert(freqs[hp] > freqs[hp - 1],
+        `the pitch must climb with hp so a weakening brick descends: tier-${hp} (${freqs[hp]}) must be higher than tier-${hp - 1} (${freqs[hp - 1]})`);
     }
     assert(freqs[hp] < g.q("SFX_BRICK_BREAK.freq"),
       `tier-${hp} chip (${freqs[hp]} Hz) must sit below the destruction pop (${g.q("SFX_BRICK_BREAK.freq")} Hz)`);
