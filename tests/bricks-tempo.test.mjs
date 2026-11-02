@@ -338,7 +338,8 @@ check("AC1: at 150% the faster keyboard paddle respects the existing wall clamp"
   g.q("paddle.x = canvas.width / 2;");
   g.key("keydown", "ArrowRight");
   // 150% reaches the right wall (~50 frames) well before 55, while
-  // the 100% base rate would still be ~25 px short at frame 55.
+  // the 100% base rate only reaches the wall at ~frame 75 (~240 px
+  // short at frame 55) — so the assert discriminates the scale.
   g.tick(55);
   const wall = g.q("canvas.width - paddleW / 2");
   assert(g.paddleX() === wall,
