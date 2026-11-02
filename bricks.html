@@ -2104,10 +2104,12 @@ function beginRun() {
   // Stage geometry follows the mode (ticket #76): alleyway runs the
   // portrait arena with its own 5×10 grid; classic/exciting run the
   // landscape default. Setting the runtime size vars and re-running
-  // the letterbox pass resizes the backing store at once, and a menu
-  // return (quitToMenu → beginRun) restores the classic stage the
-  // same way — the geometry is a pure function of the run's mode,
-  // so no dimension or grid residue survives a mode switch.
+  // the letterbox pass resizes the backing store at once. The
+  // geometry is a pure function of the SELECTED mode, so the stage
+  // behind the start screen reflects whatever mode is selected (an
+  // alleyway selection stays portrait there); the landscape stage
+  // returns with the next classic run. No dimension or grid residue
+  // survives a mode switch either way.
   var portrait = runMode === "alleyway";
   GAME_W = portrait ? ALLEYWAY_W : CLASSIC_W;
   GAME_H = portrait ? ALLEYWAY_H : CLASSIC_H;

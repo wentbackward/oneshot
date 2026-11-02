@@ -624,9 +624,7 @@ check("pointer at the RIGHT EDGE of the portrait-fitted canvas lands the paddle 
   g.win.dispatch("mousemove", { clientX: rw }); // right edge
   const rightEdge = g.q("paddle.x");
   assert(rightEdge === g.canvas.width - g.q("paddleW") / 2,
-    `the right-edge clientX must pin the paddle at the portrait right wall (${g.canvas.width - g.q("paddleW") / 2}), got ${rightEdge}`);
-  assert(rightEdge === rw / rw * g.canvas.width - g.q("paddleW") / 2,
-    `the mapping must be the full-rect fraction (clientX−left)/rect.width × canvas.width, clamped`);
+    `the right-edge clientX must map to the full-rect fraction and pin the paddle at the portrait right wall (${g.canvas.width - g.q("paddleW") / 2}), got ${rightEdge}`);
 
   g.win.dispatch("mousemove", { clientX: rw / 2 }); // centre
   assert(g.q("paddle.x") === g.canvas.width / 2,
