@@ -1577,9 +1577,14 @@ function setPaddleX(clientX, clientY) {
   if (rect.width <= 0) return; // degenerate rect: ignore the event
   var right = rect.left + rect.width;
   var bottom = rect.top + rect.height;
-  if (clientX < rect.left || clientX > right ||
-      clientY < rect.top || clientY > bottom) {
-    return; // outside the stage rect: hold, not edge-pin
+  // Negated comparisons: a missing/NaN clientX or clientY compares
+  // false in EVERY direction, so the plain `x < lo || x > hi` form
+  // would treat it as inside and poison paddle.x with the NaN target.
+  // Browsers always deliver finite coordinates, but the guard costs
+  // nothing and closes the class the degenerate-rect check handles.
+  if (!(clientX >= rect.left) || !(clientX <= right) ||
+      !(clientY >= rect.top) || !(clientY <= bottom)) {
+    return; // outside the stage rect (or malformed): hold, not edge-pin
   }
   var target = ((clientX - rect.left) / rect.width) * canvas.width;
   var step = target - paddle.x;
