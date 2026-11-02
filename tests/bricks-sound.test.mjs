@@ -250,6 +250,7 @@ function boot(width = 960, height = 600, opts = {}) {
     "sound-volume": makeEl("sound-volume"),
     "screen-gameover": makeEl("screen-gameover"),
     "btn-restart": makeEl("btn-restart"),
+    "btn-menu": makeEl("btn-menu"),
     "screen-pause": makeEl("screen-pause"),
     "btn-resume": makeEl("btn-resume"),
     "gameover-final": makeEl("gameover-final"),
