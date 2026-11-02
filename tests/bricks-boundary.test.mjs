@@ -132,6 +132,7 @@ function boot(width, height) {
     "sound-volume": makeEl("sound-volume"),
     "btn-resume": makeEl("btn-resume"),
     "btn-restart": makeEl("btn-restart"),
+    "btn-menu": makeEl("btn-menu"),
     "gameover-final": makeEl("gameover-final"),
     "hud-score": makeEl("hud-score"),
     "hud-level": makeEl("hud-level"),
