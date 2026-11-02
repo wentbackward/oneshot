@@ -445,7 +445,7 @@ var PLAYER_LIVES = 3;             // lives per run (PRD section 2 loss rule)
 var BASE_PADDLE_W = 120;           // resting width; the runtime width widens on expand
 var PADDLE_HEIGHT = 14;
 var PADDLE_BOTTOM_GAP = 24;       // clear space between paddle and bottom edge
-var PADDLE_SPEED = 720;           // keyboard travel speed, px/s
+var PADDLE_SPEED = 720;           // keyboard travel speed, px/s (per-run value: runPaddleKeySpeed, #89)
 var POINTER_MAX_STEP = 18;        // pointer per-event paddle step cap, px (
                                   // 1.5× the keyboard per-frame travel PADDLE_SPEED/60;
                                   // ticket #91: one event may never teleport the paddle)
@@ -607,7 +607,7 @@ var POWERUP_DROP_RATE = 0.25;      // normal-preset baseline; the run rolls its 
 // EXCITING-mode multiplier (ticket #74): the mode's capsule drop
 // rate = the selected preset's rate × this factor (classic × 1.0).
 var EXCITING_DROP_FACTOR = 2.0;
-var CAPSULE_FALL_SPEED = 200;      // descent speed, px/s
+var CAPSULE_FALL_SPEED = 200;     // descent speed, px/s (per-run value: runCapsuleFallSpeed, #89)
 var CAPSULE_W = 24;                // capsule footprint, internal px
 var CAPSULE_H = 14;
 var CAPSULE_POOL_SIZE = 4;         // fixed pre-allocated pool of concurrent capsules
@@ -1009,6 +1009,15 @@ var serveCeiling = MAX_BALL_SPEED;
 // (ticket #77) derives a level's legitimate speed from THIS, so a
 // back-step lands exactly where a pristine forward run stands.
 var runServeBase = BALL_SERVE_SPEED;
+// Runtime capsule fall speed: CAPSULE_FALL_SPEED scaled by the run's
+// ball-speed percent, snapshotted in beginRun() (the base value
+// before the first run) — the run's tempo moves as a whole (#89).
+var runCapsuleFallSpeed = CAPSULE_FALL_SPEED;
+// Runtime keyboard paddle speed: PADDLE_SPEED scaled by the run's
+// ball-speed percent, snapshotted in beginRun() (the base value
+// before the first run). The pointer paddle follows POSITION, never
+// a speed term, so it is deliberately untouched by the factor.
+var runPaddleKeySpeed = PADDLE_SPEED;
 // Runtime capsule drop rate: the run's snapshot of the selected
 // preset's dropRate, scaled by the selected mode's dropFactor
 // (default preset and default mode before the first run).
@@ -1556,7 +1565,7 @@ function updatePaddle(dt) {
   // update() only runs in "playing", so releasing a key stops the
   // paddle automatically; both key and pointer write the same x.
   var dir = (keys.right.size > 0 ? 1 : 0) - (keys.left.size > 0 ? 1 : 0);
-  if (dir !== 0) paddle.x += dir * PADDLE_SPEED * dt;
+  if (dir !== 0) paddle.x += dir * runPaddleKeySpeed * dt;
   clampPaddle();
 }
 function onKeyDown(e) {
@@ -1923,7 +1932,7 @@ function updatePowerups(dt) {
   for (var i = 0; i < capsules.length; i += 1) {
     var c = capsules[i];
     if (!c.active) continue;
-    c.y += CAPSULE_FALL_SPEED * dt;
+    c.y += runCapsuleFallSpeed * dt;
     var overPaddle = c.y + CAPSULE_H >= pt && c.y <= pt + PADDLE_HEIGHT;
     if (overPaddle && Math.abs(c.x - paddle.x) <= halfSpan) {
       c.active = false; // caught: consumed by its effect
@@ -2188,6 +2197,14 @@ function beginRun() {
   var speedFactor = ballSpeedPct / 100;
   serveSpeed = preset.serveSpeed * speedFactor;
   serveCeiling = MAX_BALL_SPEED * speedFactor;
+  // Same factor scales the capsule's fall and the keyboard paddle's
+  // travel: the whole run's tempo moves together (#89). The named
+  // var bases are multiplied, never replaced, and a mid-run slider
+  // move stays inert until the next run (these are snapshots, like
+  // the serve's). The pointer paddle is position-following — no
+  // speed term — and is never scaled.
+  runCapsuleFallSpeed = CAPSULE_FALL_SPEED * speedFactor;
+  runPaddleKeySpeed = PADDLE_SPEED * speedFactor;
   // Includes speedFactor so the back-step recompute (#77) matches the
   // forward chain under the slider at any setting.
   runServeBase = preset.serveSpeed * speedFactor;

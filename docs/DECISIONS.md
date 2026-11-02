@@ -2282,3 +2282,29 @@ arcade physics).
   element stub maps** (verified by grep: one stub line per id per suite),
   not just `tests/bricks-ballspeed.test.mjs` — the house trap from the last
   wave, applied once, exhaustively.
+
+## 2026-11-02 — Ticket #89: speed slider scales capsule fall speed and keyboard paddle speed too
+
+- **Two new per-run snapshots: `runCapsuleFallSpeed` and
+  `runPaddleKeySpeed`, named `var`s initialised to the base values
+  (`CAPSULE_FALL_SPEED` / `PADDLE_SPEED`) before the first run and
+  reassigned in `beginRun()` as `base * speedFactor`, exactly beside
+  `serveSpeed` / `serveCeiling` / `runServeBase`.** The base named vars
+  stay top-level, console-retunable, and are multiplied — never
+  replaced — so at 100% the hot path consumes a bitwise-identical
+  value (`x * 1 === x`), making the 100% regression byte-identical by
+  construction rather than by approximation. Alternatives rejected:
+  passing the factor through the update functions (`updatePowerups`
+  would read `ballSpeedPct` live, violating the snapshot semantics the
+  ticket pins, and a per-frame division would creep into the hot
+  path); storing the factor and multiplying at each use site (same
+  per-frame multiply, weaker audit trail than a named snapshot beside
+  the serve's).
+- **`POINTER_MAX_STEP` is deliberately NOT rescaled even though its
+  comment derives it from `PADDLE_SPEED/60`.** The ticket states the
+  pointer paddle is position-following with no speed term and must not
+  gain one; the cap is a per-event teleport guard, not a tempo knob,
+  so it keeps deriving from the BASE keyspeed. Alternatives rejected:
+  snapshotting a scaled cap (would couple a safety limit to player
+  tempo and change #91's guaranteed behaviour); a mid-run dynamic cap
+  (inert-by-snapshot is the established tempo rule).
