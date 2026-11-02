@@ -363,9 +363,11 @@ function boot(width = 960, height = 600, opts = {}) {
     key(type, code) {
       fireWin(type, { code, preventDefault() {} });
     },
-    mouseMove(clientX) {
-      // ticket #40: pointer tracking is window-level.
-      fireWin("mousemove", { clientX });
+    mouseMove(clientX, clientY) {
+      // ticket #40 (superseded by #91): pointer tracking is window-level;
+      // clientY defaults to the fitted rect's midline so the event is a
+      // well-formed in-rect event under #91's containment guard.
+      fireWin("mousemove", { clientX, clientY: clientY ?? 300 });
     },
     canvasClick() {
       canvas.dispatch("click", { type: "click" });

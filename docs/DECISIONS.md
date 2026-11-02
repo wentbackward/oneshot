@@ -2165,3 +2165,55 @@ arcade physics).
   once, exhaustively. `tests/bricks-modes.test.mjs`'s static
   assertions were widened from "two data-mode nodes" to three
   (classic|exciting|alleyway) as the scaffold absorbed the button.
+
+## 2026-11-02 — Ticket #91: pointer outside the stage rect holds the paddle; per-event displacement cap (supersedes the #40 edge-clamp)
+
+- **SUPERSESSION: the pointer edge-clamp dating from tickets #21/#40
+  (any pointer position outside the field mapped to the nearest
+  wall via `clampPaddle()`) is superseded.** `setPaddleX` now
+  ignores events whose position falls outside the stage's fitted
+  bounding rect (read via `getBoundingClientRect()` on every
+  event): the paddle HOLDS its last position instead of pinning to
+  an edge. Holding is gentler because an escaped cursor is a
+  transient accident, not a command — pinning converted "cursor
+  wandered into the letterbox" into "paddle welded to the wall",
+  while holding converts it into "nothing happens". No paddle range
+  is lost: the stage rect IS the field, and the containment test is
+  inclusive on all four edges, so a cursor sitting exactly on the
+  rect rim still maps wall-to-wall.
+- **What actually misbehaved (repro, deterministic in the vm
+  suites):** (1) a cursor parked in the left letterbox bar pinned
+  the paddle to `paddleW / 2` on every mousemove — a ball served or
+  bounced in that window kept slamming the left wall, the operator's
+  "the mouse keeps escaping and the game misbehaves"; (2) on cursor
+  return, ONE event teleported the paddle the full distance (e.g.
+  760 px in one event at boot stage size) — an attached ball rode
+  the teleport and launched from a suddenly different offset (the
+  bounce angle is offset-proportional), and any free ball aimed at
+  the previous paddle centre missed outright; (3) investigated
+  event ordering and stale rects after window resize: no hazard —
+  the rect is read per event (never cached), so a resize can only
+  leave it at most one frame stale while the deferred CSS re-fit
+  (`resizePending`) runs, and that self-corrects; the pre-existing
+  degenerate-rect (width 0) guard is retained and still exercised.
+  The fix addresses (1) with the hold rule and (2) with the cap;
+  (3) needs no code change.
+- **`POINTER_MAX_STEP = 18` px/event** — a top-level mutable
+  `var`, console-retunable, = 1.5× the keyboard paddle's per-frame
+  travel (`PADDLE_SPEED` 720 px/s ÷ 60 fps = 12 px). At ≥60
+  events/s that is ≥1080 px/s, faster than keyboard steering, so
+  normal following feels immediate; the worst case (cursor returns
+  from the far letterbox bar) still takes ≥107 events (~1.8 s at
+  60 Hz) to traverse the 1920-px field — accepted as the price of
+  never teleporting the paddle out from under a riding ball. The
+  cap applies INSIDE the rect too, per event, stateless and
+  deterministic (each event walks at most the cap toward the
+  cursor; sustained events converge exactly on it — asserted).
+  Alternatives rejected: a velocity-style px/s cap (needs
+  timestamp arithmetic in the handler and wall-clock input —
+  fights the sleep-free deterministic vm harness); per-frame
+  easing/interpolation toward the cursor (per-frame state and hot-
+  path work for a benefit the event cap already gives); X-only
+  containment (a cursor in the TOP/BOTTOM letterbox bars would
+  still steer, but the complaint is about the cursor leaving the
+  game area, any bar).
