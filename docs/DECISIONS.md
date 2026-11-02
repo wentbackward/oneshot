@@ -1944,10 +1944,13 @@ arcade physics).
   with modes); a `selected`-attribute CSS approach (the
   class-list precedent is what difficulty/theme already do).
 - **`EXCITING_DROP_FACTOR` is a top-level mutable `var` (2.0), and
-  `MODES.exciting.dropFactor` references it at module load** — the
+  `MODES.exciting.dropFactor` captures it at module load** — the
   `DIFFICULTY.normal` row precedent, keeping one source of truth;
-  the per-run snapshot freezes it for the run, so console retunes
-  apply to the next run, exactly like the difficulty knobs.
+  retunes behave exactly like the difficulty knobs, i.e. the table
+  rows freeze the var at module load (a console retune of either the
+  factor or the preset rates takes effect only after a page reload,
+  not on the next run — the per-run snapshot then freezes the table
+  value for the run).
   `EXCITING_DROP_FACTOR` sits beside `POWERUP_DROP_RATE` in the
   power-up tuning block since it scales that quantity.
 - **Economy is a MULTIPLIER on the selected preset's rate, not a
