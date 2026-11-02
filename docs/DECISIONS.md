@@ -1540,3 +1540,49 @@
   `LASER_LIFETIME_S` to 100 s so the default 1.5 s life cannot reclaim
   slots before the 32-slot pool saturates. All other campaign-1 suites
   needed no adaptation.
+
+## 2026-11-01 — Ticket #50: accelerating thrust and coast inertia
+
+- **Two-phase ship dynamics replace the old thrust+always-on-friction mix:
+  held thrust integrates `THRUST` along the heading and hard-caps the
+  resulting speed at `SHIP_MAX_SPEED` (direction preserved); with no
+  thrust key held, velocity decays by `v *= SHIP_COAST_FRICTION^(dt·60)`
+  and the existing `STOP_SPEED` snap ends the coast.** The hard cap is
+  what makes "hold longer → faster" read as building momentum (linear
+  ramp in ~0.52 s at default `THRUST = 420`), instead of the old 0.90
+  retention fighting the thrust into a low, invisible plateau
+  (~63 px/s). Defaults: `SHIP_MAX_SPEED = 220` px/s (3.5× the old
+  plateau, still ~1.4 s to cross the 960 px field),
+  `SHIP_COAST_FRICTION = 0.95`, `SHIP_SPEED_EPS = 1` px/s,
+  `COAST_SETTLE_S = 2.0` s. All four are top-level `var`s — console-
+  retunable, per campaign-1 precedent.
+- **`SHIP_COAST_FRICTION = 0.95` is chosen to sit between both ticket
+  bounds with margin, verified by driven frames in
+  `tests/ship-thrust.test.mjs`:** after 0.25 s the retained fraction is
+  `0.95¹⁵ ≈ 0.463` (bound: ≥ 0.25), and a coast from the 220 px/s cap
+  falls below `STOP_SPEED` (1 px/s) after ⌈ln 220 / −ln 0.95⌉ = 106
+  frames ≈ 1.77 s (bound: within `COAST_SETTLE_S` = 2.0 s, so 1–3 s).
+  Rejected alternatives: (a) instant stop on release — no inertia at
+  all, the exact complaint that filed this ticket; (b) pure
+  exponential decay without the `STOP_SPEED` snap — the ship would
+  glide at sub-pixel speeds forever (the "exactly zero" bound would be
+  unreachable); (c) one shared friction for thrust and coast — friction
+  while thrusting turns the top speed into an ASYMPTOTE
+  (`THRUST·f/(1−f)`) that is approached, never attained; forcing all
+  three bounds to hold at once pins `f ≈ 0.969` with a ~2.9 s settle —
+  zero margin against console retunes, and the ramp reads as the old
+  plateau. Two phases, two named knobs, each retunable independently.
+- **`COAST_SETTLE_S` ships in the game source as a contract constant
+  (not read by the update loop): the friction + snap combo is what
+  enforces it, and the vm suite asserts the bound by driving frames.**
+  Kept as a named `var` so a console retune of `SHIP_COAST_FRICTION`
+  has a documented target; re-tuning it back in violation is caught by
+  the settle test. Alternative: compute it from the other two (rejected
+  — a derived constant would hide the intent and die with a retune).
+- **Existing campaign-1 suites: no fixture values needed changing.** The
+  lasers "ghost thrust after blur" soak rests the ship within a
+  120-frame (2 s) window — still satisfied, from ~210 px/s the new coast
+  snaps at frame ~105; its comment now names the coast mechanism
+  instead of the retired `FRICTION`. Every other suite parks or zeros
+  the ship velocity explicitly, so the old curve was never encoded in a
+  fixture number.

@@ -323,7 +323,11 @@ check("window blur clears the pressed-keys set: a held W after an alt-tab leaves
   assert(g.q("ship.vy") < -1, "precondition: held W gives the ship real upward speed");
   g.fire("blur"); // focus loss (alt-tab): held keys no longer reach the game
   assert(g.q("keys.size") === 0, "blur must clear the pressed-keys set");
-  // Friction snaps the ship to rest; afterwards it must stay put.
+  // Ticket #50 adaptation: the old 0.90 always-on friction is gone; the
+  // residual speed now dies by coast inertia (SHIP_COAST_FRICTION) plus
+  // the STOP_SPEED snap — from ~210 px/s that settles at frame ~105,
+  // well inside the 120-frame window below (contract: COAST_SETTLE_S).
+  // Afterwards the ship must stay put.
   let rest = null;
   for (let i = 0; i < 120; i++) {
     g.tick();
@@ -332,7 +336,7 @@ check("window blur clears the pressed-keys set: a held W after an alt-tab leaves
       break;
     }
   }
-  assert(rest, "friction must bring the ship to rest once the keys are cleared");
+  assert(rest, "coast inertia must bring the ship to rest once the keys are cleared");
   for (let i = 0; i < 120; i++) g.tick(); // 2 s with no reachable input
   const p = g.q("({ x: ship.x, y: ship.y })");
   assert(p.x === rest.x && p.y === rest.y,
