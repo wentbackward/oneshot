@@ -515,13 +515,11 @@ check("one in-flight ball becomes ten: same position, identical speed, nine rota
   const step = g.q("MULTIBALL_SPREAD_STEP");
   assert(typeof step === "number" && step > 0, `MULTIBALL_SPREAD_STEP must be a named positive var, got ${step}`);
   const base = Math.atan2(-speed, 0);
-  const angles = balls.map((b) => Math.atan2(b.vy, b.vx)).sort((a, b) => a - b);
-  const expected = [];
-  for (let j = 0; j < 9; j += 1) expected.push(base + (j - 4) * step);
-  expected.sort((a, b) => a - b);
+  const angles = balls.map((b) => Math.atan2(b.vy, b.vx));
   for (let j = 0; j < 9; j += 1) {
-    assertClose(angles[j], expected[j], 1e-9,
-      `clone direction ${j} must be the incoming vector rotated by ${(j - 4) * step}, got ${angles[j]}`);
+    const want = base + (j - 4) * step;
+    assert(angles.some((a) => Math.abs(a - want) < 1e-9),
+      `a clone must carry the incoming vector rotated by ${(j - 4) * step} rad`);
   }
 });
 
@@ -551,13 +549,17 @@ check("four in-flight balls: excess spawns are skipped in deterministic pool ord
   fixture(g1);
   assert(g1.liveCount() === 30,
     `the cap must hold with four parents, live=${g1.liveCount()}`);
-  // Pool-order parents 0..2 get their full fan; parent 3 (x=600) is
-  // left as-is: the cap is exactly reached before its clones.
+  // Parents fan in pool order with a per-spawn cap check: parent 0
+  // and 1 reach their full fan (10 each), parent 2 gets eight of its
+  // nine clones (the ninth would exceed 30), parent 3 is skipped
+  // entirely — the deterministic skip order the ticket names.
   const countAt = (g, x) => g.ballList().filter((b) => b.active && Math.abs(b.x - x) < 1).length;
-  assert(countAt(g1, 300) === 10 && countAt(g1, 400) === 10 && countAt(g1, 500) === 10,
-    `the first three parents must each reach ten (got ${countAt(g1, 300)}, ${countAt(g1, 400)}, ${countAt(g1, 500)})`);
+  assert(countAt(g1, 300) === 10 && countAt(g1, 400) === 10,
+    `parents 0-1 must each reach ten (got ${countAt(g1, 300)}, ${countAt(g1, 400)})`);
+  assert(countAt(g1, 500) === 9,
+    `parent 2's ninth clone must be skipped at the cap (got ${countAt(g1, 500)} at x=500)`);
   assert(countAt(g1, 600) === 1,
-    `the fourth parent's excess spawns must be skipped (got ${countAt(g1, 600)} balls at x=600)`);
+    `parent 3's excess spawns must be skipped (got ${countAt(g1, 600)} balls at x=600)`);
   // A second, identically-fixed boot must reproduce the exact same
   // field: determinism under the pinned random hook.
   const g2 = boot();
@@ -688,7 +690,7 @@ check("each new capsule kind schedules its own named blip recipe, distinct from 
   const route = (kind) => {
     g.q("scheduled.length = 0");
     g.q(`applyCapsule(${kind})`);
-    return g.q("scheduled");
+    return g.q("scheduled.slice()"); // copy: later routes truncate the live array
   };
   const legacy = route("KIND_EXPAND");
   assert(legacy.length === 1, "a legacy capture must schedule exactly one blip");
