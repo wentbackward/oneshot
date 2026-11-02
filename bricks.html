@@ -368,8 +368,19 @@
 // applies the CSS custom properties and the canvas palette in a
 // single pass; named start-screen play modes (Classic / Exciting)
 // persisted in localStorage under their own named key, snapshotted
-// per run — today differing only in the capsule drop-rate economy
-// (classic × 1.0, exciting × the named EXCITING_DROP_FACTOR);
+// per run — classic keeps the legacy economy (× 1.0 drop factor,
+// the five-kind capsule table, the MAX_BALLS live-ball cap);
+// exciting multiplies the preset's drop rate by the named
+// EXCITING_DROP_FACTOR and rolls three capsule kinds that exist
+// ONLY in its drop table (ticket #75): invulnerable (a timed
+// window in which the ball smashes through breakable bricks —
+// fixed bricks still stop it — with no capsule drops and a
+// tinted, glowing ball), multiball (every in-flight ball instantly
+// fans into ten at a fixed angular spread, capped at MAX_BALLS_EXCITE
+// concurrent balls on the boot-sized pool), and blast (a timed
+// window in which every brick hit detonates all breakable bricks
+// within the named radius — one scan per hit, no chaining, fixed
+// bricks anchor without breaking);
 // and a start-screen sound toggle with a volume
 // slider, persisted as JSON { muted, volume } under their own
 // named key and driving the master bus level live (mute wins over
@@ -406,7 +417,8 @@ var DANGER_DASH = [12, 10];        // on/off rhythm of the bottom danger line, c
 var NO_DASH = [];                  // setLineDash reset argument (restores solid)
 // Ball
 var BALL_RADIUS = 8;
-var MAX_BALLS = 5;              // live-ball cap; the ball pool is sized to this
+var MAX_BALLS = 5;              // normal-play live-ball cap (classic); extra-ball catches stop here
+var MAX_BALLS_EXCITE = 30;      // EXCITING concurrent-ball cap (multiball x10); the ball pool is sized to this at boot
 var BALL_SERVE_SPEED = 480;       // level-1 launch speed on click/tap, px/s
 var LEVEL_SPEED_GROWTH = 1.15;    // per-level serve-speed multiplier (PRD section 4)
 var MAX_BALL_SPEED = 1500;        // ceiling the per-level growth caps at, px/s
@@ -542,12 +554,29 @@ var KIND_EXTRA = 1;
 var KIND_STICKY = 2;
 var KIND_LIFE = 3;
 var KIND_MULTIPLIER = 4;
+// EXCITING-only capsule kinds (ticket #75): they live exclusively
+// in the exciting drop table below and are never rolled on classic
+// — CAPSULE_KINDS stays the legacy five-kind table.
+var KIND_INVULNERABLE = 5;
+var KIND_MULTIBALL = 6;
+var KIND_BLAST = 7;
 var CAPSULE_KINDS = [KIND_EXPAND, KIND_EXTRA, KIND_STICKY, KIND_LIFE, KIND_MULTIPLIER];
+// The EXCITING drop table (ticket #75): the classic five kinds plus
+// exactly one row per new kind, appended in order. beginRun()
+// snapshots a reference to the selected mode's table onto the run.
+var CAPSULE_KINDS_EXCITE = [
+  KIND_EXPAND, KIND_EXTRA, KIND_STICKY, KIND_LIFE, KIND_MULTIPLIER,
+  KIND_INVULNERABLE, KIND_MULTIBALL, KIND_BLAST,
+];
 var COLOR_CAPSULE_EXPAND = "#ffd23f";
 var COLOR_CAPSULE_EXTRA = "#63d4ff";
 var COLOR_CAPSULE_STICKY = "#d05ce3";
 var COLOR_CAPSULE_LIFE = "#ff5c7a";
 var COLOR_CAPSULE_MULT = "#6eff8f";
+// Exciting-only capsule colours (ticket #75).
+var COLOR_CAPSULE_INVULN = "#7dffa8";
+var COLOR_CAPSULE_MULTIBALL = "#5c9dff";
+var COLOR_CAPSULE_BLAST = "#ff8a3d";
 // Exhaustive kind-to-colour table, indexed by kind: every enumerated
 // kind has exactly one row. A new kind adds a row here and an entry
 // in CAPSULE_KINDS — never a branch in the draw pass.
@@ -555,11 +584,27 @@ var CAPSULE_COLORS = [
   COLOR_CAPSULE_EXPAND, COLOR_CAPSULE_EXTRA, COLOR_CAPSULE_STICKY,
   COLOR_CAPSULE_LIFE, COLOR_CAPSULE_MULT,
 ];
+// Complete draw lookup over every ENUMERATED kind (ticket #75):
+// the five classic rows plus the three exciting ones, built once —
+// the draw pass indexes it by kind without a branch. CAPSULE_COLORS
+// itself keeps exactly one row per classic kind (legacy invariant).
+var CAPSULE_DRAW_COLORS = CAPSULE_COLORS.concat(
+  COLOR_CAPSULE_INVULN, COLOR_CAPSULE_MULTIBALL, COLOR_CAPSULE_BLAST);
 var PADDLE_EXPAND_FACTOR = 1.6;         // widened width = the run's base paddle width * factor
 var PADDLE_EXPAND_DURATION_S = 6;       // simulated seconds of widen
 var STICKY_DURATION_S = 6;              // simulated seconds the paddle still catches
 var MULT_VALUE = 2;                     // armed kills are worth this many times their tier points
 var MULT_DURATION_S = 6;                // simulated seconds the multiplier window stays armed
+// EXCITING-mode capsule effects (ticket #75): console-retunable
+// durations/radii in the house style of the effect knobs above.
+var INVULNERABLE_DURATION_S = 6;        // simulated seconds the ball smashes through breakable bricks
+var MULTIBALL_CLONES = 9;               // per in-flight ball: 1 + 9 clones = 10 concurrent balls
+var MULTIBALL_SPREAD_STEP = Math.PI / 12; // angular step between adjacent fan slots
+var BLAST_DURATION_S = 5;               // simulated seconds brick hits detonate the blast radius
+var BLAST_RADIUS_PX = 90;               // detonation radius around the impact point, canvas px
+var COLOR_BALL_INVLUN = "#7dffa8";      // the ball's tint + halo colour while invuln is active
+var INVULN_GLOW_ALPHA = 0.35;           // the halo's opacity
+var INVULN_GLOW_RADIUS_PX = 16;         // the halo's radius, canvas px
 // Difficulty presets (ticket #44): the start-screen choice maps to a
 // row of named knobs. beginRun() snapshots the selected row onto the
 // run, so switching presets between runs never mutates the global
@@ -581,19 +626,19 @@ var DIFFICULTY = {
 // Play modes (ticket #74): the start-screen choice maps to one row
 // of named knobs. beginRun() snapshots the selected row onto the
 // run, so switching modes between runs never mutates the global
-// tuning above. Today the only knob is dropFactor — classic stays
-// exactly 1.0 (legacy economy); exciting multiplies the preset's
-// drop rate by the named EXCITING_DROP_FACTOR var. The follow-up
-// tickets (exciting capsules, the alleyway mode) branch on this
-// single table and add rows/knobs without touching the selector
-// plumbing.
+// tuning above. Classic stays exactly 1.0 (legacy economy) and
+// keeps the legacy five-kind drop table; exciting multiplies the
+// preset's drop rate by the named EXCITING_DROP_FACTOR var and rolls
+// from the eight-kind table (ticket #75). The follow-up ticket
+// (the alleyway mode) branches on this single table and adds
+// rows/knobs without touching the selector plumbing.
 var MODE_KEY = "brickbreaker.mode";
 var DEFAULT_MODE = "classic";
 var MODES = {
-  classic: { dropFactor: 1.0 },
+  classic: { dropFactor: 1.0, capsuleKinds: CAPSULE_KINDS },
   // exciting references the named var, keeping a single source of
   // truth (the DIFFICULTY.normal row precedent).
-  exciting: { dropFactor: EXCITING_DROP_FACTOR },
+  exciting: { dropFactor: EXCITING_DROP_FACTOR, capsuleKinds: CAPSULE_KINDS_EXCITE },
 };
 
 // ---- Palette (the page accent lives in the CSS --accent property;
@@ -688,6 +733,13 @@ var SFX_BRICK_BREAK   = { wave: WAVE_NOISE,  freq: 900, dur: 0.09 };
 var SFX_BRICK_CHIP_FREQ = [0, 440, 550, 660];
 var SFX_BRICK_CHIP    = { wave: WAVE_SINE,   freq: SFX_BRICK_CHIP_FREQ[3], dur: 0.04 };
 var SFX_POWERUP_CATCH = { wave: WAVE_SQUARE, freq: 660, dur: 0.12 };
+// EXCITING-mode capture blips (ticket #75): each new capsule gets a
+// small blip distinct from the legacy catch blip and from its
+// siblings, scheduled through the SAME scheduleSound() bus/envelope
+// path — the mute/volume plumbing therefore applies unchanged.
+var SFX_CATCH_INVULNERABLE = { wave: WAVE_SINE,   freq: 880,  dur: 0.10 };
+var SFX_CATCH_MULTIBALL    = { wave: WAVE_SQUARE, freq: 990,  dur: 0.12 };
+var SFX_CATCH_BLAST        = { wave: WAVE_NOISE,  freq: 1200, dur: 0.15 };
 var SFX_GAME_OVER     = { wave: WAVE_SINE,   freq: 110, dur: 0.50 };
 var SFX_PEAK = 0.5;                    // every envelope peaks here; the bus scales it
 var SFX_DECAY_FLOOR = 0.001;           // decay target: exp ramps cannot reach exact 0
@@ -839,17 +891,23 @@ var capsules = [];
 for (var i = 0; i < CAPSULE_POOL_SIZE; i += 1) {
   capsules.push({ active: false, kind: KIND_EXPAND, x: 0, y: 0 });
 }
-// Ball pool: allocated once at MAX_BALLS and mutated in place; a
-// free slot is activated per extra-ball catch, never grown.
-// Slot 0 is the run's serve ball; a sticky catch rides any slot at
-// its contact offset (attachOff).
+// Ball pool: allocated once at MAX_BALLS_EXCITE (the EXCITING
+// concurrent-ball cap, ticket #75) and mutated in place; a free
+// slot is activated per spawn, never grown. Classic runs respect
+// the smaller MAX_BALLS cap at spawn time. Slot 0 is the run's
+// serve ball; a sticky catch rides any slot at its contact offset
+// (attachOff).
 var balls = [];
-for (var i = 0; i < MAX_BALLS; i += 1) {
+for (var i = 0; i < MAX_BALLS_EXCITE; i += 1) {
   balls.push({ active: false, attached: false, attachOff: 0, x: 0, y: 0, vx: 0, vy: 0 });
 }
 var stickyUntil = -1;              // simTime at which the sticky catch expires;
                                    // absolute clock, so a mid-run re-serve
                                    // inside the window leaves it armed
+var invulnUntil = -1;              // EXCITING (ticket #75): simTime at which
+                                   // the invulnerability window expires
+var blastUntil = -1;               // EXCITING (ticket #75): simTime at which
+                                   // the blast window expires
 // Brick pool: allocated once at this size and reused in place for
 // every level, so the grid never allocates on a level spawn. hp is
 // the per-brick durability remaining; spawnLevel() refills it from
@@ -882,6 +940,14 @@ var dropRate = DIFFICULTY[DEFAULT_DIFFICULTY].dropRate;
 // mode before the first run) — the seam follow-up tickets branch
 // on (see the MODES table above).
 var runMode = DEFAULT_MODE;
+// Runtime capsule drop table: the selected mode's kinds array,
+// snapshotted in beginRun() (classic before the first run).
+var runCapsuleKinds = CAPSULE_KINDS;
+// Runtime concurrent-ball cap: MAX_BALLS on classic, MAX_BALLS_EXCITE
+// on exciting — snapshotted in beginRun() so a console retune of
+// either named var takes effect from the next run, like the other
+// per-run snapshots.
+var runBallCap = MAX_BALLS;
 // Held keys per direction: one set entry per distinct held code.
 // Auto-repeat keydowns re-add the same code (idempotent), so the
 // set size mirrors the fingers on the deck, not the re-dispatches.
@@ -1508,11 +1574,14 @@ function spawnLevel() {
   bricksLeft = left;
   layoutBricks();
 }
-// One kill path shared by the lethal physics hit and console
-// access: a brick whose durability the hit drained to zero is
-// destroyed outright, credits exactly its tier's points (times the
-// live multiplier), and the final brick wins the level. Fixed bricks are immune — a kill
-// attempt on them is a silent no-op.
+// One kill path shared by the lethal physics hit, the blast radius
+// (ticket #75) and console access: a brick whose durability the hit
+// drained to zero is destroyed outright, credits exactly its tier's
+// points (times the live multiplier), and the final brick wins the
+// level. Fixed bricks are immune — a kill attempt on them is a
+// silent no-op. No capsule drop fires while the invulnerability
+// window is live (ticket #75): pass-through kills must not cascade
+// into fresh capsule rain.
 function destroyBrick(index) {
   var b = bricks[index];
   if (!b.active || b.unbreakable) return;
@@ -1524,8 +1593,16 @@ function destroyBrick(index) {
   score += simTime < multUntil ? pts * MULT_VALUE : pts;
   scheduleSound(SFX_BRICK_BREAK);
   syncHud();
-  maybeDropCapsule(b.x + b.w / 2, b.y + b.h);
+  if (!invulnActive()) maybeDropCapsule(b.x + b.w / 2, b.y + b.h);
   if (bricksLeft === 0) advanceLevel();
+}
+// EXCITING-mode window predicates (ticket #75): the expiry vars are
+// sim-time stamps (the expand/sticky/mult convention), -1 = unarmed.
+function invulnActive() {
+  return invulnUntil !== -1 && simTime < invulnUntil;
+}
+function blastActive() {
+  return blastUntil !== -1 && simTime < blastUntil;
 }
 // Cleared board: the level rises by exactly 1, the next layout is
 // spawned into the same pool, and the next serve is the current
@@ -1558,16 +1635,18 @@ function stepLevelBack() {
 }
 
 // ---- Power-ups (drop / fall / catch, ticket #25) ----
-// A destroyed brick rolls its drop through the mutable `random` hook;
-// a hit takes the first free slot of the fixed pool, so a drop never
-// allocates and quietly vanishes when the pool is full.
+// A destroyed brick rolls its drop through the mutable `random` hook
+// against the run's capsule table (the mode's list — the classic five
+// kinds or the exciting eight, ticket #75); a hit takes the first free
+// slot of the fixed pool, so a drop never allocates and quietly
+// vanishes when the pool is full.
 function maybeDropCapsule(x, y) {
   if (random() >= dropRate) return; // rolled against the run's snapshot
   for (var i = 0; i < capsules.length; i += 1) {
     var c = capsules[i];
     if (c.active) continue;
     c.active = true;
-    c.kind = CAPSULE_KINDS[Math.floor(random() * CAPSULE_KINDS.length)];
+    c.kind = runCapsuleKinds[Math.floor(random() * runCapsuleKinds.length)];
     c.x = x;
     c.y = y;
     return;
@@ -1575,9 +1654,19 @@ function maybeDropCapsule(x, y) {
 }
 // One dispatch per kind; later effects slot in here. Catching expand
 // (re)arms the widen: the expiry is set to now + the full duration,
-// never added to whatever the previous arm had left.
+// never added to whatever the previous arm had left. The blip is the
+// shared catch sound for the legacy five kinds and a small distinct
+// recipe per EXCITING kind (ticket #75) — both through the same bus.
 function applyCapsule(kind) {
-  scheduleSound(SFX_POWERUP_CATCH); // the catch blip is kind-independent
+  if (kind === KIND_INVULNERABLE) {
+    scheduleSound(SFX_CATCH_INVULNERABLE);
+  } else if (kind === KIND_MULTIBALL) {
+    scheduleSound(SFX_CATCH_MULTIBALL);
+  } else if (kind === KIND_BLAST) {
+    scheduleSound(SFX_CATCH_BLAST);
+  } else {
+    scheduleSound(SFX_POWERUP_CATCH); // the legacy catch blip
+  }
   if (kind === KIND_EXPAND) {
     paddleW = basePaddleW * PADDLE_EXPAND_FACTOR;
     expandUntil = simTime + PADDLE_EXPAND_DURATION_S;
@@ -1599,11 +1688,84 @@ function applyCapsule(kind) {
     // (Re)arm the score window: the expiry is set to now + the full
     // duration, never added to whatever the previous arm had left.
     multUntil = simTime + MULT_DURATION_S;
+  } else if (kind === KIND_INVULNERABLE) {
+    // (Re)arm the pass-through window: the expiry is set to now +
+    // the full duration, never extended additively.
+    invulnUntil = simTime + INVULNERABLE_DURATION_S;
+  } else if (kind === KIND_MULTIBALL) {
+    spawnMultiball(); // instant: no window, one fan per in-flight ball
+  } else if (kind === KIND_BLAST) {
+    // (Re)arm the detonation window: full duration, never extended.
+    blastUntil = simTime + BLAST_DURATION_S;
+  }
+}
+// The capture fan is built over a SNAPSHOT of the in-flight parents
+// (collected in this one-shot scratch, allocated once at boot) so a
+// clone can never clone itself: the pool doubles as its own roster.
+// Sized at module load from MAX_BALLS_EXCITE: the live-ball cap can
+// never exceed the pool, so np ≤ pool length = scratch length always
+// holds; a console retune of the var takes effect from the next page
+// load (the house-standard module-load capture).
+var multiballParents = new Array(MAX_BALLS_EXCITE);
+// MULTIBALL (ticket #75): every in-flight ball is replaced by TEN —
+// the parent keeps its exact vector, nine clones spawn at the parent
+// position with the same vector rotated by (j - 4) × the named
+// spread step (a symmetric fan around the incoming direction, speed
+// preserved). Fully deterministic and allocation-free: parents are
+// iterated in pool order, clones take free slots in pool order, and
+// spawning stops the moment the run's ball cap would be exceeded
+// (excess spawns skipped, never queued). Parked (attached) balls
+// are not in flight, so they do not fan — only live velocity can be
+// meaningfully rotated.
+function spawnMultiball() {
+  var np = 0;
+  for (var i = 0; i < balls.length; i += 1) {
+    if (balls[i].active && !balls[i].attached) multiballParents[np++] = i;
+  }
+  for (var n = 0; n < np; n += 1) {
+    if (liveBallCount() >= runBallCap) break;
+    var p = balls[multiballParents[n]];
+    var baseAngle = Math.atan2(p.vy, p.vx);
+    var speed = Math.hypot(p.vx, p.vy);
+    for (var j = 0; j < MULTIBALL_CLONES && liveBallCount() < runBallCap; j += 1) {
+      var free = null;
+      for (var s = 0; s < balls.length; s += 1) {
+        if (!balls[s].active) { free = balls[s]; break; }
+      }
+      if (!free) break; // the cap equals the pool size: never both
+      var a = baseAngle + (j - (MULTIBALL_CLONES - 1) / 2) * MULTIBALL_SPREAD_STEP;
+      free.active = true;
+      free.attached = false;
+      free.attachOff = 0;
+      free.x = p.x;
+      free.y = p.y;
+      free.vx = speed * Math.cos(a);
+      free.vy = speed * Math.sin(a);
+    }
+  }
+}
+// BLAST (ticket #75): every breakable brick inside the named radius
+// of the impact point detonates — one SCAN per hit event (no
+// chaining: blast-destroyed bricks do not themselves detonate).
+// Fixed bricks anchor blasts without breaking. The final-brick win
+// respawns the board, so the scan aborts if the level changed.
+function blastAround(x, y) {
+  var r2 = BLAST_RADIUS_PX * BLAST_RADIUS_PX;
+  var lvl = level;
+  for (var i = 0; i < bricks.length; i += 1) {
+    if (lvl !== level) return; // win mid-blast: the board respawned
+    var k = bricks[i];
+    if (!k.active || k.unbreakable) continue;
+    var dx = k.x + k.w / 2 - x;
+    var dy = k.y + k.h / 2 - y;
+    if (dx * dx + dy * dy <= r2) destroyBrick(i);
   }
 }
 function updatePowerups(dt) {
   if (paddleW !== basePaddleW && simTime >= expandUntil) paddleW = basePaddleW;
   if (multUntil !== -1 && simTime >= multUntil) multUntil = -1; // window elapsed
+  if (invulnUntil !== -1 && simTime >= invulnUntil) invulnUntil = -1; // invuln lapsed
+  if (blastUntil !== -1 && simTime >= blastUntil) blastUntil = -1;   // blast lapsed
   var pt = paddleTop();
   var halfSpan = paddleW / 2 + CAPSULE_W / 2;
   for (var i = 0; i < capsules.length; i += 1) {
@@ -1628,8 +1790,10 @@ function liveBallCount() {
 }
 // An extra-ball catch spawns at the paddle centre and joins active
 // play immediately: straight up at the (level-grown) serve speed.
-// The pool is the named MAX_BALLS cap — a catch beyond it is a no-op.
+// The run's normal-play ball cap (MAX_BALLS on classic, the exciting
+// ceiling on exciting) is hard — a catch beyond it is a no-op.
 function spawnExtraBall() {
+  if (liveBallCount() >= runBallCap) return;
   var free = null;
   for (var i = 0; i < balls.length; i += 1) {
     if (balls[i].active) continue;
@@ -1770,12 +1934,24 @@ function bounceWalls(b) {
 // drops nothing and leaves bricksLeft untouched; only the lethal
 // hit routes to destroyBrick().
 //
+// EXCITING windows (ticket #75): while the invulnerability window
+// is live, breakable bricks are SMASHED STRAIGHT THROUGH —
+// destroyed and scored once each via the shared kill path, the ball
+// keeps its exact vector (no reflection, no pinning) and the scan
+// continues to the next contact; fixed bricks still STOP the ball.
+// While the blast window is live, any reflected brick hit detonates
+// every breakable brick in radius of the impact point (blastAround,
+// one scan per hit, no chaining). The level is captured at entry:
+// a final-brick win respawns the board MID-SCAN, so both paths
+// abort instead of continuing against the fresh level.
+//
 // NOTE: a charged brick still RESOLVES (reflect + pin) on re-contact.
 // In a seam narrower than the ball the two pin faces are mutually
 // exclusive (the ball cannot clear both neighbours at once), so the
 // drain must be bounded by MAX_BRICK_RESCANS_PER_SUBSTEP or a wedged
 // ball would cycle the pins forever (ticket #42 review round 2).
 function collideBricks(b) {
+  var lvl = level; // win-during-scan guard (ticket #75)
   for (var i = 0; i < bricks.length; i += 1) {
     var k = bricks[i];
     if (!k.active) continue;
@@ -1784,6 +1960,14 @@ function collideBricks(b) {
     var ovx = k.w / 2 + BALL_RADIUS - Math.abs(b.x - cx);
     var ovy = k.h / 2 + BALL_RADIUS - Math.abs(b.y - cy);
     if (ovx <= 0 || ovy <= 0) continue;
+    if (!k.unbreakable && invulnActive()) {
+      // Pass-through: destroy + score once, keep the vector, keep
+      // scanning this sub-step for further contacts. No pinning —
+      // the ball legally occupies the brick's face on the way.
+      destroyBrick(i);
+      if (lvl !== level) return false; // win: board respawned, serve done
+      continue;
+    }
     if (ovx < ovy) {
       b.vx = b.x < cx ? -Math.abs(b.vx) : Math.abs(b.vx);
       b.x = b.x < cx
@@ -1804,6 +1988,13 @@ function collideBricks(b) {
       k.hp -= 1;
       if (k.hp <= 0) destroyBrick(i);
       else scheduleBrickChip(hpAtHit); // non-lethal: chip, not the pop
+    }
+    // Blast: the hit detonates the radius around the impact point
+    // (ball centre at contact). Suppressed while invuln is live —
+    // pass-through resolves without a bounce (documented
+    // interaction); skipped after a mid-hit win.
+    if (lvl === level && blastActive() && !invulnActive()) {
+      blastAround(b.x, b.y);
     }
     return true;
   }
@@ -1854,6 +2045,13 @@ function beginRun() {
   // difficulty's: a mid-run mode click applies to the NEXT run.
   runMode = selectedMode;
   dropRate = preset.dropRate * MODES[runMode].dropFactor;
+  runCapsuleKinds = MODES[runMode].capsuleKinds;
+  // Normal play keeps the classic MAX_BALLS cap; exciting raises it
+  // to the multiball ceiling (the pool is sized to the larger at
+  // boot). The exciting effect windows always drain with the run.
+  runBallCap = runMode === "exciting" ? MAX_BALLS_EXCITE : MAX_BALLS;
+  invulnUntil = -1;
+  blastUntil = -1;
   simTime = 0;
   expandUntil = -1;
   stickyUntil = -1;
@@ -2125,7 +2323,7 @@ function drawPowerups() {
   for (var i = 0; i < capsules.length; i += 1) {
     var c = capsules[i];
     if (!c.active) continue;
-    ctx.fillStyle = CAPSULE_COLORS[c.kind];
+    ctx.fillStyle = CAPSULE_DRAW_COLORS[c.kind];
     ctx.fillRect(c.x - CAPSULE_W / 2, c.y, CAPSULE_W, CAPSULE_H);
   }
 }
@@ -2134,7 +2332,25 @@ function drawPaddle() {
   ctx.fillRect(paddle.x - paddleW / 2, paddleTop(), paddleW, PADDLE_HEIGHT);
 }
 function drawBalls() {
-  ctx.fillStyle = COLOR_BALL;
+  // EXCITING invulnerability (ticket #75): while the window is live
+  // every active ball wears a tinted core plus one soft halo so the
+  // state is legible at a glance. Both passes read the named colour
+  // vars; the halo pass runs only while armed, so a lapsed window
+  // costs the bare legacy draw exactly.
+  var invuln = invulnActive();
+  if (invuln) {
+    ctx.globalAlpha = INVULN_GLOW_ALPHA;
+    ctx.fillStyle = COLOR_BALL_INVLUN;
+    for (var i = 0; i < balls.length; i += 1) {
+      var h = balls[i];
+      if (!h.active) continue;
+      ctx.beginPath();
+      ctx.arc(h.x, h.y, INVULN_GLOW_RADIUS_PX, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+  ctx.fillStyle = invuln ? COLOR_BALL_INVLUN : COLOR_BALL;
   for (var i = 0; i < balls.length; i += 1) {
     var b = balls[i];
     if (!b.active) continue;

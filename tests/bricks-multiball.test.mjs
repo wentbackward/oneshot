@@ -320,15 +320,17 @@ check("extra catches accumulate up to the named MAX_BALLS cap, and catches beyon
   start(g);
   const MAXB = g.q("MAX_BALLS");
   assert(Number.isInteger(MAXB) && MAXB >= 2, `MAX_BALLS must be a named integer >= 2, got ${MAXB}`);
-  assert(g.q("balls.length") === MAXB,
-    `the ball pool must be sized to MAX_BALLS, got ${g.q("balls.length")}`);
+  assert(g.q("MAX_BALLS_EXCITE") > MAXB,
+    `MAX_BALLS_EXCITE must exceed the classic cap, got ${g.q("MAX_BALLS_EXCITE")}`);
+  assert(g.q("balls.length") === g.q("MAX_BALLS_EXCITE"),
+    `the ball pool must be sized to MAX_BALLS_EXCITE at boot (ticket #75), got ${g.q("balls.length")}`);
   for (let k = 1; k <= MAXB + 2; k += 1) {
     g.q("applyCapsule(KIND_EXTRA)");
     const want = Math.min(MAXB, 1 + k);
     assert(g.liveCount() === want,
       `catch ${k}: live count must be min(MAX_BALLS, 1+k) = ${want}, got ${g.liveCount()}`);
-    assert(g.q("balls.length") === MAXB,
-      `the pool must never grow past MAX_BALLS, got ${g.q("balls.length")}`);
+    assert(g.q("balls.length") === g.q("MAX_BALLS_EXCITE"),
+      `the pool must never grow past its boot size MAX_BALLS_EXCITE, got ${g.q("balls.length")}`);
   }
   assert(g.liveCount() === MAXB,
     `past the cap further catches must add no ball, live=${g.liveCount()}`);
