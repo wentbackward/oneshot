@@ -144,6 +144,7 @@ function boot(width, height, initialStore = {}) {
     "btn-reset-hiscore": makeEl("btn-reset-hiscore"),
     "btn-mute": makeEl("btn-mute"),
     "sound-volume": makeEl("sound-volume"),
+    "ball-speed": makeEl("ball-speed"),
     "leaderboard-start": makeEl("leaderboard-start"),
     "screen-gameover": makeEl("screen-gameover"),
     "btn-restart": makeEl("btn-restart"),
