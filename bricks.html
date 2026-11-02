@@ -446,9 +446,6 @@ var BASE_PADDLE_W = 120;           // resting width; the runtime width widens on
 var PADDLE_HEIGHT = 14;
 var PADDLE_BOTTOM_GAP = 24;       // clear space between paddle and bottom edge
 var PADDLE_SPEED = 720;           // keyboard travel speed, px/s (per-run value: runPaddleKeySpeed, #89)
-var POINTER_MAX_STEP = 18;        // pointer per-event paddle step cap, px (
-                                  // 1.5× the keyboard per-frame travel PADDLE_SPEED/60;
-                                  // ticket #91: one event may never teleport the paddle)
 // Boundary dressing (ticket #69): the decorative wall and danger-
 // line weights and rhythm. The dash arrays are prebuilt at module
 // load — setLineDash must receive the SAME reference every frame,
@@ -1635,49 +1632,44 @@ window.addEventListener("blur", onBlur);
 // rect: a fraction of the visible stage width becomes a fraction
 // of the (constant) backing store width. The rect is read on EVERY
 // event, so a window resize can never leave a stale rect behind.
-// Two guards (ticket #91, superseding the #40 edge-clamp):
-// 1. An event OUTSIDE the rect (the letterbox strips or off-window)
-//    must NOT steer: the paddle holds its last position instead of
-//    pinning to a wall. Containment is inclusive on all four edges:
-//    a cursor sitting exactly on the rect rim still steers, which
-//    keeps full wall-to-wall reach — the stage rect IS the field.
-// 2. Even a legal in-rect event may land far from the paddle (the
-//    cursor re-entering from the letterbox): the step is capped at
-//    POINTER_MAX_STEP so no single event can teleport the paddle
-//    out from under a riding ball.
-// A degenerate rect (zero width, e.g. while the canvas is hidden)
-// is ignored too: dividing by it would poison every later event.
-function setPaddleX(clientX, clientY) {
+// Steering is instant 1:1 positional tracking (ticket #95,
+// superseding the #91 step cap and out-of-rect hold): the mapped
+// x is assigned directly and clamped to the paddle's reachable
+// range. Over the stage the paddle centre sits exactly under the
+// cursor; a cursor left/right of the stage hugs the corresponding
+// wall; a cursor above/below the stage (vertical letterbox, HUD)
+// still steers by its horizontal position. A large jump is just
+// "aim, and the paddle goes there" — aiming, which is what the
+// cursor is for (the #40-era teleport complaint predates the
+// rect-relative, clamped mapping).
+// Two guards survive: a degenerate rect (zero width, e.g. while
+// the canvas is hidden) is ignored — dividing by it would poison
+// every later event — and a missing/NaN clientX is rejected by a
+// negated comparison (NaN compares false in EVERY direction).
+function setPaddleX(clientX) {
   var rect = canvas.getBoundingClientRect();
   if (rect.width <= 0) return; // degenerate rect: ignore the event
-  var right = rect.left + rect.width;
-  var bottom = rect.top + rect.height;
-  // Negated comparisons: a missing/NaN clientX or clientY compares
-  // false in EVERY direction, so the plain `x < lo || x > hi` form
-  // would treat it as inside and poison paddle.x with the NaN target.
-  // Browsers always deliver finite coordinates, but the guard costs
-  // nothing and closes the class the degenerate-rect check handles.
-  if (!(clientX >= rect.left) || !(clientX <= right) ||
-      !(clientY >= rect.top) || !(clientY <= bottom)) {
-    return; // outside the stage rect (or malformed): hold, not edge-pin
+  // Malformed-coordinate guard: a missing/NaN clientX satisfies NEITHER
+  // comparison, so it is rejected before mapping could produce a NaN
+  // target and poison paddle.x. Browsers always deliver finite
+  // coordinates; the guard costs nothing and closes the same class
+  // the degenerate-rect check handles.
+  if (!(clientX >= rect.left) && !(clientX <= rect.left + rect.width)) {
+    return;
   }
-  var target = ((clientX - rect.left) / rect.width) * canvas.width;
-  var step = target - paddle.x;
-  if (step > POINTER_MAX_STEP) step = POINTER_MAX_STEP;
-  else if (step < -POINTER_MAX_STEP) step = -POINTER_MAX_STEP;
-  paddle.x += step;
-  clampPaddle();
+  paddle.x = ((clientX - rect.left) / rect.width) * canvas.width;
+  clampPaddle(); // wall-hug: clamps to the reachable range
 }
-// Window-level pointer tracking (ticket #40, steering rules
-// updated by #91): the listeners live on window, not the canvas, so
-// the paddle keeps following the cursor wherever it is — but only
-// while the pointer sits inside the stage rect (else hold).
+// Window-level pointer tracking (ticket #40, steering redesigned
+// by #95): the listeners live on window, not the canvas, so the
+// paddle keeps following the cursor wherever it is — over the
+// stage it tracks 1:1, off the stage it hugs the nearest wall.
 window.addEventListener("mousemove", function (e) {
-  setPaddleX(e.clientX, e.clientY);
+  setPaddleX(e.clientX);
 });
 window.addEventListener("touchmove", function (e) {
   if (e.touches && e.touches.length > 0) {
-    setPaddleX(e.touches[0].clientX, e.touches[0].clientY);
+    setPaddleX(e.touches[0].clientX);
   }
   e.preventDefault(); // keep the page from scrolling while dragging
 }, { passive: false });

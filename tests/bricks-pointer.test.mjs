@@ -241,9 +241,9 @@ const FULL_RECT = { left: 0, top: 0, width: 960, height: 600 };
 // ================================================================
 check("the #91 POINTER_MAX_STEP cap knob no longer exists in the game", () => {
   const g = boot(960, 600);
-  assert(g.q("typeof POINTER_MAX_STEP") === "undefined",
-    "POINTER_MAX_STEP must be deleted with all its usages, got " +
-      `${g.q("typeof POINTER_MAX_STEP")} = ${g.q("POINTER_MAX_STEP")}`);
+  const kind = g.q("typeof POINTER_MAX_STEP");
+  assert(kind === "undefined",
+    `POINTER_MAX_STEP must be deleted with all its usages, got ${kind}`);
   assert(!html.includes("POINTER_MAX_STEP"),
     "no trace of POINTER_MAX_STEP may remain in bricks.html");
 });
@@ -262,10 +262,13 @@ check("AC1: a FAR in-rect event lands the paddle at the rect-mapped cursor x in 
     `one in-rect event 760 px away must land the paddle at 200 in that same event, got ${g.paddleX()}`);
 });
 
-check("AC1: tracking is 1:1 across the whole stage — a sequence of in-rect events puts the paddle exactly under each cursor x", () => {
+check("AC1: tracking is 1:1 across the whole reachable range — a sequence of in-rect events puts the paddle exactly under each cursor x", () => {
   const g = boot(960, 600);
   start(g);
-  const samples = [10, 123, 480, 777, 950, 5, 959];
+  // Every sample maps into the paddle's reachable range
+  // [paddleW/2, canvas.width − paddleW/2] = [60, 1860], so the
+  // landing is the raw rect mapping, uncapped and unclamped.
+  const samples = [31, 123, 480, 777, 920, 40, 900];
   for (const c of samples) {
     g.mouseMove(c); // maps to (c/960)·1920
     assertClose(g.paddleX(), (c / 960) * g.canvas.width, 1e-9,
@@ -365,7 +368,7 @@ check("AC3: a cursor ABOVE the rect but within its horizontal span still tracks 
   g.mouseMove(400, 99); // 1 px above the rect, x inside the span
   assertClose(g.paddleX(), ((400 - 240) / 480) * g.canvas.width, 1e-9,
     `a cursor 1 px above the rect must still track its horizontal position, got ${g.paddleX()}`);
-  g.mouseMove(640, -10000); // deep in the top bar, x far right of the span
+  g.mouseMove(10000, -10000); // deep in the top bar, x far past the right span
   assert(g.paddleX() === g.q("canvas.width - paddleW / 2"),
     `a cursor deep above, horizontally past the right span, must hug the right wall, got ${g.paddleX()}`);
 });
