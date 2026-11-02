@@ -267,11 +267,32 @@
   }
   /* Start-screen ball-speed option (ticket #73): the slider follows
      the volume slider's row treatment, on its own tidy row. The .vol
-     and range rules are shared with the sound row above. */
+     and range rules are shared with the sound row above. Ticket #90
+     adds the live readout span (inherits the row-label treatment) and
+     the .slider track wrapper whose ::after pseudo-element is the
+     visible 100% notch: 100 is the mid of the 50..150 range, so the
+     tick anchors at left: 50%, coloured through the theme accent.
+     CSS only, no image, theme-aware via the existing palette vars. */
   .speed {
     display: flex;
     align-items: center;
     gap: 0.75rem;
+  }
+  .speed .slider {
+    position: relative;
+    display: inline-flex;
+  }
+  .speed .slider::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 2px;
+    height: 14px;
+    background: var(--accent);
+    opacity: 0.75;
+    pointer-events: none;
   }
 </style>
 </head>
@@ -308,7 +329,9 @@
       <label class="vol">Vol<input id="sound-volume" type="range" min="0" max="100" value="100"></label>
     </div>
     <div class="speed">
-      <label class="vol">Ball Speed<input id="ball-speed" type="range" min="50" max="150" value="100"></label>
+      <label class="vol" id="ball-speed-label">Ball Speed<span id="ball-speed-value">100%</span>
+        <span class="slider"><input id="ball-speed" type="range" min="50" max="150" step="5" value="100"></span>
+      </label>
     </div>
     <div class="leaderboard" id="leaderboard-start"></div>
     <button id="btn-reset-hiscore" type="button">Reset High Score</button>
@@ -1397,6 +1420,13 @@ soundVolumeInput.addEventListener("input", function () {
 // a botched write must never break boot. beginRun() snapshots the
 // live value, so a mid-run move only affects the NEXT run — the
 // slider scales the named serve knobs, never replaces them.
+//
+// Ticket #90: the slider steps 50..150 in 5% increments (step="5"),
+// a live readout next to the row label mirrors the current percent
+// (boot, input, double-click reset), and a double-click on the readout
+// or the row label is the reset gesture back to 100. An off-grid hand-
+// stored value (e.g. 123) still loads and displays untouched —
+// only a user move re-anchors onto the grid (nearest stop).
 function loadBallSpeed() {
   try {
     var value = JSON.parse(localStorage.getItem(BALL_SPEED_KEY));
@@ -1416,28 +1446,60 @@ function saveBallSpeed() {
     // Non-persistent storage (e.g. blocked): the session still works.
   }
 }
+// Ticket #90: the 5% snap grid (step="5") — console-retunable, like
+// the other ball-speed knobs. Clamps into [50, 150], then anchors
+// onto the nearest stop: the floor 50 is grid-aligned, so stops are
+// 50, 55, ..., 150.
+var BALL_SPEED_STEP_PCT = 5;
+function snapBallSpeedPct(raw) {
+  var clamped = Math.min(MAX_BALL_SPEED_PCT, Math.max(MIN_BALL_SPEED_PCT, raw));
+  return MIN_BALL_SPEED_PCT +
+    Math.round((clamped - MIN_BALL_SPEED_PCT) / BALL_SPEED_STEP_PCT) *
+    BALL_SPEED_STEP_PCT;
+}
 var ballSpeedPct = loadBallSpeed();
-// Reflect the restored percent onto the slider; called at boot
-// (storage may override the static 100 default).
+// Ticket #90: the readout span and the row label (the label wraps
+// the readout, so in a real browser a double-click on either target
+// hits the single handler below). Both are start-screen controls:
+// event wiring only, never touched by the frame loop.
+var ballSpeedValue = document.getElementById("ball-speed-value");
+var ballSpeedLabel = document.getElementById("ball-speed-label");
+// Reflect the restored percent onto the slider thumb AND the readout;
+// called at boot (storage may override the static 100 default) and
+// by the double-click reset. Pure DOM writes, no storage traffic.
 function syncBallSpeedControl() {
   if (ballSpeedInput.value !== String(ballSpeedPct)) {
     ballSpeedInput.value = String(ballSpeedPct);
+  }
+  if (ballSpeedValue.textContent !== String(ballSpeedPct) + "%") {
+    ballSpeedValue.textContent = String(ballSpeedPct) + "%";
   }
 }
 syncBallSpeedControl(); // boot: before the first frame
 ballSpeedInput.addEventListener("input", function () {
   // A range input reports its own value as a string; clamp into
-  // [50, 150] so programmatic out-of-range writes degrade cleanly.
-  // An identical re-application is a no-op, so no redundant storage
-  // write fires.
+  // [50, 150] and snap onto the 5% grid (ticket #90) so programmatic
+  // off-grid writes degrade to the nearest stop. An identical
+  // re-application is a no-op, so no redundant storage write fires.
   var v = parseInt(ballSpeedInput.value, 10);
-  var pct = Number.isInteger(v)
-    ? Math.min(MAX_BALL_SPEED_PCT, Math.max(MIN_BALL_SPEED_PCT, v))
-    : ballSpeedPct;
+  if (!Number.isInteger(v)) return;
+  var pct = snapBallSpeedPct(v);
   if (pct === ballSpeedPct) return;
   ballSpeedPct = pct;
   saveBallSpeed();
+  syncBallSpeedControl();
 });
+// The reset gesture (ticket #90): a double-click on the readout or
+// the row label parks the slider at the 100% notch. Exactly one
+// persistence write; an already-100 gesture is a no-op that writes
+// nothing (the same invariant as a no-op slider move).
+function resetBallSpeed() {
+  if (ballSpeedPct === DEFAULT_BALL_SPEED_PCT) return;
+  ballSpeedPct = DEFAULT_BALL_SPEED_PCT;
+  saveBallSpeed();
+  syncBallSpeedControl();
+}
+ballSpeedLabel.addEventListener("dblclick", resetBallSpeed);
 
 // ---- Fixed-aspect stage ----
 // The playfield is a GAME_W × GAME_H logical stage whose mode
