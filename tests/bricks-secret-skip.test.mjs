@@ -54,6 +54,7 @@ function makeEl(id) {
     style: {},
     textContent: "",
     className: "",
+    value: "100", // sliders (volume, ball-speed) boot-read .value
     children: [],
     listeners: {},
     addEventListener(type, cb) {
@@ -126,6 +127,7 @@ function boot(width = 960, height = 600) {
     "theme-minimal": makeEl("theme-minimal"),
     "btn-mute": makeEl("btn-mute"),
     "sound-volume": makeEl("sound-volume"),
+    "ball-speed": makeEl("ball-speed"),
     "screen-gameover": makeEl("screen-gameover"),
     "btn-restart": makeEl("btn-restart"),
     "btn-menu": makeEl("btn-menu"),
