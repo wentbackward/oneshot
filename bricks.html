@@ -810,6 +810,11 @@ var serveSpeed = BALL_SERVE_SPEED;
 // beginRun() as the MAX_BALL_SPEED ceiling scaled by the run's
 // ball-speed percent, so the whole growth curve shifts with it.
 var serveCeiling = MAX_BALL_SPEED;
+// Runtime serve base: the run's level-1 speed INCLUDING the ball-speed
+// percent, snapshotted in beginRun(); the back-step recompute
+// (ticket #77) derives a level's legitimate speed from THIS, so a
+// back-step lands exactly where a pristine forward run stands.
+var runServeBase = BALL_SERVE_SPEED;
 // Runtime capsule drop rate: the run's snapshot of the selected
 // preset's dropRate (default preset before the first run).
 var dropRate = DIFFICULTY[DEFAULT_DIFFICULTY].dropRate;
@@ -821,6 +826,10 @@ var keys = { left: new Set(), right: new Set() };
 // browser auto-repeat re-dispatches of a held Escape/KeyP never re-
 // toggle the pause screen — only a fresh physical press does.
 var pauseKeys = new Set();
+// Distinct level-skip keys currently held: mirrors the pause-key
+// set, so browser auto-repeat re-dispatches of a held Shift+L /
+// Shift+K step exactly once per physical press (ticket #77).
+var levelSkipKeys = new Set();
 
 // ---- High score (localStorage persistence, PRD section 4) ----
 function loadHighScore() {
@@ -1256,6 +1265,20 @@ function onKeyDown(e) {
     // no churn on game over), and browser auto-repeat of a held M
     // lands in "start" after the first edge, so it is a no-op too.
     if (gameState === "paused") quitToMenu();
+  } else if (e.code === "KeyL" || e.code === "KeyK") {
+    // Secret level-skip keys (ticket #77, deliberately undocumented
+    // in the UI — docs/DECISIONS.md is the record): Shift+L advances
+    // exactly as a clear would, Shift+K steps back one level.
+    // Gated to "playing" alone; the held-set mirrors the pause-key
+    // edge gate so auto-repeat steps once per physical press, and
+    // the shiftKey flag is read on the press itself, so a Shift that
+    // is released before the letter is never a combo.
+    if (!e.shiftKey || levelSkipKeys.has(e.code)) return;
+    levelSkipKeys.add(e.code);
+    if (gameState === "playing") {
+      if (e.code === "KeyL") advanceLevel();
+      else stepLevelBack();
+    }
   } else if (e.code === "ArrowLeft" || e.code === "KeyA") {
     keys.left.add(e.code);
     e.preventDefault();
@@ -1278,6 +1301,7 @@ function onKeyDown(e) {
 }
 function onKeyUp(e) {
   if (e.code === "Escape" || e.code === "KeyP") pauseKeys.delete(e.code);
+  else if (e.code === "KeyL" || e.code === "KeyK") levelSkipKeys.delete(e.code);
   else if (e.code === "ArrowLeft" || e.code === "KeyA") keys.left.delete(e.code);
   else if (e.code === "ArrowRight" || e.code === "KeyD") keys.right.delete(e.code);
 }
@@ -1286,6 +1310,7 @@ function onKeyUp(e) {
 // press cannot be swallowed as a ghost-held pause key.
 function onBlur() {
   pauseKeys.clear();
+  levelSkipKeys.clear();
   keys.left.clear();
   keys.right.clear();
 }
@@ -1392,6 +1417,24 @@ function destroyBrick(index) {
 function advanceLevel() {
   level += 1;
   serveSpeed = Math.min(serveSpeed * LEVEL_SPEED_GROWTH, serveCeiling);
+  spawnLevel();
+  serveBall();
+  syncHud();
+}
+// Step back one level, flooring at 1 (ticket #77): the target
+// level's layout respawns pristine into the same pool, and the
+// serve speed is RECOMPUTED as the level's own legitimate speed —
+// the run's level-1 base grown by the named factor per level
+// (capped exactly like the forward progression) — not a delta off
+// whatever the drifted runtime speed holds. Score, lives and the
+// multiplier window are untouched.
+function stepLevelBack() {
+  if (level <= 1) return; // the floor: level 1 cannot go back
+  level -= 1;
+  serveSpeed = Math.min(
+    runServeBase * Math.pow(LEVEL_SPEED_GROWTH, level - 1),
+    serveCeiling // the run's scaled ceiling, so back-steps agree with the forward chain under the slider
+  );
   spawnLevel();
   serveBall();
   syncHud();
@@ -1685,6 +1728,9 @@ function beginRun() {
   var speedFactor = ballSpeedPct / 100;
   serveSpeed = preset.serveSpeed * speedFactor;
   serveCeiling = MAX_BALL_SPEED * speedFactor;
+  // Includes speedFactor so the back-step recompute (#77) matches the
+  // forward chain under the slider at any setting.
+  runServeBase = preset.serveSpeed * speedFactor;
   basePaddleW = preset.paddleWidth;
   paddleW = basePaddleW;
   dropRate = preset.dropRate;
