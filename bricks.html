@@ -345,6 +345,14 @@ var BASE_PADDLE_W = 120;           // resting width; the runtime width widens on
 var PADDLE_HEIGHT = 14;
 var PADDLE_BOTTOM_GAP = 24;       // clear space between paddle and bottom edge
 var PADDLE_SPEED = 720;           // keyboard travel speed, px/s
+// Boundary dressing (ticket #69): the decorative wall and danger-
+// line weights and rhythm. The dash arrays are prebuilt at module
+// load — setLineDash must receive the SAME reference every frame,
+// never a fresh literal, or the draw path would churn garbage.
+var WALL_LINE_W = 2;               // solid wall thickness, canvas px
+var DANGER_LINE_W = 2;             // dashed danger-line thickness, canvas px
+var DANGER_DASH = [12, 10];        // on/off rhythm of the bottom danger line, canvas px
+var NO_DASH = [];                  // setLineDash reset argument (restores solid)
 // Ball
 var BALL_RADIUS = 8;
 var MAX_BALLS = 5;              // live-ball cap; the ball pool is sized to this
@@ -489,6 +497,12 @@ var DIFFICULTY = {
 var COLOR_BG = "#0b0f14";
 var COLOR_PADDLE = "#5cf2b0";
 var COLOR_BALL = "#e8ecf1";
+// Boundary (ticket #69): the wall accent and the bottom danger line
+// ride the same mirror mechanism as bg/paddle/ball — applyTheme()
+// re-points these on every selection change, so the draw pass reads
+// the active theme with no branches.
+var COLOR_WALL = "#5cf2b0";
+var COLOR_DANGER = "#ef5d62";
 
 // ---- Themes (selectable retro skins, ticket #46) ----
 // One row per theme: the CSS custom-property triple (applied to
@@ -511,6 +525,8 @@ var THEMES = {
       paddle: COLOR_PADDLE,
       ball: COLOR_BALL,
       bricks: [COLOR_BRICK_A, COLOR_BRICK_B, COLOR_BRICK_C, COLOR_BRICK_FIXED],
+      wall: COLOR_WALL,
+      danger: COLOR_DANGER,
     },
   },
   // neon: saturated cyan/magenta over a deep violet-black ground.
@@ -521,6 +537,8 @@ var THEMES = {
       paddle: "#00f0ff",
       ball: "#ffffff",
       bricks: ["#ff2d78", "#ffbe0b", "#7c4dff", "#5b4b8a"],
+      wall: "#00f0ff",
+      danger: "#ff2d78",
     },
   },
   // minimal: near-monochrome warm stone over an off-white ground.
@@ -531,6 +549,8 @@ var THEMES = {
       paddle: "#14141a",
       ball: "#14141a",
       bricks: ["#57534e", "#78716c", "#a8a29e", "#d6d3d1"],
+      wall: "#14141a",
+      danger: "#57534e",
     },
   },
 };
@@ -925,6 +945,8 @@ function applyTheme(name) {
   COLOR_BG = row.palette.bg;
   COLOR_PADDLE = row.palette.paddle;
   COLOR_BALL = row.palette.ball;
+  COLOR_WALL = row.palette.wall;
+  COLOR_DANGER = row.palette.danger;
   var tierColors = row.palette.bricks;
   for (var i = 0; i < BRICK_TIERS.length; i += 1) {
     BRICK_TIERS[i].color = tierColors[i];
@@ -1661,12 +1683,43 @@ function draw() {
   ctx.fillStyle = COLOR_BG;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   if (gameState === "start") return;
+  drawBoundary();
   drawBricks();
   // Outside "playing" the field is frozen: capsules stay pooled but
   // undrawn, so the game-over screen shows a tidy board.
   if (gameState === "playing") drawPowerups();
   drawPaddle();
   drawBalls();
+}
+// Ticket #69: dress the ball's actual travel boundary. The three
+// solid segments are the exact surfaces bounceWalls() reflects from
+// (it compares the ball against 0 / canvas.width for the sides and
+// 0 for the top, and reads canvas.width/height here too — no second
+// source of truth), and the dashed segment is the open bottom edge
+// where a life is lost (updateBalls drops the ball below
+// canvas.height). Decorative: one fixed path each, theme-indexed
+// colour lookups (COLOR_WALL/COLOR_DANGER follow applyTheme), and
+// the prebuilt DANGER_DASH/NO_DASH arrays — zero per-frame
+// allocation. Drawn under bricks/paddle/balls.
+function drawBoundary() {
+  ctx.lineWidth = WALL_LINE_W;
+  ctx.strokeStyle = COLOR_WALL;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(canvas.width, 0); // top
+  ctx.moveTo(0, 0);
+  ctx.lineTo(0, canvas.height); // left
+  ctx.moveTo(canvas.width, 0);
+  ctx.lineTo(canvas.width, canvas.height); // right
+  ctx.stroke();
+  ctx.lineWidth = DANGER_LINE_W;
+  ctx.strokeStyle = COLOR_DANGER;
+  ctx.setLineDash(DANGER_DASH);
+  ctx.beginPath();
+  ctx.moveTo(0, canvas.height); // the open edge a life falls out of
+  ctx.lineTo(canvas.width, canvas.height);
+  ctx.stroke();
+  ctx.setLineDash(NO_DASH);
 }
 function drawBricks() {
   for (var i = 0; i < bricks.length; i += 1) {
