@@ -712,7 +712,7 @@ check("every audioCtx.resume() Promise gets a bare .catch: a rejecting resume() 
     `every resume() call must attach a .catch handler, calls=${g.audio.rec.resumeCalls} catches=${g.audio.rec.resumeCatches}`);
 });
 
-check("events outside the required set schedule no sound: a wall reflection and a non-fatal ball loss stay silent", () => {
+check("a wall reflection now schedules its own cue (ticket #96) and a non-fatal ball loss stays silent", () => {
   const g = boot(960, 600, { audio: true });
   start(g);
   const n0 = soundParts(g);
@@ -722,13 +722,17 @@ check("events outside the required set schedule no sound: a wall reflection and 
   );
   g.tick(1);
   assert(g.q("balls[0].vx") < 0, "setup: the wall reflection must have flipped vx");
-  assert(soundParts(g) === n0,
-    `a wall reflection must schedule no sound, scheduled ${soundParts(g) - n0} nodes`);
+  const r = g.q("SFX_WALL_BOUNCE");
+  assert(r && soundParts(g) - n0 === 2,
+    `a wall reflection must schedule exactly the wall blip (one source + one envelope = 2 nodes), scheduled ${soundParts(g) - n0} nodes`);
+  const wallOsc = g.audio.rec.oscillators[g.audio.rec.oscillators.length - 1];
+  assert(wallOsc.type === r.wave && wallOsc.frequency.value === r.freq,
+    "the reflection's cue must be the named wall-bounce recipe");
   // Ball loss while lives remain (fresh attached serve, no game over):
   g.dropBall();
   assert(g.lives() === 2, `setup: one life must remain, lives=${g.lives()}`);
-  assert(soundParts(g) === n0,
-    `a non-fatal ball loss must schedule no sound, scheduled ${soundParts(g) - n0} nodes`);
+  assert(soundParts(g) === n0 + 2,
+    `a non-fatal ball loss must schedule no sound, scheduled ${soundParts(g) - n0 - 2} nodes`);
 });
 
 // ================================================================

@@ -2343,3 +2343,43 @@ arcade physics).
   snapshotting a scaled cap (would couple a safety limit to player
   tempo and change #91's guaranteed behaviour); a mid-run dynamic cap
   (inert-by-snapshot is the established tempo rule).
+
+## 2026-11-02 — Ticket #96: wall-bounce cue recipe — restrained peak, distinct timbre
+- **The "quieter gain" comes from a NEW OPTIONAL per-recipe `peak`
+  field, not a new bus or per-call gain arithmetic.** `scheduleSound()`
+  peaks the envelope at `recipe.peak` when the recipe carries one, else
+  `SFX_PEAK` (unchanged), so `SFX_WALL_BOUNCE = { wave: WAVE_SQUARE,
+  freq: 170, dur: 0.05, peak: SFX_WALL_BOUNCE_PEAK }` with
+  `SFX_WALL_BOUNCE_PEAK = 0.25` (half the standard 0.5 at boot) sits at
+  the existing SFX_PEAK/decay-floor/SFX_EXP_EPS machinery. Retuning: the
+  recipe's `.peak` is read LIVE at schedule time, so console retunes go
+  through `SFX_WALL_BOUNCE.peak`; `SFX_WALL_BOUNCE_PEAK` is the
+  initialisation source only (the recipe captures its value at
+  declaration, like `freq`), and the clamp still protects against a
+  zeroed value. Alternatives rejected:
+  a second, quieter master bus (adds wiring, complicates the
+  single-bus mute invariant the audio suite pins); a separate
+  lower-envelope helper (duplicates the scheduler, violates the
+  "reuse the scheduler" instruction).
+- **Timbre: low SQUARE blip at 170 Hz, 0.05 s — chosen to stay
+  distinct from BOTH neighbours without a new waveform constant.**
+  The chips are 440/550/660 Hz sine, the pop is 900 Hz lowpassed
+  noise, the paddle bounce is 220 Hz sine; 170 Hz square is below
+  every chip pitch and the pop, and square harmonics separate it
+  from the sine family even at a similar loudness. Alternatives
+  rejected: a new WAVE_TRIANGLE constant (the audio suite pins the
+  three named waveform constants and every recipe to them — a new
+  wave would rip through that matrix for no functional gain);
+  sine (indistinguishable from the paddle/chip family at a glance
+  and by spectral content).
+- **Trigger placement: each crossing arm of `bounceWalls()`, i.e.
+  one blip per physical reflection.** A corner hit (two crossings in
+  one sub-step pass) therefore plays two blips — two reflections are
+  two audible events. No dedupe/throttle was added: the pinning
+  removes the ball from the crossing half-space, so a resting ball
+  can never re-trigger (verified by the "parked ball stays silent"
+  test), and the cue's own short duration/quiet peak is what keeps
+  rapid rattle from cluttering. Alternatives rejected: a per-frame
+  "already rattled" flag (hidden state in the hot path, changes
+  corner semantics); throttling by sim time (allocation-free but
+  arbitrary and unpinnable in deterministic tests).
