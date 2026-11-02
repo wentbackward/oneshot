@@ -125,6 +125,7 @@ function boot(width = 960, height = 600) {
     game: canvas,
     "screen-start": makeEl("screen-start"),
     "btn-start": makeEl("btn-start"),
+    "capsule-legend": makeEl("capsule-legend"),
     "difficulty-easy": makeEl("difficulty-easy"),
     "difficulty-normal": makeEl("difficulty-normal"),
     "difficulty-hard": makeEl("difficulty-hard"),
