@@ -148,7 +148,7 @@
     let inIntermission = false;       // BETWEEN_WAVES_S pause after a cleared wave
     let intermissionEndsAt = 0;       // sim time at which the next wave starts
     let gameState = "start";          // "start" | "playing" | "gameover": gates sim, input and screen
-    let frameNo = 0;                 // playing-sim frame counter: stamps fresh spawns (edge rocks and shatter fragments alike) so no beam may kill them on that frame
+    let frameNo = 0;                 // playing-sim frame counter: stamps shatter fragments so no beam may kill them on the shattering frame (edge rocks spawn after the hit tests run and need no stamp)
     // Random source lives in a mutable `var` so unit tests (and console
     // experiments) can install a deterministic sequence; the game itself
     // only ever CALLS it, never reassigns it.
@@ -483,7 +483,7 @@
         slot.y = y;
         slot.r = r;
         slot.tier = 0; // edge spawns are large rocks
-        slot.bornFrame = frameNo; // birth-stamped like split fragments
+        slot.bornFrame = 0; // identity: not birth-stamped (edge spawns run after this frame's hit tests and are first eligible on the next frame)
         slot.splitBy = 0; // a fresh edge rock is immune to no beam
         slot.entry = edge;
         slot.rot = random() * Math.PI * 2;
@@ -641,13 +641,13 @@
       for (const a of asteroids.slots) {
         if (!a.active) continue;
         if (Math.hypot(a.x - ship.x, a.y - ship.y) > a.r + SHIP_RADIUS) continue;
-        applyHullImpact(a);
+        applyHullImpact(a, true);
         return; // one impact per frame, even if several rocks overlap
       }
       for (const d of drones.slots) {
         if (!d.active) continue;
         if (Math.hypot(d.x - ship.x, d.y - ship.y) > DRONE_RADIUS + SHIP_RADIUS) continue;
-        applyHullImpact(d);
+        applyHullImpact(d, false);
         return;
       }
     }
@@ -656,9 +656,12 @@
     // is destroyed at the point of contact (a rock shatters into its
     // tier's fragments, the same rule as a laser kill), then exactly 1
     // hp is taken at the overlap midpoint (burst, invulnerability,
-    // game-over there).
-    function applyHullImpact(hazard) {
-      if (hazard.tier !== undefined) shatterAsteroid(hazard, 0); // rock: shatter per the tier rule (no beam involved)
+    // game-over there). isRock is passed explicitly by the caller — the
+    // two loops know which pool they iterate; we do not infer the kind
+    // from slot fields, which would silently misroute a drone slot that
+    // ever grew a `tier` property.
+    function applyHullImpact(hazard, isRock) {
+      if (isRock) shatterAsteroid(hazard, 0); // rock: shatter per the tier rule (no beam involved)
       else hazard.active = false;                            // drone: destroyed outright
       hitShip((ship.x + hazard.x) / 2, (ship.y + hazard.y) / 2); // mid-point of the overlap
     }

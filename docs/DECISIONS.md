@@ -1644,3 +1644,30 @@
   `killShip`), and its laser kill pins `LASER_COOLDOWN_MS` so the held
   Space never releases a second beam. `sfx.test.mjs` — kill expectation
   follows the fixture's default tier. All other suites passed untouched.
+
+### 2026-11-01 — review folds: explicit hazard kind, dead edge-spawn stamp, explicit fixture tiers (ticket #51)
+
+Follow-up to the entry above, from code review:
+
+- `applyHullImpact(hazard, isRock)` now takes the hazard kind
+  explicitly from its two call sites instead of duck-typing
+  `hazard.tier !== undefined` — a drone slot that ever grew a `tier`
+  property would have been routed through `shatterAsteroid`
+  silently. Drones stay no-split by construction: the caller passes
+  `false`, the pipeline destroys the slot outright.
+- The edge-spawn `bornFrame = frameNo` stamp was removed: edge rocks
+  are born in `updateWaves`, which runs after `checkLaserKills` in
+  the same frame, so an edge rock is first hit-tested on
+  `frameNo + 1` and can never satisfy the `bornFrame === frameNo`
+  guard. Stamping the identity value `0` instead ("not birth-stamped
+  this frame"); shatter fragments keep their live stamp, which is the
+  only case where the guard can fire.
+- The `placeAst` fixture helpers in `lasers`, `drones`,
+  `ship-damage`, `screens` and `sfx` now set `s.tier = 0` explicitly
+  rather than relying on the pool slot's initial value surviving a
+  prior fragment occupancy.
+- Review also surfaced a pre-existing bug unrelated to this ticket:
+  `tryFire` reuses a laser slot without resetting `slot.dt`, so a
+  fresh beam's first sweep segment is lengthened by the previous
+  occupant's step (a short phantom reach behind the nose). Tracked
+  separately (issue #53), not fixed here.

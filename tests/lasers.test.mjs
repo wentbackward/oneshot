@@ -140,7 +140,7 @@ function boot(width = 960, height = 600) {
 // same fixture helper the asteroids suite uses.
 function placeAst(g, x, y, r = 20) {
   g.q(`(() => { const s = asteroids.slots.find((a) => !a.active);
-    s.active = true; s.x = ${x}; s.y = ${y}; s.r = ${r};
+    s.active = true; s.tier = 0; s.x = ${x}; s.y = ${y}; s.r = ${r};
     s.vx = 0; s.vy = 0;
     s.shape.length = 6; s.rot = 0; s.spin = 0; return true; })()`);
 }
