@@ -133,7 +133,7 @@ function boot(width, height, initialStore = {}) {
     "theme-minimal": makeEl("theme-minimal"),
     "mode-classic": makeEl("mode-classic"),
     "mode-exciting": makeEl("mode-exciting"),
-    "btn-mute": makeEl("btn-mute"),
+    "mode-alleyway": makeEl("mode-alleyway"),    "btn-mute": makeEl("btn-mute"),
     "sound-volume": makeEl("sound-volume"),
     "ball-speed": makeEl("ball-speed"),
     "screen-gameover": makeEl("screen-gameover"),

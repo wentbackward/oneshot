@@ -134,7 +134,7 @@ function boot(width, height, initialStore = {}) {
     "theme-minimal": makeEl("theme-minimal"),
     "mode-classic": makeEl("mode-classic"),
     "mode-exciting": makeEl("mode-exciting"),
-    "btn-mute": makeEl("btn-mute"),
+    "mode-alleyway": makeEl("mode-alleyway"),    "btn-mute": makeEl("btn-mute"),
     "sound-volume": makeEl("sound-volume"),
     "ball-speed": makeEl("ball-speed"),
     "screen-gameover": makeEl("screen-gameover"),
@@ -216,6 +216,7 @@ function boot(width, height, initialStore = {}) {
 const opts = (g) => ({
   classic: g.els["mode-classic"],
   exciting: g.els["mode-exciting"],
+  alleyway: g.els["mode-alleyway"],
 });
 const isMarked = (el) => el.className.includes("selected");
 const markedCount = (g) => Object.values(opts(g)).filter(isMarked).length;
@@ -228,22 +229,24 @@ const startSection = (() => {
 })();
 
 // ================================================================
-// Acceptance 1 + 4 (static HTML): two nodes in #screen-start share
-// a data-mode attribute with values classic|exciting, exactly one
-// (classic) marked selected by default
+// Acceptance 1 + 4 (static HTML): three nodes in #screen-start
+// share a data-mode attribute with values classic|exciting|alleyway,
+// exactly one (classic) marked selected by default
 // ================================================================
-check("the start screen contains exactly two nodes with data-mode, values classic|exciting (one each)", () => {
+check("the start screen contains exactly three data-mode nodes, values classic|exciting|alleyway (one each)", () => {
   const values = [...startSection.matchAll(/data-mode="([^"]*)"/g)].map((m) => m[1]);
-  assert(values.length === 2,
-    `#screen-start must hold exactly 2 data-mode nodes, found ${values.length}: ${JSON.stringify(values)}`);
+  assert(values.length === 3,
+    `#screen-start must hold exactly 3 data-mode nodes, found ${values.length}: ${JSON.stringify(values)}`);
   const sorted = [...values].sort();
-  assert(JSON.stringify(sorted) === JSON.stringify(["classic", "exciting"]),
-    `the two values must be classic and exciting (once each), got ${JSON.stringify(values)}`);
+  assert(JSON.stringify(sorted) === JSON.stringify(["alleyway", "classic", "exciting"]),
+    `the three values must be classic, exciting and alleyway (once each), got ${JSON.stringify(values)}`);
+  const alleywayBtn = startSection.match(/<button\b[^>]*id="mode-alleyway"[^>]*>/);
+  assert(alleywayBtn, "the third option node must be the #mode-alleyway button");
 });
 
 check("the static default-selection mark sits on the classic node only", () => {
   const tags = [...startSection.matchAll(/<button\b[^>]*data-mode="([^"]*)"[^>]*>/g)];
-  assert(tags.length === 2, `expected 2 option buttons, found ${tags.length}`);
+  assert(tags.length === 3, `expected 3 option buttons, found ${tags.length}`);
   for (const t of tags) {
     const name = t[1];
     const marked = /class="[^"]*\bselected\b[^"]*"/.test(t[0]);
@@ -382,20 +385,22 @@ check("after a simulated reload (fresh vm sandbox, same backing store) the chose
 // follow-up tickets can branch on; the selector iterates a button
 // list that admits a third entry cleanly (alleyway)
 // ================================================================
-check("EXCITING_DROP_FACTOR is the named tunable 2.0 and MODES maps classic → 1.0, exciting → the factor", () => {
+check("EXCITING_DROP_FACTOR is the named tunable 2.0 and MODES maps classic → 1.0, exciting → the factor, alleyway → 1.0", () => {
   const g = boot(960, 600);
   const factor = g.q("EXCITING_DROP_FACTOR");
   assert(factor === 2.0, `EXCITING_DROP_FACTOR must be 2.0, got ${JSON.stringify(factor)}`);
   const table = g.q("MODES");
   assert(table && typeof table === "object", "MODES must be a module-level table");
   for (const name of Object.keys(table)) {
-    assert(name === "classic" || name === "exciting",
-      `unexpected MODES row '${name}' — the scaffold exposes classic/exciting only, got ${Object.keys(table)}`);
+    assert(name === "classic" || name === "exciting" || name === "alleyway",
+      `unexpected MODES row '${name}' — the table exposes classic/exciting/alleyway only, got ${Object.keys(table)}`);
   }
   assert(table.classic.dropFactor === 1.0,
     `the classic row must multiply the drop rate by exactly 1.0, got ${JSON.stringify(table.classic.dropFactor)}`);
   assert(table.exciting.dropFactor === EXCITING_DROP_FACTOR_LITERAL,
     `the exciting row must multiply by EXCITING_DROP_FACTOR (2.0), got ${JSON.stringify(table.exciting.dropFactor)}`);
+  assert(table.alleyway.dropFactor === 1.0,
+    `the alleyway row must keep the classic drop-rate economy (×1.0), got ${JSON.stringify(table.alleyway.dropFactor)}`);
 });
 
 check("modeButtons lists one [element, name] pair per MODES key — the seam a third button (alleyway) plugs into", () => {
