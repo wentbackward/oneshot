@@ -1644,19 +1644,15 @@ window.addEventListener("blur", onBlur);
 // rect-relative, clamped mapping).
 // Two guards survive: a degenerate rect (zero width, e.g. while
 // the canvas is hidden) is ignored — dividing by it would poison
-// every later event — and a missing/NaN clientX is rejected by a
-// negated comparison (NaN compares false in EVERY direction).
+// every later event — and a malformed clientX (missing/NaN) is
+// rejected before it could poison paddle.x. Browsers always deliver
+// finite coordinates; both guards cost nothing and close the class
+// the #91 audit found. (±Infinity is accepted and harmlessly folded
+// to a wall by clampPaddle.)
 function setPaddleX(clientX) {
   var rect = canvas.getBoundingClientRect();
   if (rect.width <= 0) return; // degenerate rect: ignore the event
-  // Malformed-coordinate guard: a missing/NaN clientX satisfies NEITHER
-  // comparison, so it is rejected before mapping could produce a NaN
-  // target and poison paddle.x. Browsers always deliver finite
-  // coordinates; the guard costs nothing and closes the same class
-  // the degenerate-rect check handles.
-  if (!(clientX >= rect.left) && !(clientX <= rect.left + rect.width)) {
-    return;
-  }
+  if (isNaN(clientX)) return; // malformed coordinate: ignore the event
   paddle.x = ((clientX - rect.left) / rect.width) * canvas.width;
   clampPaddle(); // wall-hug: clamps to the reachable range
 }
