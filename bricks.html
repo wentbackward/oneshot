@@ -226,7 +226,9 @@
     border-color: var(--accent);
     background: rgba(92, 242, 176, 0.12);
   }
-  .sound .vol {
+  /* Shared start-screen control treatment: the volume row and the
+     ball-speed row (ticket #73) both pair a label with a range slider. */
+  .sound .vol, .speed .vol {
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -235,9 +237,17 @@
     text-transform: uppercase;
     color: var(--ink);
   }
-  #sound-volume {
+  #sound-volume, #ball-speed {
     width: 120px;
     accent-color: var(--accent);
+  }
+  /* Start-screen ball-speed option (ticket #73): the slider follows
+     the volume slider's row treatment, on its own tidy row. The .vol
+     and range rules are shared with the sound row above. */
+  .speed {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
   }
 </style>
 </head>
@@ -267,6 +277,9 @@
     <div class="sound">
       <button id="btn-mute" type="button" class="sound-opt">Sound On</button>
       <label class="vol">Vol<input id="sound-volume" type="range" min="0" max="100" value="100"></label>
+    </div>
+    <div class="speed">
+      <label class="vol">Ball Speed<input id="ball-speed" type="range" min="50" max="150" value="100"></label>
     </div>
     <div class="leaderboard" id="leaderboard-start"></div>
     <button id="btn-reset-hiscore" type="button">Reset High Score</button>
@@ -329,7 +342,10 @@
 // single pass; and a start-screen sound toggle with a volume
 // slider, persisted as JSON { muted, volume } under their own
 // named key and driving the master bus level live (mute wins over
-// volume)
+// volume), and a start-screen ball-speed slider (50-150%, persisted
+// as an integer percent under its own named key) that beginRun()
+// snapshots: it scales each run's serve speed and growth ceiling
+// by the same factor
 // ================================================================
 
 // ---- Tunables (var: addressable as globals, e.g. from the console) ----
@@ -363,6 +379,13 @@ var MAX_BALLS = 5;              // live-ball cap; the ball pool is sized to this
 var BALL_SERVE_SPEED = 480;       // level-1 launch speed on click/tap, px/s
 var LEVEL_SPEED_GROWTH = 1.15;    // per-level serve-speed multiplier (PRD section 4)
 var MAX_BALL_SPEED = 1500;        // ceiling the per-level growth caps at, px/s
+// Ball-speed option (ticket #73): the start-screen slider's bounds
+// and default, in percent. The slider never replaces the named
+// serve knobs — beginRun() multiplies them by ballSpeedPct/100.
+var BALL_SPEED_KEY = "brickbreaker.speed";
+var MIN_BALL_SPEED_PCT = 50;
+var MAX_BALL_SPEED_PCT = 150;
+var DEFAULT_BALL_SPEED_PCT = 100;
 var MAX_PADDLE_BOUNCE_ANGLE = Math.PI / 3;  // 60 deg from vertical at the rim
 // Pin nudge: when collideBricks pins a ball flush to a brick face it
 // nudges it this far OUTSIDE, so a re-computed overlap of the pinned
@@ -727,6 +750,7 @@ var themeButtons = [
 ];
 var btnMute = document.getElementById("btn-mute");
 var soundVolumeInput = document.getElementById("sound-volume");
+var ballSpeedInput = document.getElementById("ball-speed");
 
 // ---- State ----
 var gameState = "start"; // "start" | "playing" | "paused" | "gameover"
@@ -782,6 +806,10 @@ var bricksLeft = 0;               // live bricks, kept as an O(1) win check
 // Runtime serve speed: reset to the selected preset's serveSpeed at
 // (re)start, grown per cleared level and capped at MAX_BALL_SPEED.
 var serveSpeed = BALL_SERVE_SPEED;
+// Runtime serve ceiling: snapshotted beside serveSpeed in
+// beginRun() as the MAX_BALL_SPEED ceiling scaled by the run's
+// ball-speed percent, so the whole growth curve shifts with it.
+var serveCeiling = MAX_BALL_SPEED;
 // Runtime capsule drop rate: the run's snapshot of the selected
 // preset's dropRate (default preset before the first run).
 var dropRate = DIFFICULTY[DEFAULT_DIFFICULTY].dropRate;
@@ -1115,6 +1143,56 @@ soundVolumeInput.addEventListener("input", function () {
   applySoundSettings(soundMuted, volume);
 });
 
+// ---- Ball-speed option: start-screen slider (ticket #73) ----
+// The percent by which each run's serve speed and growth ceiling
+// are scaled, persisted as a JSON integer under the named key (the
+// high-score / difficulty / theme / sound encoding precedent).
+// Corrupt or out-of-range stored values fall back to the default:
+// a botched write must never break boot. beginRun() snapshots the
+// live value, so a mid-run move only affects the NEXT run — the
+// slider scales the named serve knobs, never replaces them.
+function loadBallSpeed() {
+  try {
+    var value = JSON.parse(localStorage.getItem(BALL_SPEED_KEY));
+    return Number.isInteger(value) &&
+      value >= MIN_BALL_SPEED_PCT && value <= MAX_BALL_SPEED_PCT
+      ? value
+      : DEFAULT_BALL_SPEED_PCT;
+  } catch {
+    return DEFAULT_BALL_SPEED_PCT; // storage unavailable, blocked, or corrupt: play on
+  }
+}
+function saveBallSpeed() {
+  try {
+    // Persisted as a JSON integer: 125, not "125".
+    localStorage.setItem(BALL_SPEED_KEY, JSON.stringify(ballSpeedPct));
+  } catch {
+    // Non-persistent storage (e.g. blocked): the session still works.
+  }
+}
+var ballSpeedPct = loadBallSpeed();
+// Reflect the restored percent onto the slider; called at boot
+// (storage may override the static 100 default).
+function syncBallSpeedControl() {
+  if (ballSpeedInput.value !== String(ballSpeedPct)) {
+    ballSpeedInput.value = String(ballSpeedPct);
+  }
+}
+syncBallSpeedControl(); // boot: before the first frame
+ballSpeedInput.addEventListener("input", function () {
+  // A range input reports its own value as a string; clamp into
+  // [50, 150] so programmatic out-of-range writes degrade cleanly.
+  // An identical re-application is a no-op, so no redundant storage
+  // write fires.
+  var v = parseInt(ballSpeedInput.value, 10);
+  var pct = Number.isInteger(v)
+    ? Math.min(MAX_BALL_SPEED_PCT, Math.max(MIN_BALL_SPEED_PCT, v))
+    : ballSpeedPct;
+  if (pct === ballSpeedPct) return;
+  ballSpeedPct = pct;
+  saveBallSpeed();
+});
+
 // ---- Fixed-aspect stage ----
 // The playfield is a constant GAME_W × GAME_H logical stage; the
 // backing store (stage × CANVAS_SCALE) is set once and never follows
@@ -1309,10 +1387,11 @@ function destroyBrick(index) {
 }
 // Cleared board: the level rises by exactly 1, the next layout is
 // spawned into the same pool, and the next serve is the current
-// speed grown by LEVEL_SPEED_GROWTH (capped at MAX_BALL_SPEED).
+// speed grown by LEVEL_SPEED_GROWTH (capped at the run's scaled
+// serve ceiling).
 function advanceLevel() {
   level += 1;
-  serveSpeed = Math.min(serveSpeed * LEVEL_SPEED_GROWTH, MAX_BALL_SPEED);
+  serveSpeed = Math.min(serveSpeed * LEVEL_SPEED_GROWTH, serveCeiling);
   spawnLevel();
   serveBall();
   syncHud();
@@ -1600,7 +1679,12 @@ function beginRun() {
   level = 1;
   lives = PLAYER_LIVES;
   var preset = DIFFICULTY[selectedDifficulty];
-  serveSpeed = preset.serveSpeed;
+  // The run's ball-speed percent scales the preset's serve and the
+  // growth ceiling by the same factor (curve shape preserved); the
+  // named var knobs above are multiplied, never replaced.
+  var speedFactor = ballSpeedPct / 100;
+  serveSpeed = preset.serveSpeed * speedFactor;
+  serveCeiling = MAX_BALL_SPEED * speedFactor;
   basePaddleW = preset.paddleWidth;
   paddleW = basePaddleW;
   dropRate = preset.dropRate;
