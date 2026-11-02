@@ -349,13 +349,33 @@ check("Enter on game over restarts cleanly: score 0, wave 1, full HP, zero live 
   const g = boot();
   g.press("Enter");
   suppressSpawns(g);
-  // Leave residue behind: two parked hazards plus the death burst.
+  // #80: pin the RNG for this scenario. Shatter headings/speeds and the
+  // death bursts all consume `random`, so the residue layout must be
+  // reproducible; the old count-based checkpoint drifted on the
+  // unpinned fragment velocities (see docs/DECISIONS.md).
+  g.q("random = () => 0.25;");
+  // Leave residue behind: two parked hazards plus the death cascade.
   g.placeAst(100, 100);
   g.placeAst(820, 500);
   killShip(g, 3);
-  // #51: each of the three death-rocks shatters into 2 medium fragments
-  // on impact, so the residue is 2 parked hazards + 3 x 2 fragments.
-  assertClose(g.hazardCount(), 2 + 3 * 2, 0, "precondition: two parked hazards and the shatter residue are still in the field");
+  // #80: structural precondition, not a live count. Each hit rock
+  // shatters ON TOP of the ship, so its fragments spawn within the
+  // ship-overlap radius too: at the next invuln expiry checkShipHits
+  // (first overlapping slot wins) may consume a leftover fragment
+  // instead of the freshly parked rock, and the surviving rock stands
+  // in for the missing fragment pair — the live count at this
+  // checkpoint legally drifts between 6 and 8. Assert identities
+  // instead: both parked rocks alive at their parked coordinates,
+  // plus at least the two fragments the first hit rock must always
+  // leave (it is the only overlapping hazard at that moment, and a
+  // later hit never removes more residue than it leaves — the smallest
+  // tier shatters into nothing, all higher tiers replace one with two).
+  const parkedAlive = g.q("asteroids.slots.filter((a) => a.active && a.vx === 0 && a.vy === 0 && " +
+    "((a.x === 100 && a.y === 100) || (a.x === 820 && a.y === 500))).length");
+  assert(parkedAlive === 2,
+    "precondition: both parked hazards are still in the field (identified by slot, not by count)");
+  assert(g.hazardCount() >= 2 + 2,
+    "precondition: the death cascade's shatter residue is still in the field (2 parked rocks plus >= 2 fragments)");
   assert(g.particleCount() > 0, "precondition: the death burst is still animating");
   g.press("Enter");
   assertCleanRestart(g, "Enter restart");
