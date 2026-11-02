@@ -82,11 +82,6 @@ function makeEl(id) {
       el.children.push(child);
       return child;
     },
-    removeChild(child) {
-      const i = el.children.indexOf(child);
-      if (i >= 0) el.children.splice(i, 0, child);
-      return child;
-    },
   };
   return el;
 }
