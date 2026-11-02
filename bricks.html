@@ -814,8 +814,11 @@ var SFX_BRICK_CHIP    = { wave: WAVE_SINE,   freq: SFX_BRICK_CHIP_FREQ[3], dur: 
 // instead of competing with brick sounds. The optional `peak` field
 // makes scheduleSound() honour a per-recipe level; recipes without
 // one keep peaking at SFX_PEAK exactly as before.
-var SFX_WALL_BOUNCE_PEAK = 0.25;      // half of SFX_PEAK: the rattle stays quiet
+var SFX_WALL_BOUNCE_PEAK = 0.25;      // boot-time default: half of SFX_PEAK at startup, so the rattle stays quiet
 var SFX_WALL_BOUNCE = { wave: WAVE_SQUARE, freq: 170, dur: 0.05, peak: SFX_WALL_BOUNCE_PEAK };
+// Live console retunes go through SFX_WALL_BOUNCE.peak (scheduleSound
+// reads recipe.peak at schedule time); the _PEAK constant is the
+// initialisation source only.
 var SFX_POWERUP_CATCH = { wave: WAVE_SQUARE, freq: 660, dur: 0.12 };
 // EXCITING-mode capture blips (ticket #75): each new capsule gets a
 // small blip distinct from the legacy catch blip and from its
@@ -860,8 +863,8 @@ function ensureAudio() {
 // the recipe duration, so the node's audio is bounded. Both ramp
 // values are clamped to SFX_EXP_EPS (exp ramps must stay positive);
 // the start is set at the schedule time, so a console zeroed
-// SFX_PEAK / SFX_DECAY_FLOOR / SFX_WALL_BOUNCE_PEAK can
-// never make the scheduler throw.
+// SFX_PEAK / SFX_DECAY_FLOOR (read live here) or a recipe
+// .peak (also read live) can never make the scheduler throw.
 function scheduleSound(recipe) {
   if (!audioCtx) return; // audio not enabled yet: silent no-op
   var t0 = audioCtx.currentTime;

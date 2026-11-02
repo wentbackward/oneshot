@@ -2350,10 +2350,13 @@ arcade physics).
   peaks the envelope at `recipe.peak` when the recipe carries one, else
   `SFX_PEAK` (unchanged), so `SFX_WALL_BOUNCE = { wave: WAVE_SQUARE,
   freq: 170, dur: 0.05, peak: SFX_WALL_BOUNCE_PEAK }` with
-  `SFX_WALL_BOUNCE_PEAK = 0.25` (half the standard 0.5) sits at the
-  existing SFX_PEAK/decay-floor/SFX_EXP_EPS machinery — console-
-  retunable exactly like the other recipes, and the clamp still
-  protects against a zeroed console value. Alternatives rejected:
+  `SFX_WALL_BOUNCE_PEAK = 0.25` (half the standard 0.5 at boot) sits at
+  the existing SFX_PEAK/decay-floor/SFX_EXP_EPS machinery. Retuning: the
+  recipe's `.peak` is read LIVE at schedule time, so console retunes go
+  through `SFX_WALL_BOUNCE.peak`; `SFX_WALL_BOUNCE_PEAK` is the
+  initialisation source only (the recipe captures its value at
+  declaration, like `freq`), and the clamp still protects against a
+  zeroed value. Alternatives rejected:
   a second, quieter master bus (adds wiring, complicates the
   single-bus mute invariant the audio suite pins); a separate
   lower-envelope helper (duplicates the scheduler, violates the
