@@ -2422,3 +2422,42 @@ arcade physics).
   approximation error, and the jitter behaviour gets its own dedicated
   suite (`tests/bricks-serve-jitter.test.mjs`). Widening the epsilon
   would have turned exact-law assertions into fuzzy ones.
+
+## 2026-11-02 — Ticket #98: widen the brick field side inset (angle reach)
+
+- **`BRICK_SIDE_MARGIN` raised from 24 to 40 canvas px (single value,
+  both modes).** The angle-reach rationale: at 24 px the outermost
+  bricks sit so close to the side walls that the shallow angles the
+  paddle can impart barely let the ball slide along and reach
+  off-centre bricks. 40 px is "slightly bigger, not a huge reflow":
+  in classic the column width drops 181.8 → 178.6 px (~1.8%), in
+  alleyway 177.6 → 171.2 px (~3.6%) — a modest, uniform shrink that
+  `layoutBricks()` performs automatically because the column width
+  derives from `canvas.width` minus the doubled margin. The field
+  stays perfectly symmetric (left gap == right gap == 40) and
+  centred; the top margin stays at `BRICK_TOP_MARGIN = 64` (the
+  ticket's optional top nudge is deliberately not taken — the side
+  gap was the problem, and fewer changed constants means fewer
+  things to verify).
+- **One shared inset for both modes, not per-mode vars.** With 5
+  columns the portrait arena already has proportionally *more*
+  margin than the landscape one (40/960 vs 40/1920 canvas px), and
+  the 5 wide columns (171.2 px) are still ~4× the inset, so nothing
+  crowds. Alternatives rejected: separate
+  `CLASSIC_BRICK_SIDE_MARGIN`/`ALLEYWAY_BRICK_SIDE_MARGIN` vars
+  (extra surface for no demonstrated need), 24 → 32 (visible but a
+  weak relief for the reach problem), 24 → 48+ (drifts toward the
+  "huge reflow" the ticket warns against). 40 stays a plain
+  top-level `var`, so it remains console-retunable per the house
+  knob style.
+- **The test pins the widened value against the real layout, not
+  against re-derived copies of the same expression.** Left gap is
+  compared exactly (it *is* the named margin); the right gap is the
+  derived edge (margin + 9 column steps), so it gets a 1e-9 px
+  sub-nanopixel float tolerance — the ~2e-13 residual is binary
+  float addition, not a layout defect. `tests/bricks-side-inset.test.mjs`
+  covers the widened value, symmetry, the modest-bounds check and
+  the unchanged 10/5 column counts in both modes; the pre-existing
+  suites (bricks-grid, bricks-alleyway, bricks-level-layouts) derive
+  positions from the named vars, so they track the new inset with
+  no edits.
