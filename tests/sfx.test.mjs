@@ -488,8 +488,8 @@ check("an asteroid laser kill plays a low-passed white-noise burst with the aste
   g.press("Space");
   g.tick(2);
   g.release("Space");
-  waitUntil(g, () => g.score() === g.q("SCORE_PER_ASTEROID"), 120,
-    "the straight-ahead laser kill");
+  waitUntil(g, () => g.score() === g.q("SCORE_PER_LARGE"), 120,
+    "the straight-ahead laser kill"); // #51: the fixture keeps its default tier (0 large)
   const bs = bursts(g.rec);
   assert(bs.length === 1, `one asteroid kill must schedule exactly one noise burst, got ${bs.length}`);
   assertNoiseBurst(g, bs[0], "SFX_ASTEROID_KILL_HZ", "SFX_ASTEROID_KILL_LEVEL", "SFX_ASTEROID_KILL_S");

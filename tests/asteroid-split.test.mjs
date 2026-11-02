@@ -11,8 +11,10 @@
 // bit-for-bit deterministic.
 //
 // Conventions used here:
-// - one "single shot" = keydown Space, exactly one tick, keyup Space
-//   (the frame-1 sweep spans 23..34.7 px along the ship's heading).
+// - one "single shot" = keydown Space, two ticks, keyup Space: the
+//   first tick fires the beam (integrated with dt = 0, so it only
+//   leaves the nose); the second tick sweeps 277 -> 265.3 px, which
+//   crosses the parked fixture for every tier radius (24/12/6).
 // - a parked rock at (480, 260) on the default 960x600 boot is
 //   crossed by that sweep for every tier radius (24/12/6).
 //
@@ -120,6 +122,7 @@ function boot(width = 960, height = 600, seed = 11) {
     count: () => q("asteroids.slots.reduce((n, a) => n + (a.active ? 1 : 0), 0)"),
     poolLen: () => q("asteroids.slots.length"),
     score: () => q("score"),
+    hp: () => q("hp"),
     clearField: () => q("asteroids.slots.forEach((a) => (a.active = false))"),
     // Reset the fire cooldown and retire any live beam (a leftover sweep
     // from a previous shot would otherwise cross a newly placed fixture
@@ -153,11 +156,14 @@ function placeAst(g, x, y, r, tier) {
 const ROCK_X = 480;
 const ROCK_Y = 260;
 
-// keydown Space, one tick, keyup Space: exactly one beam released, and
-// no follow-up shot can fire while Space is no longer held.
+// keydown Space, two ticks, keyup Space: exactly one beam released
+// (the bootstrap tick integrates with dt = 0 and only releases the
+// beam from the nose; the second tick sweeps 277 -> 265.3 px, which
+// crosses the parked fixture for every tier radius), and no
+// follow-up shot can fire once Space is released.
 function singleShot(g) {
   g.key("Space", true);
-  g.tick();
+  g.tick(2);
   g.key("Space", false);
 }
 
@@ -305,15 +311,23 @@ check("a fragment cannot be destroyed by the same beam that shattered its parent
   suppressSpawns(g);
   placeAst(g, ROCK_X, ROCK_Y, g.q("ASTEROID_R_LARGE"), 0);
   g.key("Space", true);
-  g.tick(); // frame 1: the large rock dies, two medium fragments spawn
+  singleShot(g); // the kill frame: the large rock dies, two medium
+  // fragments spawn AT ITS POSITION, on the very sweep segment
+  // that destroyed it
   assert(g.count() === 2, "the large fixture must have split on the kill frame");
-  assertClose(g.score(), g.q("SCORE_PER_LARGE"), 0, "the kill frame credits exactly the large score");
-  g.tick(); // frame 2: the SAME beam still sweeps through the fragment band
   assertClose(g.score(), g.q("SCORE_PER_LARGE"), 0,
-    "the shattering beam must not chain-kill its own fragments on the same frame");
-  assert(g.count() === 2,
-    "the fresh fragments must survive the shattering beam's continued sweep (immune on their birth frame)");
+    "the kill frame credits exactly the large score — the shattering beam must not chain-kill its own fragments");
+  // Park both fragments at the parent's spot: the shattering beam is
+  // still live (LASER_LIFETIME_S) and, within its lifetime, sweeps the
+  // full column through the parked fragments — a chain killer would
+  // collect them, an immune fragment pair would not.
+  g.q(`(() => { for (const a of asteroids.slots) if (a.active) { a.x = ${ROCK_X}; a.y = ${ROCK_Y}; a.vx = 0; a.vy = 0; } })()`);
   g.key("Space", false);
+  for (let i = 0; i < 100 && g.count() === 2; i++) g.tick();
+  assertClose(g.score(), g.q("SCORE_PER_LARGE"), 0,
+    "no later sweep of the shattering beam may chain-kill its own fragments");
+  assert(g.count() === 2,
+    "the fragments must outlive every sweep of the beam that shattered their parent");
 });
 
 // ================================================================

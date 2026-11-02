@@ -51,14 +51,24 @@
     const LASER_POOL_SIZE = 32;   // pre-allocated laser slots, recycled (never reallocated)
     const LASER_LENGTH = 18;      // px, visual length of the beam
     var LASER_LIFETIME_S = 1.5;   // s of sim time a beam lives before recycling (wrapping makes off-screen culling obsolete; ~1050 px at the default speed)
-    var ASTEROID_BASE = 6;        // asteroids in wave 1; wave N fields ASTEROID_BASE + ASTEROID_GROWTH * (N - 1)
-    var ASTEROID_GROWTH = 2;      // extra asteroids each wave above the first
-    var SCORE_PER_ASTEROID = 10;  // HUD score credited per laser kill
+    var ASTEROID_BASE = 6;        // LARGE rocks in wave 1; wave N fields ASTEROID_BASE + ASTEROID_GROWTH * (N - 1)
+    var ASTEROID_GROWTH = 2;      // extra LARGE rocks each wave above the first
+    // Shot splitting: tiers descend large -> medium -> small; destroying a
+    // rock spawns ASTEROID_CHILDREN[tier] fragments of the NEXT tier (the
+    // smallest tier shatters into nothing). Radii form a geometric series
+    // through the named ratio.
+    const ASTEROID_R_LARGE = 24;  // px, radius of the large tier
+    const ASTEROID_SIZE_RATIO = 0.5; // each lower tier's radius is this fraction of its parent's
+    const ASTEROID_R_MEDIUM = ASTEROID_R_LARGE * ASTEROID_SIZE_RATIO; // 12 px
+    const ASTEROID_R_SMALL = ASTEROID_R_MEDIUM * ASTEROID_SIZE_RATIO; // 6 px
+    const ASTEROID_R = [ASTEROID_R_LARGE, ASTEROID_R_MEDIUM, ASTEROID_R_SMALL]; // indexed by tier (0 large, 1 medium, 2 small)
+    const ASTEROID_CHILDREN = [2, 2, 0]; // fragments spawned when a tier is destroyed (smallest splits into nothing)
+    var SCORE_PER_LARGE = 20;      // HUD score credited per laser kill of a large rock
+    var SCORE_PER_MEDIUM = 10;     // HUD score credited per laser kill of a medium rock
+    var SCORE_PER_SMALL = 5;       // HUD score credited per laser kill of a small rock
     const SPAWN_SAFE_RADIUS = 200; // px — new asteroids spawn at least this far from the ship
-    const ASTEROID_MIN_R = 12;    // px, smallest asteroid radius
-    const ASTEROID_MAX_R = 20;    // px, largest asteroid radius
-    const ASTEROID_SPEED_MIN = 40;   // px/s, slowest drift
-    const ASTEROID_SPEED_MAX = 160;  // px/s, fastest drift
+    var ASTEROID_SPEED_MIN = 40;   // px/s, slowest drift (fragments draw from the same band)
+    var ASTEROID_SPEED_MAX = 160;  // px/s, fastest drift
     const ASTEROID_SPAWN_EVERY = 0.25; // s between respawn attempts while below this wave's roster
     const ASTEROID_CANDIDATE_RETRIES = 8; // spawnAsteroid: candidate attempts per single spawn
     const ASTEROID_SPAWNS_PER_FRAME = 8;  // spawnAsteroids: spawn rounds per frame
@@ -127,7 +137,7 @@
     };
     const keys = new Set();
     let gameTime = 0; // seconds of accumulated simulation time
-    let score = 0;    // HUD score: one SCORE_PER_ASTEROID per rock kill, one SCORE_PER_DRONE per drone kill
+    let score = 0;    // HUD score: one per-tier rock score per kill (SCORE_PER_LARGE/MEDIUM/SMALL), one SCORE_PER_DRONE per drone kill
     let hp = PLAYER_MAX_HP;          // current hull; one impact costs exactly 1. Snapshotted from
                                      // PLAYER_MAX_HP at load and again in startGame — the knob is
                                      // read at (re)start, not live (see docs/DECISIONS.md)
@@ -138,25 +148,35 @@
     let inIntermission = false;       // BETWEEN_WAVES_S pause after a cleared wave
     let intermissionEndsAt = 0;       // sim time at which the next wave starts
     let gameState = "start";          // "start" | "playing" | "gameover": gates sim, input and screen
+    let frameNo = 0;                 // playing-sim frame counter: stamps fresh spawns (edge rocks and shatter fragments alike) so no beam may kill them on that frame
     // Random source lives in a mutable `var` so unit tests (and console
     // experiments) can install a deterministic sequence; the game itself
     // only ever CALLS it, never reassigns it.
     var random = Math.random;
 
     // Pre-allocated laser pool: every shot mutates an existing slot in
-    // place, so sustained fire never creates new objects.
+    // place, so sustained fire never creates new objects. `serial`
+    // identifies a beam for its whole life: a shattered rock's
+    // fragments remember their parent's killer this way. Serial 0 is
+    // "identity unassigned" (a beam created outside tryFire grants no
+    // immunity) — tryFire hands out serials from 1.
     const laserPool = { slots: [] };
     for (let i = 0; i < LASER_POOL_SIZE; i++) {
-      laserPool.slots.push({ active: false, x: 0, y: 0, dx: 0, dy: 0, dt: 0, age: 0 });
+      laserPool.slots.push({ active: false, x: 0, y: 0, dx: 0, dy: 0, dt: 0, age: 0, serial: 0 });
     }
 
     // Pre-allocated asteroid pool: every rock mutates an existing slot in
-    // place (including its polygon outline), so spawning never allocates.
-    // `entry` is the edge this rock is still drifting in from (0 top, 1
-    // bottom, 2 left, 3 right); -1 once its centre is inside the field.
-    // Wrap-around is suspended on that axis until then, so the fully
-    // off-screen spawn offset can never trigger an instant teleport.
-
+    // place (including its polygon outline and its split fragments), so
+    // spawning never allocates.
+    // `tier` is the size class (0 large, 1 medium, 2 small); `r` is the
+    // live radius for collision/draw/gap math; `entry` is the edge this
+    // rock is still drifting in from (0 top, 1 bottom, 2 left, 3 right);
+    // -1 once its centre is inside the field. Wrap-around is suspended on
+    // that axis until then, so the fully off-screen spawn offset can never
+    // trigger an instant teleport. `bornFrame` stamps the frame a shatter
+    // fragment was born: no beam may kill it on that frame. `splitBy`
+    // holds the serial of the beam that shattered its parent: that beam
+    // alone stays unable to kill the fragment for its whole lifetime.
     // Pre-allocated particle pool: impact bursts mutate existing slots
     // in place, so rapid-fire combat never creates new objects.
     const particlePool = { slots: [] };
@@ -170,7 +190,10 @@
         active: false,
         x: 0,
         y: 0,
-        r: ASTEROID_MIN_R,
+        r: ASTEROID_R_LARGE,
+        tier: 0,
+        bornFrame: 0,
+        splitBy: 0,
         vx: 0,
         vy: 0,
         rot: 0,
@@ -259,6 +282,7 @@
     // FIRING — Space releases one laser from the nose, cooldown-gated
     // ================================================================
     let lastFireAt = Number.NEGATIVE_INFINITY; // permits an instant first shot
+    let laserSerial = 0; // monotonically rising identity: one per beam released
 
     function tryFire() {
       if (!keys.has("Space")) return;
@@ -278,6 +302,7 @@
       slot.dx = dx;
       slot.dy = dy;
       slot.age = 0; // sim-time lifetime starts at the shot
+      slot.serial = ++laserSerial; // identity the shatter immunity below keys off (never 0)
       lastFireAt = gameTime;
       playShoot();
     }
@@ -321,24 +346,85 @@
     }
 
     // ================================================================
-    // ASTEROIDS — pooled rocks that spawn at the edges, drift and
-    // wrap; lasers destroy them for SCORE_PER_ASTEROID each
+    // ASTEROIDS — pooled tiered rocks that spawn at the edges as LARGE,
+    // drift and wrap; a laser kill credits the per-tier score and
+    // shatters the rock into its tier's fragments (or nothing for the
+    // smallest tier)
     // ================================================================
+    // Plain indexed scan for a free slot: no closure allocated per spawn
+    // (the hot path must not create objects).
+    function nextFreeAsteroidSlot() {
+      const slots = asteroids.slots;
+      for (let i = 0; i < slots.length; i++) {
+        if (!slots[i].active) return slots[i];
+      }
+      return null; // pool saturated — callers spawn as many as fit, never allocate
+    }
+
+    // Live per-tier score: the knobs are read on every kill so a console
+    // reassignment applies from the very next destruction.
+    function asteroidScore(tier) {
+      return tier === 0 ? SCORE_PER_LARGE : tier === 1 ? SCORE_PER_MEDIUM : SCORE_PER_SMALL;
+    }
+
+    // Shatter a destroyed rock: exactly ASTEROID_CHILDREN[tier] fragments
+    // of the NEXT tier at the parent's position, copying the parent's
+    // polygon style and entry edge, with fresh random headings and
+    // speeds inside the named min/max band. Fragments reuse free pool
+    // slots in place; a saturated pool spawns as many as fit (documented
+    // rule). Zero allocation: everything mutates existing slots.
+    // `killerSerial` is the serial of the beam that destroyed the parent
+    // (0 for non-laser destructions, e.g. the ship's hull): the fragments
+    // stay immune to that one beam for its whole remaining life, so a
+    // single shot can never eat its own cascade.
+    function shatterAsteroid(parent, killerSerial) {
+      const childTier = parent.tier + 1;
+      const wanted = ASTEROID_CHILDREN[parent.tier]; // 0 for the smallest tier
+      parent.active = false; // freed first: a saturated pool still has the parent's own slot to spawn into
+      for (let i = 0; i < wanted; i++) {
+        const slot = nextFreeAsteroidSlot();
+        if (!slot) break; // pool saturated: spawn as many fragments as fit
+        const ang = random() * Math.PI * 2;
+        const speed = ASTEROID_SPEED_MIN + (ASTEROID_SPEED_MAX - ASTEROID_SPEED_MIN) * random();
+        slot.active = true;
+        slot.tier = childTier;
+        slot.r = ASTEROID_R[childTier];
+        slot.x = parent.x;
+        slot.y = parent.y;
+        slot.shape.length = parent.shape.length;
+        for (let v = 0; v < parent.shape.length; v++) slot.shape[v] = parent.shape[v];
+        slot.vx = Math.cos(ang) * speed;
+        slot.vy = Math.sin(ang) * speed;
+        slot.entry = parent.entry; // keep the parent's spawn-edge wrap suspension in force
+        // Mirror the outward component along an inherited spawn edge
+        // (same rule as edge spawns) so a fragment cannot drift away
+        // forever off the edge it was born at.
+        if (slot.entry === 0 && slot.vy <= 0) slot.vy = -slot.vy;
+        else if (slot.entry === 1 && slot.vy >= 0) slot.vy = -slot.vy;
+        else if (slot.entry === 2 && slot.vx <= 0) slot.vx = -slot.vx;
+        else if (slot.entry === 3 && slot.vx >= 0) slot.vx = -slot.vx;
+        slot.rot = random() * Math.PI * 2;
+        slot.spin = parent.spin;
+        slot.bornFrame = frameNo; // laser-immune on the shattering frame
+        slot.splitBy = killerSerial; // immune to the shattering beam for its life
+      }
+    }
     // Pick one candidate at a random point just outside a random
     // edge, drifting back into the field (aimed at the centre with a
     // ±60° jitter, re-aimed if the jitter points it back out). Rejected
     // outright if it would start closer than SPAWN_SAFE_RADIUS to the
-    // ship, or sit on top of a live rock.
+    // ship, or sit on top of a live rock. Edge spawns are always the
+    // large tier: the wave rosters count large rocks.
     function spawnAsteroid() {
       const w = canvas.width;
       const h = canvas.height;
-      const slot = asteroids.slots.find((a) => !a.active);
-      if (!slot) return false; // pool exhausted — skip the spawn, never allocate
+      const slot = nextFreeAsteroidSlot();
+      if (!slot) return false; // pool saturated — skip the spawn, never allocate
 
       for (let attempt = 0; attempt < ASTEROID_CANDIDATE_RETRIES; attempt++) {
         const u = random(); // which edge: ¼ of the roll per side (0 top, 1 bottom, 2 left, 3 right)
         const edge = u < 0.25 ? 0 : u < 0.5 ? 1 : u < 0.75 ? 2 : 3;
-        const r = ASTEROID_MIN_R + (ASTEROID_MAX_R - ASTEROID_MIN_R) * random();
+        const r = ASTEROID_R[0]; // large tier, fixed radius
         let x;
         let y;
         if (edge === 0) {       // top
@@ -396,6 +482,9 @@
         slot.x = x;
         slot.y = y;
         slot.r = r;
+        slot.tier = 0; // edge spawns are large rocks
+        slot.bornFrame = frameNo; // birth-stamped like split fragments
+        slot.splitBy = 0; // a fresh edge rock is immune to no beam
         slot.entry = edge;
         slot.rot = random() * Math.PI * 2;
         slot.spin = (random() - 0.5) * 0.8; // slow, varied tumble (rad/s)
@@ -411,6 +500,10 @@
     function spawnAsteroids() {
       if (gameTime - lastSpawnAt < ASTEROID_SPAWN_EVERY) return;
       lastSpawnAt = gameTime;
+      // Live-rock count of ANY tier (fragments hold pool slots too): the
+      // large-rock build pauses while fragments are alive and resumes
+      // once they die. The roster itself is counted by waveBuilt, which
+      // only edge spawns ever increment.
       let count = 0;
       for (const a of asteroids.slots) if (a.active) count++;
       const cap = waveAsteroidCap(wave); // this wave's asteroid roster, clamped to the pool
@@ -468,9 +561,11 @@
         for (let ai = 0; ai < rocks.length; ai++) {
           const a = rocks[ai];
           if (!a.active) continue;
+          if (a.bornFrame === frameNo) continue; // born by an earlier shatter this frame: no beam may kill it this frame
+          if (a.splitBy > 0 && a.splitBy === s.serial) continue; // immune to the very beam that shattered its parent
           if (segPointDistance(px, py, s.x, s.y, a.x, a.y) <= a.r) {
-            a.active = false; // destroyed: removed from the field
-            score += SCORE_PER_ASTEROID;
+            score += asteroidScore(a.tier); // the tier's points, exactly once
+            shatterAsteroid(a, s.serial); // the kill frame: fragments (if any) spawn in place
             playAsteroidKill();
           }
         }
@@ -558,10 +653,13 @@
     }
 
     // The one hull-impact pipeline (rocks and drones alike): the hazard
-    // is destroyed at the point of contact, then exactly 1 hp is taken
-    // at the overlap midpoint (burst, invulnerability, game-over there).
+    // is destroyed at the point of contact (a rock shatters into its
+    // tier's fragments, the same rule as a laser kill), then exactly 1
+    // hp is taken at the overlap midpoint (burst, invulnerability,
+    // game-over there).
     function applyHullImpact(hazard) {
-      hazard.active = false; // the impact shatters the rock / destroys the drone
+      if (hazard.tier !== undefined) shatterAsteroid(hazard, 0); // rock: shatter per the tier rule (no beam involved)
+      else hazard.active = false;                            // drone: destroyed outright
       hitShip((ship.x + hazard.x) / 2, (ship.y + hazard.y) / 2); // mid-point of the overlap
     }
 
@@ -717,13 +815,16 @@
     }
 
     // ================================================================
-    // WAVES — wave N fields a fixed roster of hazards, sized by the
-    // *_BASE / *_GROWTH tuning knobs and clamped to the pre-allocated
-    // pool capacities (a roster without slots could never be built,
-    // so its wave could never end). The roster is built through the
-    // normal spawners at wave start; a hazard destroyed mid-wave is
-    // never replaced. Clearing every hazard starts a BETWEEN_WAVES_S
-    // pause, after which the wave number steps up by exactly one.
+    // WAVES — wave N fields a fixed roster of hazards (the asteroid
+    // side counts LARGE rocks), sized by the *_BASE / *_GROWTH tuning
+    // knobs and clamped to the pre-allocated pool capacities (a roster
+    // without slots could never be built, so its wave could never end).
+    // The roster is built through the normal spawners at wave start;
+    // a hazard destroyed mid-wave is never replaced. A wave completes
+    // only when its roster is fully spawned AND no live hazard of ANY
+    // tier remains (shatter fragments keep it open). Clearing every
+    // hazard starts a BETWEEN_WAVES_S pause, after which the wave
+    // number steps up by exactly one.
     // ================================================================
     function waveAsteroidCount(n) {
       return ASTEROID_BASE + ASTEROID_GROWTH * (n - 1);
@@ -788,6 +889,7 @@
       // screen is a static, empty field, and game over freezes the
       // world behind the overlay (startGame wipes it on restart).
       if (gameState !== "playing") return;
+      frameNo += 1; // one playing-sim frame; shatter fragments stamp themselves with it
 
       // A dead ship is inert: no physics, no firing, no further damage.
       if (!shipDead) {

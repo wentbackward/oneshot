@@ -281,12 +281,19 @@ check("at HP 0 the game-over overlay shows GAME OVER and a final score matching 
   g.press("Enter");
   suppressSpawns(g);
   // Earn a real score: one laser kill of a parked rock straight ahead
-  // (ship at (480,300) heading up; rock parked at (480,40)).
+  // (ship at (480,300) heading up; rock parked at (480,40)). #51: the
+  // fixture keeps its default tier (0 large) -> the kill credits the
+  // large-rock score, and the dead rock leaves 2 medium fragments. The
+  // cooldown is pinned to infinity so the held Space never releases a
+  // second beam that could vaporise the fragments of the first kill.
+  g.q("LASER_COOLDOWN_MS = 1e9");
   g.placeAst(480, 40);
   g.press("Space");
-  waitUntil(g, () => g.score() === 10, 120, "the straight-ahead laser kill to credit SCORE_PER_ASTEROID");
-  g.release("Space"); // stop firing: held Space would vaporise the damage fixtures
-  assertClose(g.hazardCount(), 0, 0, "the laser must have destroyed the parked rock");
+  waitUntil(g, () => g.score() === g.q("SCORE_PER_LARGE"), 120, "the straight-ahead laser kill to credit SCORE_PER_LARGE");
+  g.release("Space"); // stop firing
+  // #51: the parked large rock shattered into its 2 medium fragments;
+  // they stay immune to the shattering beam, so the field holds exactly 2.
+  assertClose(g.hazardCount(), 2, 0, "the laser must have destroyed the parked rock (leaving its 2 fragments)");
   // Now die: three hits (short invuln) bring the hull to 0.
   killShip(g, 3);
   assertClose(g.hp(), 0, 0, "three hits must bring the hull to 0");
@@ -294,14 +301,15 @@ check("at HP 0 the game-over overlay shows GAME OVER and a final score matching 
   g.tick(3);
   assert(g.ctxTexts.includes(GAME_OVER),
     `the game-over screen must draw "GAME OVER", got ${JSON.stringify([...new Set(g.ctxTexts)])}`);
-  assert(g.ctxTexts.includes(finalScore(10)),
-    `the game-over screen must draw "FINAL SCORE 10", got ${JSON.stringify([...new Set(g.ctxTexts)])}`);
+  const killScore = g.q("SCORE_PER_LARGE"); // #51: per-tier scoring replaces the flat 10
+  assert(g.ctxTexts.includes(finalScore(killScore)),
+    `the game-over screen must draw "FINAL SCORE ${killScore}", got ${JSON.stringify([...new Set(g.ctxTexts)])}`);
   // The final score must equal the HUD score line drawn in the same run.
   const hudScores = g.ctxTexts.filter((t) => t.startsWith("SCORE ")).map((t) => Number(t.slice(6)));
   assert(hudScores.length > 0, "the HUD must have drawn a score line before death");
-  assert(hudScores[hudScores.length - 1] === 10,
-    `the HUD score at moment of death must be 10, got ${hudScores[hudScores.length - 1]}`);
-  assertClose(g.q("score"), 10, 0, "the score variable must be unchanged on the game-over screen");
+  assert(hudScores[hudScores.length - 1] === killScore,
+    `the HUD score at moment of death must be ${killScore}, got ${hudScores[hudScores.length - 1]}`);
+  assertClose(g.q("score"), killScore, 0, "the score variable must be unchanged on the game-over screen");
 });
 
 check("the game-over overlay is drawn statically every frame after death", () => {
@@ -345,7 +353,9 @@ check("Enter on game over restarts cleanly: score 0, wave 1, full HP, zero live 
   g.placeAst(100, 100);
   g.placeAst(820, 500);
   killShip(g, 3);
-  assertClose(g.hazardCount(), 2, 0, "precondition: two hazards are still parked in the field");
+  // #51: each of the three death-rocks shatters into 2 medium fragments
+  // on impact, so the residue is 2 parked hazards + 3 x 2 fragments.
+  assertClose(g.hazardCount(), 2 + 3 * 2, 0, "precondition: two parked hazards and the shatter residue are still in the field");
   assert(g.particleCount() > 0, "precondition: the death burst is still animating");
   g.press("Enter");
   assertCleanRestart(g, "Enter restart");
