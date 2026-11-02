@@ -1702,6 +1702,10 @@ function applyCapsule(kind) {
 // The capture fan is built over a SNAPSHOT of the in-flight parents
 // (collected in this one-shot scratch, allocated once at boot) so a
 // clone can never clone itself: the pool doubles as its own roster.
+// Sized at module load from MAX_BALLS_EXCITE: the live-ball cap can
+// never exceed the pool, so np ≤ pool length = scratch length always
+// holds; a console retune of the var takes effect from the next page
+// load (the house-standard module-load capture).
 var multiballParents = new Array(MAX_BALLS_EXCITE);
 // MULTIBALL (ticket #75): every in-flight ball is replaced by TEN —
 // the parent keeps its exact vector, nine clones spawn at the parent

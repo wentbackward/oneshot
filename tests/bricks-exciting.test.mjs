@@ -523,6 +523,25 @@ check("one in-flight ball becomes ten: same position, identical speed, nine rota
   }
 });
 
+check("parked (attached) balls do not fan: 1 in-flight + 1 attached capture yields 11 live, the attached ball untouched and no zero-velocity clones", () => {
+  const g = boot();
+  startRun(g, "exciting");
+  clearField(g);
+  parkBall(g, 0, 500, 400, 0, -480); // in-flight parent
+  g.q("balls[1].active = true; balls[1].attached = true; balls[1].x = 480; balls[1].y = 560; balls[1].vx = 0; balls[1].vy = 0;");
+  assert(g.liveCount() === 2, "setup: one in-flight, one attached");
+  g.q("applyCapsule(KIND_MULTIBALL)");
+  assert(g.liveCount() === 11,
+    `the fan must cover only the in-flight parent (10) plus the untouched attached ball (1), live=${g.liveCount()}`);
+  const attached = g.ballList().find((b) => b.active && b.attached);
+  assert(attached && attached.x === 480 && attached.vx === 0 && attached.vy === 0,
+    "the attached ball must remain parked with zero velocity");
+  for (const b of g.ballList()) {
+    if (!b.active || b.attached) continue;
+    assert(Math.hypot(b.vx, b.vy) > 0, "no clone may spawn with a zero velocity vector (rotating a parked ball is degenerate)");
+  }
+});
+
 check("three in-flight balls fill the board to the 30-ball cap; the pool never grows", () => {
   const g = boot();
   startRun(g, "exciting");
