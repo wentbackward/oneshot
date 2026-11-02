@@ -164,9 +164,10 @@
     border-color: var(--accent);
     background: rgba(92, 242, 176, 0.12);
   }
-  /* Start-screen mode selector (ticket #74): one group of named
-     play modes; the active mode carries .selected. The row accepts
-     a further option button without restyling (alleyway is next). */
+  /* Start-screen mode selector (ticket #74, alleyway row ticket
+     #76): one group of named play modes; the active mode carries
+     .selected. The row's generic .mode-opt treatment means every
+     further option button needs no restyling. */
   .modes {
     display: flex;
     gap: 0.5rem;
@@ -300,6 +301,7 @@
     <div class="modes">
       <button id="mode-classic" type="button" class="mode-opt selected" data-mode="classic">Classic</button>
       <button id="mode-exciting" type="button" class="mode-opt" data-mode="exciting">Exciting</button>
+      <button id="mode-alleyway" type="button" class="mode-opt" data-mode="alleyway">Alleyway</button>
     </div>
     <div class="sound">
       <button id="btn-mute" type="button" class="sound-opt">Sound On</button>
@@ -335,9 +337,11 @@
 // brick grid, ball-brick collision, scoring, level progression and
 // the win condition
 //
-// Single file: fixed-aspect 960×600 (16:10) logical stage, rendered
-// at an internal-resolution scale factor and letterboxed/centered in
-// the viewport (fit, not stretch), a requestAnimationFrame loop with
+// Single file: a default landscape 960×600 (16:10) logical stage —
+// the alleyway play mode switches it to a portrait 480×800 arena
+// with its own 5×10 brick grid (ticket #76) — rendered at an
+// internal-resolution scale factor and letterboxed/centered in the
+// viewport (fit, not stretch), a requestAnimationFrame loop with
 // a clamped frame delta, start / pause / game-over overlay screens
 // (the pause freezes the whole simulation; resume via the overlay
 // CTA or a fresh Escape/KeyP press), keyboard and pointer paddle
@@ -366,21 +370,23 @@
 // persisted in localStorage under their own named key, driven by
 // one THEMES table that at boot and on every selection change
 // applies the CSS custom properties and the canvas palette in a
-// single pass; named start-screen play modes (Classic / Exciting)
-// persisted in localStorage under their own named key, snapshotted
-// per run — classic keeps the legacy economy (× 1.0 drop factor,
-// the five-kind capsule table, the MAX_BALLS live-ball cap);
-// exciting multiplies the preset's drop rate by the named
-// EXCITING_DROP_FACTOR and rolls three capsule kinds that exist
-// ONLY in its drop table (ticket #75): invulnerable (a timed
-// window in which the ball smashes through breakable bricks —
-// fixed bricks still stop it — with no capsule drops and a
-// tinted, glowing ball), multiball (every in-flight ball instantly
-// fans into ten at a fixed angular spread, capped at MAX_BALLS_EXCITE
-// concurrent balls on the boot-sized pool), and blast (a timed
-// window in which every brick hit detonates all breakable bricks
-// within the named radius — one scan per hit, no chaining, fixed
-// bricks anchor without breaking);
+// single pass; named start-screen play modes
+// (Classic / Exciting / Alleyway) persisted in localStorage under
+// their own named key, snapshotted per run — classic keeps the
+// legacy economy (× 1.0 drop factor, the five-kind capsule table,
+// the MAX_BALLS live-ball cap); exciting multiplies the preset's
+// drop rate by the named EXCITING_DROP_FACTOR and rolls three
+// capsule kinds that exist ONLY in its drop table (ticket #75):
+// invulnerable (a timed window in which the ball smashes through
+// breakable bricks — fixed bricks still stop it — with no capsule
+// drops and a tinted, glowing ball), multiball (every in-flight
+// ball instantly fans into ten at a fixed angular spread, capped at
+// MAX_BALLS_EXCITE concurrent balls on the boot-sized pool), and
+// blast (a timed window in which every brick hit detonates all
+// breakable bricks within the named radius — one scan per hit, no
+// chaining, fixed bricks anchor without breaking); alleyway
+// (ticket #76) plays the classic economy on a portrait 480×800
+// stage with its own brick grid and pattern table;
 // and a start-screen sound toggle with a volume
 // slider, persisted as JSON { muted, volume } under their own
 // named key and driving the master bus level live (mute wins over
@@ -392,8 +398,18 @@
 
 // ---- Tunables (var: addressable as globals, e.g. from the console) ----
 var CANVAS_SCALE = 2;             // canvas pixels per stage pixel
-var GAME_W = 960;                 // fixed logical stage width (16:10)
-var GAME_H = 600;                 // fixed logical stage height (16:10)
+// Stage dimensions (logical px). CLASSIC_* is the landscape
+// default; ALLEYWAY_* is the portrait arena (ticket #76).
+// GAME_W/GAME_H are the RUNTIME stage size: they start at the
+// landscape default and beginRun() re-sets them per mode, so the
+// backing store, the CSS letterbox fit and the pointer mapping all
+// follow the selected mode.
+var CLASSIC_W = 960;              // landscape logical stage width (16:10)
+var CLASSIC_H = 600;              // landscape logical stage height (16:10)
+var ALLEYWAY_W = 480;             // alleyway portrait arena width
+var ALLEYWAY_H = 800;             // alleyway portrait arena height
+var GAME_W = CLASSIC_W;           // runtime stage width: beginRun() (re)sets per mode
+var GAME_H = CLASSIC_H;           // runtime stage height: beginRun() (re)sets per mode
 var UI_FONT = "monospace";        // retro face for canvas UI text
 var MAX_FRAME_SECONDS = 1 / 30;   // dt clamp: no teleports after tab switches
 var random = Math.random;          // mutable hook: test suites pin it for determinism
@@ -436,8 +452,12 @@ var MAX_PADDLE_BOUNCE_ANGLE = Math.PI / 3;  // 60 deg from vertical at the rim
 // (ULP-rounding-dependent) contact on a LATER frame.
 var BRICK_PIN_EPS = 1e-6;
 // Bricks: grid geometry (internal canvas px) over a fixed-size pool
-var BRICK_ROWS = 5;
-var BRICK_COLS = 10;
+var CLASSIC_BRICK_ROWS = 5;       // landscape grid rows
+var CLASSIC_BRICK_COLS = 10;      // landscape grid columns
+var ALLEYWAY_BRICK_ROWS = 10;     // alleyway portrait grid rows
+var ALLEYWAY_BRICK_COLS = 5;      // alleyway portrait grid columns
+var BRICK_ROWS = CLASSIC_BRICK_ROWS; // runtime: beginRun() (re)sets per mode
+var BRICK_COLS = CLASSIC_BRICK_COLS; // runtime: beginRun() (re)sets per mode
 var BRICK_SIDE_MARGIN = 24;
 var BRICK_TOP_MARGIN = 64;
 var BRICK_GAP = 6;
@@ -499,6 +519,25 @@ var LEVEL_PATTERNS = [
   [ "A.C.C.C.C.", "B.A.B.A.B.", "C.B.C.B.C.", "A.B.A.B.A.", "B.C.B.C.B." ],
   // 3 — overhang: a fixed slab hovering above an open field
   [ "AAAAAAAAAA", "CC.XXXX.CC", "BB.XX...BB", "BB......BB", "CCCC.CCCCC" ]
+];
+// Alleyway pattern table (ticket #76): ALLEYWAY_BRICK_ROWS
+// row-strings of ALLEYWAY_BRICK_COLS cells — the SAME cell grammar
+// as LEVEL_PATTERNS ('.' = empty, A/B/C = tiers, X = fixed), but
+// designed PORTRAIT: tall corridors and offset fixed slabs that read
+// as vertical alley structure, never as a squeezed landscape wall.
+// Deliberately a separate table (docs/DECISIONS.md): transposing the
+// landscape 5×10 strings would keep their wide-wall proportions on
+// a narrow field. Level k in alleyway mode takes
+// ALLEYWAY_LEVEL_PATTERNS[(k - 1) % ALLEYWAY_LEVEL_PATTERNS.length].
+var ALLEYWAY_LEVEL_PATTERNS = [
+  // 0 — spine: paired fixed posts flank tiered pillars for five
+  //   storeys, then staggered single guards on open rows
+  [ "AXBXC", "AXBXC", "AXBXC", "AXBXC", "AXBXC",
+    ".....", "A.C.A", ".....", "B.C.B", "....." ],
+  // 1 — slalom: offset fixed slabs (left, then right) form a
+  //   zig-zag corridor between stacked tiered ledges
+  [ ".....", ".AAA.", "XXX..", "B.C.B", ".....",
+    "...XX", "A.B.A", ".....", ".CCC.", "....." ]
 ];
 // Per-tier wear ramp (ticket #71): a PRECOMPUTED table of one fill
 // per damage stage, indexed by damage taken (0 = full hp = base
@@ -623,15 +662,20 @@ var DIFFICULTY = {
   hard: { serveSpeed: 560, paddleWidth: 96, dropRate: 0.15 },
 };
 
-// Play modes (ticket #74): the start-screen choice maps to one row
-// of named knobs. beginRun() snapshots the selected row onto the
-// run, so switching modes between runs never mutates the global
-// tuning above. Classic stays exactly 1.0 (legacy economy) and
-// keeps the legacy five-kind drop table; exciting multiplies the
-// preset's drop rate by the named EXCITING_DROP_FACTOR var and rolls
-// from the eight-kind table (ticket #75). The follow-up ticket
-// (the alleyway mode) branches on this single table and adds
-// rows/knobs without touching the selector plumbing.
+// Play modes (tickets #74/#75/#76): the start-screen choice maps to
+// one row of named knobs. beginRun() snapshots the selected row onto
+// the run, so switching modes between runs never mutates the global
+// tuning above. The row's numeric knob is dropFactor — classic and
+// alleyway stay exactly 1.0 (classic economy); exciting multiplies
+// the preset's drop rate by the named EXCITING_DROP_FACTOR var and
+// rolls from the eight-kind table (ticket #75); its live-ball cap
+// (MAX_BALLS_EXCITE vs MAX_BALLS) is decided in beginRun() from the
+// selected mode, not carried on the row. Classic keeps the legacy
+// five-kind drop table and the MAX_BALLS cap. Alleyway's portrait stage, grid and
+// pattern table are applied from the named ALLEYWAY_* vars in
+// beginRun()/spawnLevel(), not carried on the row — future modes
+// add a row here (plus named geometry vars where they need them)
+// without touching the selector plumbing.
 var MODE_KEY = "brickbreaker.mode";
 var DEFAULT_MODE = "classic";
 var MODES = {
@@ -639,6 +683,12 @@ var MODES = {
   // exciting references the named var, keeping a single source of
   // truth (the DIFFICULTY.normal row precedent).
   exciting: { dropFactor: EXCITING_DROP_FACTOR, capsuleKinds: CAPSULE_KINDS_EXCITE },
+  // alleyway (ticket #76): classic rules and economy — the portrait
+  // stage, grid and pattern table are applied in beginRun()/
+  // spawnLevel() from the named ALLEYWAY_* vars, so the row's only
+  // numeric knob stays the (×1.0) drop factor, and its capsule table
+  // is the classic five-kind one.
+  alleyway: { dropFactor: 1.0, capsuleKinds: CAPSULE_KINDS },
 };
 
 // ---- Palette (the page accent lives in the CSS --accent property;
@@ -853,11 +903,12 @@ var themeButtons = [
   [document.getElementById("theme-minimal"), "minimal"],
 ];
 // [element, mode-name] pairs for the start-screen play modes
-// (ticket #74); the list is what mark/select iterate, so a third
-// button (alleyway) slots in as one more row here and in MODES.
+// (tickets #74/#76); the list is what mark/select iterate, so a
+// further mode slots in as one more row here and in MODES.
 var modeButtons = [
   [document.getElementById("mode-classic"), "classic"],
   [document.getElementById("mode-exciting"), "exciting"],
+  [document.getElementById("mode-alleyway"), "alleyway"],
 ];
 var btnMute = document.getElementById("btn-mute");
 var soundVolumeInput = document.getElementById("sound-volume");
@@ -873,7 +924,7 @@ var lives = PLAYER_LIVES;         // (re)start-time snapshot of PLAYER_LIVES
 var resizePending = false;
 var lastFrameTime = null;
 // Paddle position is its centre x; the top-edge y derives from the
-// (constant) stage height.
+// run's stage height (constant within a run; beginRun() picks it per mode).
 var paddle = { x: 0 };
 // Runtime paddle width: widened while an expand capsule's effect is
 // live, otherwise the run's base width.
@@ -1204,7 +1255,7 @@ for (var i = 0; i < themeButtons.length; i += 1) {
   })(themeButtons[i][1]);
 }
 
-// ---- Mode selection (persisted, ticket #74) ----
+// ---- Mode selection (persisted, tickets #74/#76) ----
 // The start-screen play-mode choice, persisted as a JSON string
 // under the named key (the high-score / difficulty / theme
 // encoding precedent). Unknown or corrupt stored values fall back
@@ -1386,15 +1437,16 @@ ballSpeedInput.addEventListener("input", function () {
 });
 
 // ---- Fixed-aspect stage ----
-// The playfield is a constant GAME_W × GAME_H logical stage; the
-// backing store (stage × CANVAS_SCALE) is set once and never follows
-// the viewport, so the world geometry is monitor-independent.
-// The visible size is the largest 16:10 rectangle fitting the
-// viewport, written as CSS px (letterbox, centered by CSS) — fit,
-// not stretch (PRD section 5 responsive scaling). The fit is capped
-// at the native stage size: larger monitors render the stage at most
-// 1:1 in CSS, so CANVAS_SCALE keeps the raster sharp without
-// blurring it on an upscale.
+// The playfield is a GAME_W × GAME_H logical stage whose mode
+// (landscape classic/exciting, portrait alleyway — ticket #76)
+// beginRun() (re)selects; the backing store (stage × CANVAS_SCALE)
+// follows it via resizeCanvas(). The visible size is the largest
+// stage-shaped rectangle fitting the viewport, written as CSS px
+// (letterbox, centered by CSS) — fit, not stretch (PRD section 5
+// responsive scaling). The fit is capped at the native stage size:
+// larger monitors render the stage at most 1:1 in CSS, so
+// CANVAS_SCALE keeps the raster sharp without blurring it on an
+// upscale.
 function resizeCanvas() {
   if (canvas.width !== GAME_W * CANVAS_SCALE) canvas.width = GAME_W * CANVAS_SCALE;
   if (canvas.height !== GAME_H * CANVAS_SCALE) canvas.height = GAME_H * CANVAS_SCALE;
@@ -1526,9 +1578,10 @@ window.addEventListener("touchmove", function (e) {
 }, { passive: false });
 
 // ---- Bricks (fixed-size pool, mutated in place across levels) ----
-// Geometry derives from the constant stage size (the backing store
-// never changes after boot), so one layout is stable for the whole
-// run and never needs a re-fit.
+// Geometry derives from the run's stage size (the backing store is
+// fixed FOR A RUN — beginRun() picks it per mode and it holds for
+// the whole run), so one layout is stable for the run and never
+// needs a re-fit.
 function layoutBricks() {
   var bw = (canvas.width - 2 * BRICK_SIDE_MARGIN - (BRICK_COLS - 1) * BRICK_GAP) / BRICK_COLS;
   for (var i = 0; i < bricks.length; i += 1) {
@@ -1541,14 +1594,17 @@ function layoutBricks() {
   }
 }
 // Activate the pattern assigned to the current level (module
-// global) into the fixed pool in place: level k takes
-// LEVEL_PATTERNS[(k - 1) % LEVEL_PATTERNS.length], so the table
-// cycles forever and a spawn never allocates. '.' leaves a cell
-// dormant, a tier letter arms the matching one-hit tier, 'X' arms
-// the unbreakable fixed tier. bricksLeft counts breakable bricks
-// only, so fixed bricks never block a win.
+// global) into the fixed pool in place: the run's mode owns the
+// table (ticket #76) — alleyway levels pull from the portrait
+// ALLEYWAY_LEVEL_PATTERNS, so a portrait board never reads as a
+// transposed landscape wall — and level k takes table[(k - 1) %
+// table.length], cycling forever with no allocation. '.' leaves a
+// cell dormant, a tier letter arms the matching one-hit tier, 'X'
+// arms the unbreakable fixed tier. bricksLeft counts breakable
+// bricks only, so fixed bricks never block a win.
 function spawnLevel() {
-  var pattern = LEVEL_PATTERNS[(level - 1) % LEVEL_PATTERNS.length];
+  var table = runMode === "alleyway" ? ALLEYWAY_LEVEL_PATTERNS : LEVEL_PATTERNS;
+  var pattern = table[(level - 1) % table.length];
   var left = 0;
   for (var i = 0; i < bricks.length; i += 1) {
     var row = Math.floor(i / BRICK_COLS);
@@ -2045,6 +2101,24 @@ function beginRun() {
   // difficulty's: a mid-run mode click applies to the NEXT run.
   runMode = selectedMode;
   dropRate = preset.dropRate * MODES[runMode].dropFactor;
+  // Stage geometry follows the mode (ticket #76): alleyway runs the
+  // portrait arena with its own 5×10 grid; classic/exciting run the
+  // landscape default. Setting the runtime size vars and re-running
+  // the letterbox pass resizes the backing store at once. The
+  // geometry is a pure function of the SELECTED mode, so the stage
+  // behind the start screen reflects whatever mode is selected (an
+  // alleyway selection stays portrait there); the landscape stage
+  // returns with the next classic run. No dimension or grid residue
+  // survives a mode switch either way.
+  var portrait = runMode === "alleyway";
+  GAME_W = portrait ? ALLEYWAY_W : CLASSIC_W;
+  GAME_H = portrait ? ALLEYWAY_H : CLASSIC_H;
+  BRICK_ROWS = portrait ? ALLEYWAY_BRICK_ROWS : CLASSIC_BRICK_ROWS;
+  BRICK_COLS = portrait ? ALLEYWAY_BRICK_COLS : CLASSIC_BRICK_COLS;
+  resizeCanvas();
+  // A narrower portrait field may now trap a paddle the previous
+  // landscape run parked wide: re-clamp after the resize above.
+  clampPaddle();
   runCapsuleKinds = MODES[runMode].capsuleKinds;
   // Normal play keeps the classic MAX_BALLS cap; exciting raises it
   // to the multiball ceiling (the pool is sized to the larger at
