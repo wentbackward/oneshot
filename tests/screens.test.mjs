@@ -353,23 +353,28 @@ check("Enter on game over restarts cleanly: score 0, wave 1, full HP, zero live 
   // death bursts all consume `random`, so the residue layout must be
   // reproducible; the old count-based checkpoint drifted on the
   // unpinned fragment velocities (see docs/DECISIONS.md).
+  // Value note: 0.25 sends every fragment straight DOWN (heading
+  // 0.25·2π = π/2), i.e. toward the ship at (480, ~300) from the parked
+  // rocks above it — the worst case for the leftover-fragment race, so
+  // the pin demonstrably covers the drifting path. A "neutral" value
+  // would let fragments drift past the ship and quietly restore count
+  // variance; do not "clean it up".
   g.q("random = () => 0.25;");
   // Leave residue behind: two parked hazards plus the death cascade.
   g.placeAst(100, 100);
   g.placeAst(820, 500);
   killShip(g, 3);
-  // #80: structural precondition, not a live count. Each hit rock
-  // shatters ON TOP of the ship, so its fragments spawn within the
-  // ship-overlap radius too: at the next invuln expiry checkShipHits
+  // #80: precondition anchored on the pin, not on a live count. Each
+  // hit rock shatters ON TOP of the ship, so its fragments spawn within
+  // the ship-overlap radius too: at the next invuln expiry checkShipHits
   // (first overlapping slot wins) may consume a leftover fragment
   // instead of the freshly parked rock, and the surviving rock stands
   // in for the missing fragment pair — the live count at this
-  // checkpoint legally drifts between 6 and 8. Assert identities
-  // instead: both parked rocks alive at their parked coordinates,
-  // plus at least the two fragments the first hit rock must always
-  // leave (it is the only overlapping hazard at that moment, and a
-  // later hit never removes more residue than it leaves — the smallest
-  // tier shatters into nothing, all higher tiers replace one with two).
+  // checkpoint legally drifts between 6 and 8 UNPINNED. The pin above
+  // is what makes the checkpoint deterministic; the identity + floor
+  // assertions below (parked rocks by slot, residue bounded below) keep
+  // the precondition honest even if the pin were ever dropped, but they
+  // do not by themselves remove the count variance.
   const parkedAlive = g.q("asteroids.slots.filter((a) => a.active && a.vx === 0 && a.vy === 0 && " +
     "((a.x === 100 && a.y === 100) || (a.x === 820 && a.y === 500))).length");
   assert(parkedAlive === 2,

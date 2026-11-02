@@ -1797,9 +1797,9 @@ radius 20+14=34 > fragment 12+14=26). Fragment headings/speeds come from
 `checkShipHits` (first overlapping slot in slot order wins) legitimately
 consumed a leftover fragment instead of the freshly parked rock ~24% of
 runs (measured 400 replays: 95 runs at 6 hazards, 305 at 8). The
-surviving rock stands in for the missing fragment pair; the game is
-deterministic given its RNG stream, and nothing in asteroids.html is
-non-deterministic.
+freshly parked death rock thus survives at the ship while a leftover
+fragment is consumed instead; the game is deterministic given its RNG
+stream, and nothing in asteroids.html is non-deterministic.
 
 The checkpoint is now structural, per the ticket's fix direction: (a) the
 two parked hazards are identified by their parked coordinates and zero
