@@ -585,6 +585,29 @@ check("leak check: press-and-release Shift first, THEN press L with Shift down=f
   assert(g.level() === 3, `after the non-trigger, a real press must still work, level=${g.level()}`);
 });
 
+check("unsupported ordering is pinned: letter held FIRST, then Shift arrives must not trigger (no retro-shift)", () => {
+  const g = boot(960, 600);
+  start(g);
+  clearBoard(g);
+  assert(g.level() === 2, "setup: level 2");
+  const spd = g.serveSpeed();
+  // Plain L held (shiftKey false at its press edge — the game's only
+  // chance to see it), then Shift arrives over the held letter:
+  // the combo is browser-delivery-dependent, and we pin that the
+  // game treats it as a no-op rather than retro-activating.
+  g.key("keydown", "KeyL", { shiftKey: false });
+  g.key("keydown", "ShiftLeft", { shiftKey: true });
+  g.tick(2);
+  assert(g.level() === 2, `letter-then-Shift must NOT skip, level=${g.level()}`);
+  assert(g.serveSpeed() === spd, "the speed must not move on letter-then-Shift");
+  g.key("keyup", "ShiftLeft", { shiftKey: false });
+  g.key("keyup", "KeyL");
+  // The next clean press still works (nothing latched by the odd order).
+  g.key("keydown", "KeyL", { shiftKey: true });
+  g.key("keyup", "KeyL");
+  assert(g.level() === 3, `a clean press after the odd ordering must still work, level=${g.level()}`);
+});
+
 check("plain L and plain K (no Shift) are no-ops even mid-run", () => {
   const g = boot(960, 600);
   start(g);

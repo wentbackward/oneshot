@@ -1884,7 +1884,10 @@ arcade physics).
   `min(runServeBase × LEVEL_SPEED_GROWTH^(target−1), serveCeiling)`,
   i.e. the level's own legitimate speed against the run's scaled
   ceiling, so stepping back after
-  forward skips (or after cap saturation) is exact and never a delta.
+  forward skips (or after cap saturation) is exact to the prescribed
+  recompute formula (±1 ULP vs the forward `serveSpeed × growth`
+  chain at deep levels — a Math.pow association difference, ~1e-13
+  px/s, never a delta in any practical sense).
   Alternatives rejected: recomputing from
   `DIFFICULTY[selectedDifficulty].serveSpeed` at press time (would
   silently change under console retunes and trusts the start-screen
