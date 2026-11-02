@@ -1826,3 +1826,34 @@ arcade physics).
 - **Crack overlay: one polyline per damage taken, capped at `CRACK_LINES_MAX = 2`, drawn from a normalised point table `CRACK_POINTS` (per pool index: two polylines × three points) precomputed once at module load by a fixed integer scramble of the brick index.** The crack therefore has three properties the tests pin: it is deterministic (no `random` hook — the suites' RNG pin never touches it, and it is identical across frames and across respawned boards), it is per-brick (different index → different path), and deepening is prefix-stable (the stage-1 polyline stays put when the second line appears, so a brick "cracks further" instead of repainting randomly). Alternatives rejected: per-brick `random()` seeds (breaks the deterministic vm suites and changes the crack every respawn — exactly what the ticket forbids), per-frame crack geometry (arithmetic per brick per frame for something that never changes; the table costs ~1 KB at boot), or a richer jagged path (more than two short polylines adds no perceptual signal on a 26-px-tall brick and burns draw calls).
 - **Crack ink is the tier's deepest ramp stage (`tier.ramp[tier.hp − 1]`) rather than a fixed dark colour.** The ink then tracks the theme (a grey-black seam on the light minimal ground, a deep magenta on neon) and the draw path stays a pure table index. Rejected: a constant near-black stroke (clashed with the minimal theme's off-white ground) and per-frame shade mixing (allocation).
 - **The unbreakable tier keeps the bare fill path**: its ramp is `[base]` and its hp delta is permanently 0, so `drawBricks` issues exactly the same two ops it always did (base-colour `fillRect`, no strokes) — the ticket's "render path unchanged" reads as a byte-identical recorded op sequence in the durability suite, and single-hit (tier C) bricks likewise never leave `ramp[0]` because their first hit is lethal.
+## 2026-11-02 — Ticket #72: audible chip cue on non-lethal multi-hit brick hits
+
+- **Pitch is keyed on the hp the brick had AT IMPACT (pre-decrement), not
+  on the hp remaining after.** The acceptance criterion names the 3-hp
+  brick's first chip "tier-3" and its second "tier-2", which matches
+  pre-decrement hp exactly. Alternative: key on remaining hp (first chip
+  would be the tier-2 pitch) — rejected, contradicts the criterion's
+  naming.
+- **Frequencies as a named `var` table `SFX_BRICK_CHIP_FREQ`
+  (`[0, 440, 550, 660]`, index = hp) plus the shared recipe object
+  `SFX_BRICK_CHIP` (`{ wave: WAVE_SINE, freq, dur: 0.04 }`).** All entries
+  sit below the destruction pop (900 Hz) so chip and pop read
+  differently, and the spacing (440→550→660) is wide enough to read as
+  distinct pitches even on a small speaker. The recipe object is reused
+  and mutated in place by `scheduleBrickChip(hpAtHit)`, so the hit path
+  allocates nothing beyond what `scheduleSound` already allocates (one
+  oscillator + one envelope gain). Alternatives: one flat `var` per hp
+  (rejected — a table indexes naturally by hp and scales to a hypothetical
+  4-hp tier with no code change); computing the pitch arithmetically
+  (rejected — the ticket asks for named, console-retunable values).
+- **The chip is routed through the unchanged `scheduleSound` path**, so
+  it inherits the master bus, mute, volume, the SFX_PEAK/SFX_DECAY_FLOOR
+  envelope clamps and the gesture-gated context for free — no new
+  AudioContext, no new bus, no new DOM elements. Alternative: a dedicated
+  chip-only gain chain (rejected — unnecessary; the ticket explicitly
+  reuses the existing plumbing).
+- **Only `else` (non-lethal) hits call `scheduleBrickChip`; the fatal
+  branch still routes solely to `destroyBrick`.** Chip and pop are
+  mutually exclusive by construction (if/else), not by suppressing one
+  sound after scheduling both. Alternative: schedule both and rely on
+  timing (rejected — the criterion demands exactly one).
