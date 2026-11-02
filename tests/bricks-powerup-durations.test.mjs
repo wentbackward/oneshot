@@ -248,9 +248,9 @@ check("expand applied at T: the paddle is widened at T+D/2 and back to base widt
   stepUntil(g, T + D / 2);
   assert(g.paddleW() === widened,
     `the paddle must still be widened at T+D/2 (sim ${g.simTime()}), got ${g.paddleW()}`);
-  stepUntil(g, T + D + 1 / 60);
+  stepUntil(g, T + D); // the production clear is `simTime >= *Until`: gone at the FIRST frame at/just past T+D
   assert(g.paddleW() === g.baseW(),
-    `the paddle must be back to the base width once simTime passes T+D (sim ${g.simTime()}), got ${g.paddleW()}`);
+    `the paddle must be back to the base width once simTime reaches T+D (sim ${g.simTime()}), got ${g.paddleW()}`);
 });
 
 check("sticky applied at T: a ball hitting the paddle at T+D/2 still attaches (effect holds)", () => {
@@ -316,9 +316,9 @@ check("multiplier applied at T: the score window is still armed at T+D/2 and cle
   stepUntil(g, T + D / 2);
   assert(g.q("multUntil") !== -1 && g.q("simTime < multUntil"),
     `the multiplier window must still be armed at T+D/2 (sim ${g.simTime()})`);
-  stepUntil(g, T + D + 1 / 60);
+  stepUntil(g, T + D); // the production clear is `simTime >= multUntil`: cleared at the first frame at/just past T+D
   assert(g.q("multUntil") === -1,
-    `once simTime passes T+D the window must be cleared, got ${g.q("multUntil")} (sim ${g.simTime()})`);
+    `once simTime reaches T+D the window must be cleared, got ${g.q("multUntil")} (sim ${g.simTime()})`);
 });
 
 check("invulnerable applied at T: invulnActive() still true at T+D/2 and false at T+D", () => {
@@ -331,9 +331,9 @@ check("invulnerable applied at T: invulnActive() still true at T+D/2 and false a
   stepUntil(g, T + D / 2);
   assert(g.q("invulnActive()") === true,
     `invulnActive() must still be true at T+D/2 (sim ${g.simTime()})`);
-  stepUntil(g, T + D + 1 / 60);
+  stepUntil(g, T + D); // the production clear is `simTime >= invulnUntil`: inactive at the first frame at/just past T+D
   assert(g.q("invulnActive()") === false,
-    `invulnActive() must be false once simTime passes T+D (sim ${g.simTime()})`);
+    `invulnActive() must be false once simTime reaches T+D (sim ${g.simTime()})`);
 });
 
 check("blast applied at T: blastActive() still true at T+D/2 and false at T+D", () => {
@@ -346,9 +346,9 @@ check("blast applied at T: blastActive() still true at T+D/2 and false at T+D", 
   stepUntil(g, T + D / 2);
   assert(g.q("blastActive()") === true,
     `blastActive() must still be true at T+D/2 (sim ${g.simTime()})`);
-  stepUntil(g, T + D + 1 / 60);
+  stepUntil(g, T + D); // the production clear is `simTime >= blastUntil`: inactive at the first frame at/just past T+D
   assert(g.q("blastActive()") === false,
-    `blastActive() must be false once simTime passes T+D (sim ${g.simTime()})`);
+    `blastActive() must be false once simTime reaches T+D (sim ${g.simTime()})`);
 });
 
 // ================================================================
@@ -368,6 +368,12 @@ check("base serve speed and the level speed curve are untouched; the ball-speed 
   // The slider escape hatch keeps its 50-150% range.
   assert(g.q("MIN_BALL_SPEED_PCT") === 50 && g.q("MAX_BALL_SPEED_PCT") === 150,
     `the ball-speed slider range must stay 50-150, got ${g.q("MIN_BALL_SPEED_PCT")}-${g.q("MAX_BALL_SPEED_PCT")}`);
+  // Behavioural pin: the curve's APPLICATION survives a level advance too
+  // (guards a drive-by change to advanceLevel()'s growth, not just the vars).
+  g.q("advanceLevel()");
+  assert(g.q("level") === 2, `setup: advanced to level 2, got ${g.q("level")}`);
+  assert(g.q("serveSpeed") === 480 * 1.15,
+    `the level-2 serve speed must be the untouched curve 480 × 1.15, got ${g.q("serveSpeed")}`);
 });
 
 // ---------- summary ----------
