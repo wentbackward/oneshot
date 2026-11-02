@@ -1397,7 +1397,8 @@ function destroyBrick(index) {
 }
 // Cleared board: the level rises by exactly 1, the next layout is
 // spawned into the same pool, and the next serve is the current
-// speed grown by LEVEL_SPEED_GROWTH (capped at MAX_BALL_SPEED).
+// speed grown by LEVEL_SPEED_GROWTH (capped at the run's scaled
+// serve ceiling).
 function advanceLevel() {
   level += 1;
   serveSpeed = Math.min(serveSpeed * LEVEL_SPEED_GROWTH, serveCeiling);
