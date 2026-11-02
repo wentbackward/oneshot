@@ -648,6 +648,14 @@ check("a rock ~10 px astern of the nose survives the first hit-test frame of a f
   // gets a chance to contest the rock. 10 px astern of the nose —
   // inside the previous occupant's last step (~LASER_SPEED/60 =
   // 11.67 px at defaults), clear of a point at the muzzle.
+  // NOTE (review #67): this rock intentionally sits INSIDE the ship's
+  // collision circle — at the default SHIP_RADIUS = 14 the whole stale
+  // step (muzzle - LASER_SPEED/60) lies inside the hull disk (the muzzle
+  // is SHIP_RADIUS + LASER_LENGTH/2 = 17 px ahead of centre), so no rock
+  // can be simultaneously stale-reachable and hull-clear. The
+  // tick-free ordering above is the load-bearing premise; if a tick is
+  // ever inserted after placement, the fixture must be redesigned, not
+  // merely repositioned.
   placeAst(g, shipX, noseY + 10, 2);
   // Fire the fresh beam and hit-test it in the fire-hand-off state:
   g.key("Space", true);
@@ -656,6 +664,9 @@ check("a rock ~10 px astern of the nose survives the first hit-test frame of a f
   const slot = g.q(`laserPool.slots[${idx}]`);
   assert(slot.active, "the fresh beam must occupy the recycled slot");
   assert(slot.x === shipX && slot.y === noseY, "the fresh beam starts exactly at the muzzle");
+  // Mechanism proof (the behavioural weight is carried by the score-0
+  // and rock-alive asserts below): the fresh beam must start as a POINT
+  // at the muzzle — dt = 0, not the recycled slot's stale last step.
   assert(slot.dt === 0,
     `the fresh beam must start as a POINT at the muzzle (dt = 0), not inherit the recycled slot's last step (dt=${slot.dt})`);
   g.q("checkLaserKills()"); // the fresh beam's first hit-test, in the fire-hand-off state

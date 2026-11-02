@@ -1700,4 +1700,13 @@ slot's previous occupant fires several frames, dies, the slot recycles
 to a fresh beam aimed at a rock parked ~10 px astern of the nose; the
 rock must NOT score on the fresh beam's first hit-test frame, and
 MUST score once the beam's own swept front crosses it a few frames
-later.
+later. The fixture probes the `tryFire -> checkLaserKills` hand-off
+state directly (the two calls, back to back): in the shipped frame
+order `tryFire` runs, then `updateLasers` overwrites `s.dt` with the
+fresh beam's OWN step before the first `checkLaserKills`, so the stale
+step never actually reaches the hit test in natural play at 60 fps
+(the stale step would equal the fresh one). The test therefore pins
+the initializer CONTRACT — if a future reordering hit-tested before
+`updateLasers`, the stale step would resurface, and the suite would
+catch it rather than shipping a rock that scores before the beam
+visibly reaches it.
