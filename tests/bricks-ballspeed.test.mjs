@@ -137,6 +137,8 @@ function boot(width, height, initialStore = {}) {
     "btn-mute": makeEl("btn-mute"),
     "sound-volume": makeEl("sound-volume"),
     "ball-speed": makeEl("ball-speed"),
+    "ball-speed-label": makeEl("ball-speed-label"),
+    "ball-speed-value": makeEl("ball-speed-value"),
     "screen-gameover": makeEl("screen-gameover"),
     "btn-restart": makeEl("btn-restart"),
     "btn-menu": makeEl("btn-menu"),
@@ -219,6 +221,22 @@ function setSlider(g, v) {
   el.value = String(v);
   for (const cb of el.listeners["input"] ?? []) cb({ type: "input" });
 }
+// Fire the double-click gesture on the given element. The stub
+// elements do not model the DOM tree; in the real markup the
+// readout span sits INSIDE the row label, so a dblclick on it
+// bubbles to the label — model that single containment hop.
+// The slider is inside the label as well, but the game's handler
+// ignores dblclicks whose target is the input (a fine-adjust gesture,
+// not a reset), so the driver never needs to model a slider-
+// originated dblclick reaching the handler.
+const DBLCLICK_PARENTS = { "ball-speed-value": "ball-speed-label" };
+function dblClick(g, id) {
+  let cur = id;
+  while (cur) {
+    for (const cb of g.els[cur].listeners["dblclick"] ?? []) cb({ type: "dblclick" });
+    cur = DBLCLICK_PARENTS[cur];
+  }
+}
 // Begin a run through the start CTA and launch the serve ball via
 // the canvas click path; returns the launch speed (px/s).
 function startAndLaunch(g) {
@@ -234,19 +252,53 @@ const startSection = (() => {
   return m[1];
 })();
 
+// The raw <style> block source, for the structural-CSS checks.
+const styleBlock = (() => {
+  const m = html.match(/<style>[\s\S]*?<\/style>/);
+  if (!m) throw new Error("<style> block not found in bricks.html");
+  return m[0];
+})();
+
+// The body of one CSS rule for a literal selector (last occurrence).
+function cssRule(selector) {
+  const esc = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pat = new RegExp(esc + "\\s*{([^}]*)}", "g");
+  let last = null;
+  for (const m of styleBlock.matchAll(pat)) last = m[1];
+  return last;
+}
+
 // ================================================================
 // Requirement (static HTML): a range input id="ball-speed",
-// min 50, max 150, static default 100, lives in the start-screen
-// controls
+// min 50, max 150, static default 100, step 5 (ticket #90), lives
+// in the start-screen controls; the row carries the live readout
+// span and the labelled double-click reset target
 // ================================================================
-check("the start screen carries <input id=\"ball-speed\" type=\"range\" min=\"50\" max=\"150\" value=\"100\">", () => {
+check('the start screen carries <input id="ball-speed" type="range" min="50" max="150" step="5" value="100">', () => {
   const slider = startSection.match(/<input[^>]*id="ball-speed"[^>]*>/);
   assert(slider !== null, 'the start screen must carry an <input id="ball-speed">');
   const tag = slider[0];
-  for (const attr of ['type="range"', 'min="50"', 'max="150"', 'value="100"']) {
+  for (const attr of ['type="range"', 'min="50"', 'max="150"', 'step="5"', 'value="100"']) {
     assert(tag.includes(attr),
       `the ball-speed input must declare ${attr}, got: ${tag}`);
   }
+});
+
+check("the speed row carries the live readout (#ball-speed-value) next to a labelled reset target (#ball-speed-label)", () => {
+  assert(startSection.includes('id="ball-speed-label"'),
+    'the speed row label must carry id="ball-speed-label" (the double-click reset target)');
+  assert(startSection.includes('id="ball-speed-value"'),
+    'the speed row must carry id="ball-speed-value" (the live readout)');
+});
+
+check("AC4: the 100% notch is a CSS pseudo-element hook at the mid position, theme-coloured", () => {
+  const rule = cssRule(".speed .slider::after");
+  assert(rule !== null,
+    "the notch must be a ::after pseudo-element on the .speed .slider track wrapper");
+  assert(/left:\s*50%/.test(rule),
+    `100% is the MID of the 50-150 range, so the notch must anchor at left: 50%; got: ${rule.trim()}`);
+  assert(/background:\s*var\(--accent\)/.test(rule),
+    `the notch must be theme-coloured through the existing palette vars; got: ${rule.trim()}`);
 });
 
 check("the file gains no external references", () => {
@@ -305,6 +357,143 @@ check("the percent loads via the named key constant (BALL_SPEED_KEY) at boot", (
   assert(key === KEY, `the game's key drifted from the documented key, got ${JSON.stringify(key)}`);
   assert(g.storage.reads.includes(KEY),
     `boot must read ${KEY} from localStorage, reads were ${JSON.stringify(g.storage.reads)}`);
+});
+
+// ================================================================
+// AC2 (live readout): the readout element shows the booted value
+// (default 100 / stored value — including a hand-stored off-grid
+// 123) and tracks input events
+// ================================================================
+check("boot readout: a fresh boot shows the default 100% in the readout", () => {
+  const g = boot(960, 600);
+  assert(g.els["ball-speed-value"].textContent === "100%",
+    `the readout must show the booted default 100%, got ${JSON.stringify(g.els["ball-speed-value"].textContent)}`);
+});
+
+check("boot readout: a stored 125 boots the readout showing 125%", () => {
+  const g = boot(960, 600, { [KEY]: "125" });
+  assert(g.els["ball-speed-value"].textContent === "125%",
+    `the readout must show the stored 125%, got ${JSON.stringify(g.els["ball-speed-value"].textContent)}`);
+});
+
+check("the readout tracks input events (125 then 50)", () => {
+  const g = boot(960, 600);
+  setSlider(g, 125);
+  assert(g.els["ball-speed-value"].textContent === "125%",
+    `after moving to 125 the readout must show 125%, got ${JSON.stringify(g.els["ball-speed-value"].textContent)}`);
+  setSlider(g, 50);
+  assert(g.els["ball-speed-value"].textContent === "50%",
+    `after moving to 50 the readout must show 50%, got ${JSON.stringify(g.els["ball-speed-value"].textContent)}`);
+});
+
+// ================================================================
+// AC1 (5% grid): moving the slider only ever lands on multiples
+// of 5 — asserted via input events, boundaries included
+// ================================================================
+check("AC1: grid-aligned input events land exactly on the requested 5% stops (50..150 sweep)", () => {
+  const g = boot(960, 600);
+  for (let v = 50; v <= 150; v += 5) {
+    setSlider(g, v);
+    const pct = g.q("ballSpeedPct");
+    assert(pct === v, `a grid-aligned move to ${v} must hold ${v}, got ${pct}`);
+    assert(pct % 5 === 0, `the state must be a multiple of 5, got ${pct}`);
+  }
+});
+
+check("AC1: an off-grid input value snaps to the nearest 5% stop (123 -> 125, 88 -> 90)", () => {
+  const g = boot(960, 600);
+  setSlider(g, 123);
+  assert(g.q("ballSpeedPct") === 125,
+    `123 must snap to the nearest stop 125, got ${g.q("ballSpeedPct")}`);
+  setSlider(g, 88);
+  assert(g.q("ballSpeedPct") === 90,
+    `88 must snap to the nearest stop 90, got ${g.q("ballSpeedPct")}`);
+});
+
+// ================================================================
+// Off-grid stored value (requirement): a hand-stored 123 loads and
+// the readout shows 123 — the stored value is NOT rewritten until
+// the user moves the slider, when the move snaps to the grid
+// ================================================================
+check("a hand-stored off-grid 123 loads: slider 123, readout 123%, zero boot writes", () => {
+  const g = boot(960, 600, { [KEY]: "123" });
+  assert(g.els["ball-speed"].value === "123",
+    `the slider must restore the hand-stored 123 untouched, got ${JSON.stringify(g.els["ball-speed"].value)}`);
+  assert(g.els["ball-speed-value"].textContent === "123%",
+    `the readout must show the off-grid 123, got ${JSON.stringify(g.els["ball-speed-value"].textContent)}`);
+  assert(g.q("ballSpeedPct") === 123, `the module state must be 123, got ${g.q("ballSpeedPct")}`);
+  assert(g.storage.writes.length === 0,
+    `boot must not rewrite an off-grid stored value, writes were ${JSON.stringify(g.storage.writes)}`);
+});
+
+check("with a hand-stored 123, the first user move snaps to the grid and persists the snapped value", () => {
+  const g = boot(960, 600, { [KEY]: "123" });
+  setSlider(g, 125); // the user drags to the adjacent stop
+  assert(g.q("ballSpeedPct") === 125, `the move must land on 125, got ${g.q("ballSpeedPct")}`);
+  assert(g.storage.writes.length === 1,
+    `exactly one write must fire, writes were ${JSON.stringify(g.storage.writes)}`);
+  assert(JSON.parse(g.storage.writes[0][1]) === 125,
+    `the persisted value must be the snapped 125, got ${JSON.stringify(g.storage.writes[0][1])}`);
+});
+
+// ================================================================
+// AC3 (double-click reset): dblclick on the readout/label resets
+// the slider to 100, moves the thumb, updates the readout and
+// persists EXACTLY ONE write of 100; an already-100 dblclick is a
+// no-op that writes nothing
+// ================================================================
+check("AC3: double-click on the row label resets to 100 — thumb, readout, single persistence write", () => {
+  const g = boot(960, 600, { [KEY]: "125" });
+  dblClick(g, "ball-speed-label");
+  assert(g.els["ball-speed"].value === "100",
+    `the slider thumb must move to 100, got ${JSON.stringify(g.els["ball-speed"].value)}`);
+  assert(g.q("ballSpeedPct") === 100, `the module state must be 100, got ${g.q("ballSpeedPct")}`);
+  assert(g.els["ball-speed-value"].textContent === "100%",
+    `the readout must show 100%, got ${JSON.stringify(g.els["ball-speed-value"].textContent)}`);
+  assert(g.storage.writes.length === 1,
+    `the reset must perform exactly one persistence write, writes were ${JSON.stringify(g.storage.writes)}`);
+  const [wKey, wValue] = g.storage.writes[0];
+  assert(wKey === KEY, `the write must target ${KEY}, got ${JSON.stringify(wKey)}`);
+  assert(JSON.parse(wValue) === 100, `the write must be the JSON integer 100, got ${JSON.stringify(wValue)}`);
+});
+
+check("AC3: the double-click gesture works from the readout span too", () => {
+  const g = boot(960, 600, { [KEY]: "50" });
+  dblClick(g, "ball-speed-value");
+  assert(g.q("ballSpeedPct") === 100 && g.els["ball-speed"].value === "100",
+    `dblclick on the readout must reset the slider to 100, got state ${g.q("ballSpeedPct")} / value ${JSON.stringify(g.els["ball-speed"].value)}`);
+});
+
+check("a double-click ON THE SLIDER bubbles to the label but must NOT reset (fine-adjust gesture)", () => {
+  const g = boot(960, 600, { [KEY]: "125" });
+  // Model the real-browser bubble: the label's dblclick handler fires
+  // with e.target === the input (the slider sits inside the label).
+  for (const cb of g.els["ball-speed-label"].listeners["dblclick"] ?? []) {
+    cb({ type: "dblclick", target: g.els["ball-speed"] });
+  }
+  assert(g.q("ballSpeedPct") === 125 && g.els["ball-speed"].value === "125",
+    `a slider-targeted dblclick must not reset, got state ${g.q("ballSpeedPct")} / value ${JSON.stringify(g.els["ball-speed"].value)}`);
+  assert(g.storage.writes.length === 0,
+    `the swallowed reset must not persist, writes were ${JSON.stringify(g.storage.writes)}`);
+});
+
+check("a double-click reset already at 100 performs no write (no-op move invariant)", () => {
+  const g = boot(960, 600);
+  dblClick(g, "ball-speed-label");
+  assert(g.storage.writes.length === 0,
+    `an already-100 reset must not rewrite storage, writes were ${JSON.stringify(g.storage.writes)}`);
+  assert(g.els["ball-speed-value"].textContent === "100%",
+    `the readout must keep showing 100%`);
+});
+
+check("a reset write survives a simulated reload (fresh vm sandbox, same backing store)", () => {
+  const before = boot(960, 600, { [KEY]: "150" });
+  dblClick(before, "ball-speed-label");
+  assert(before.store[KEY] === "100",
+    `the reset must persist 100, got ${JSON.stringify(before.store[KEY])}`);
+  const after = boot(960, 600, before.store);
+  assert(after.els["ball-speed"].value === "100" && after.els["ball-speed-value"].textContent === "100%",
+    `the reload must restore the reset 100 (slider + readout), got ${JSON.stringify(after.els["ball-speed"].value)} / ${JSON.stringify(after.els["ball-speed-value"].textContent)}`);
 });
 
 // ================================================================

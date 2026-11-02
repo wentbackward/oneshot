@@ -2217,3 +2217,68 @@ arcade physics).
   containment (a cursor in the TOP/BOTTOM letterbox bars would
   still steer, but the complaint is about the cursor leaving the
   game area, any bar).
+## 2026-11-02 — Ticket #90: ball-speed slider 5% snap, 100% notch, live readout, double-click reset
+
+- **Off-grid snap is NEAREST-stop (round), after clamp — not floor/truncation.**
+  An off-grid programmatic input (e.g. 123) lands on 125, not 120: dragging near
+  a stop feels like a magnet rather than always one cell behind. Clamping first
+  keeps both bounds exact (10→50, 999→150). The snap is JS-side
+  (`snapBallSpeedPct`) because the vm stubs don't emulate the browser's native
+  `step` enforcement, so the grid guarantee is assertable via input events in
+  the deterministic suite; the native `step="5"` attribute stays as the
+  declarative source of the grid for real browsers. Alternatives rejected:
+  floor-snap (asymmetric, always ≤1 cell low — feels sluggish); drop the JS
+  snap and rely on native step alone (unassertable in the harness, and
+  programmatic `el.value` writes bypass native snapping in some engines).
+  Known cosmetic consequence: a hand-stored off-grid 123 boots with the
+  readout showing "123%" while a real browser's native step
+  sanitisation renders the thumb at the 125 stop until the user's first
+  move — the ticket's "don't rewrite a stored out-of-grid value unless
+  the user moves the slider" requirement makes the two views diverge
+  briefly; not a bug, do not "fix" by rewriting the stored value at boot.
+- **The live readout is a bare `<span id="ball-speed-value">` INSIDE the
+  existing row `<label>`**, inheriting the shared `.vol` row-label treatment
+  (size, letterspacing, uppercase, `--ink`) — zero new type rules; the flex
+  gap already spaces it from the "Ball Speed" text. Alternatives rejected:
+  a `<output>` sibling of the label (extra flex item, no semantic gain for a
+  value that is never the result of a form submission); giving the readout its
+  own font rule (duplicates `.vol`, drift-prone).
+- **The single `dblclick` reset handler lives on the row label
+  (`#ball-speed-label`), which wraps the readout** — in a real browser a
+  double-click anywhere on the "BALL SPEED 125%" text (readout or label)
+  bubbles to the one handler, satisfying "the readout (or the row label)"
+  without duplicated listeners. The vm stubs don't model the tree, so the
+  test driver models that one containment hop explicitly
+  (`DBLCLICK_PARENTS`). Alternatives rejected: a second listener on the
+  readout span (double firing in a real browser — second pass is a no-op but
+  dead complexity); making the readout a `<button>` (wrong widget for a
+  passive value; focus ring + button styling fight the row-label treatment).
+- **The 100% notch is `.speed .slider::after` — a pseudo-element tick on a
+  tight `.slider` wrapper around the input, anchored `left: 50%`** (100 is
+  exactly the mid of the 50..150 range), `background: var(--accent)` at
+  0.75 opacity, `pointer-events: none`. Pseudo-element over a span element:
+  no extra node, and crucially no new boot-time DOM id to replicate into all
+  23 bricks suites' stub maps (the house trap). The wrapper exists only so
+  the tick can be positioned against the TRACK's extent (the input itself
+  can't reliably host positioned children across engines); it is
+  `display: inline-flex` so it hugs the 120px input and 50% of the wrapper
+  is 50% of the track. Alternatives rejected: a separate `<span class=
+  "notch">` element (extra node/id churn for zero benefit); drawing the tick
+  on the canvas (the start screen is DOM, not canvas); per-theme CSS
+  overrides (the `--accent` variable already re-points per theme via
+  `applyTheme`, so one rule is theme-aware by construction).
+- **Reset is a state+persist operation, not an `input` dispatch.**
+  `resetBallSpeed()` assigns `ballSpeedPct = 100`, writes storage once, and
+  calls `syncBallSpeedControl()` (thumb + readout). Dispatching a synthetic
+  `input` would also work but couples the reset path to the parse-and-snap
+  path; the direct assignment is the simpler single-write path and keeps the
+  no-op invariant obvious (already 100 → early return, zero writes).
+  Alternatives rejected: synthetic `dispatchEvent(new Event("input"))`
+  (hidden coupling, harder to audit the write count); a dedicated
+  "reset" button (the ticket defines the gesture as double-click — a
+  second affordance duplicates the same state change).
+- **NEW BOOT-TIME DOM ELEMENTS: `#ball-speed-value` and
+  `#ball-speed-label` were added to ALL twenty-three bricks suites'
+  element stub maps** (verified by grep: one stub line per id per suite),
+  not just `tests/bricks-ballspeed.test.mjs` — the house trap from the last
+  wave, applied once, exhaustively.

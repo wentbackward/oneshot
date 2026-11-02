@@ -148,6 +148,8 @@ function boot(width, height, initialStore = {}) {
     "btn-mute": makeEl("btn-mute"),
     "sound-volume": makeEl("sound-volume"),
     "ball-speed": makeEl("ball-speed"),
+    "ball-speed-label": makeEl("ball-speed-label"),
+    "ball-speed-value": makeEl("ball-speed-value"),
     "leaderboard-start": makeEl("leaderboard-start"),
     "screen-gameover": makeEl("screen-gameover"),
     "btn-restart": makeEl("btn-restart"),

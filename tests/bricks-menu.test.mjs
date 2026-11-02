@@ -142,6 +142,8 @@ function boot(width, height, seedStore = {}) {
     "btn-mute": makeEl("btn-mute"),
     "sound-volume": makeEl("sound-volume"),
     "ball-speed": makeEl("ball-speed"),
+    "ball-speed-label": makeEl("ball-speed-label"),
+    "ball-speed-value": makeEl("ball-speed-value"),
     "btn-resume": makeEl("btn-resume"),
     "btn-restart": makeEl("btn-restart"),
     "btn-menu": makeEl("btn-menu"),
