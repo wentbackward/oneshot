@@ -22,6 +22,12 @@
 //     subsequently scheduled envelope terminate at 0.
 //  4. No external refs, no `new Image(`/`new Worker(` in bricks.html
 //     (mirrors the dev-loop gate checks — no audio assets).
+//  5. (ticket #72) Non-lethal hits on multi-hit bricks schedule a chip
+//     blip on the master bus whose pitch descends with the brick's hp
+//     at hit (3-hp brick: tier-3 pitch, then the lower tier-2 pitch);
+//     the fatal hit schedules only the destruction pop, never a chip.
+//     1-hp bricks and fixed bricks schedule no chip at all; mute/volume
+//     honours apply to chips through the same bus as every other recipe.
 //
 // Run: node tests/bricks-audio.test.mjs
 // ================================================================
@@ -347,7 +353,7 @@ function boot(width = 960, height = 600, opts = {}) {
       const cols = q("BRICK_COLS");
       return q(`(() => {
         const t = bricks[${row * cols + col}];
-        return { active: t.active, tier: t.tier, x: t.x, y: t.y, w: t.w, h: t.h };
+        return { active: t.active, tier: t.tier, hp: t.hp, x: t.x, y: t.y, w: t.w, h: t.h };
       })()`);
     },
     key(type, code) {
@@ -379,6 +385,36 @@ const start = (g) => {
   g.els["btn-start"].click();
   g.tick(1);
 };
+
+// Route one direct hit through the game's own collideBricks(): park
+// the serve ball on the brick's centre, call collideBricks once, then
+// clear the per-frame charge (update() normally clears it at frame
+// end) and re-park the ball so repeat hits work. Returns the brick's
+// state after the hit.
+function chipHit(g, row, col) {
+  const b = g.brickAt(row, col);
+  assert(b.active, `setup: brick (${row},${col}) must be active`);
+  g.q(`
+    balls[0].attached = true;
+    balls[0].x = ${b.x + b.w / 2};
+    balls[0].y = ${b.y + b.h / 2};
+    balls[0].vx = 0; balls[0].vy = 0;
+    collideBricks(balls[0]);
+    bricks[${row * g.q("BRICK_COLS") + col}].charged = false;
+    balls[0].attached = true;
+    balls[0].vx = 0; balls[0].vy = 0;
+    1`
+  );
+  return g.brickAt(row, col);
+}
+
+// Move the volume slider the way the browser would: set the DOM
+// value, then fire the "input" event.
+function setVolume(g, v) {
+  const el = g.els["sound-volume"];
+  el.value = String(v);
+  for (const cb of el.listeners["input"] ?? []) cb({ type: "input" });
+}
 
 // Park a flying ball one frame above the paddle top, falling straight
 // down (vx = 0) at the paddle centre — the classic single-tick bounce.
@@ -766,6 +802,131 @@ check("bricks.html introduces no `new Image(` / `new Worker(` constructors and n
   const extHits = html.match(/(src|href)=/g) ?? [];
   assert(extHits.length === 0,
     `bricks.html must contain no external src=/href= refs, found ${extHits.length}`);
+});
+
+// ================================================================
+// Criterion 5 (ticket #72): audible chip cue on non-lethal multi-hit
+// brick hits — pitch descends as the brick weakens, the fatal hit
+// keeps the destruction pop, 1-hp/fixed bricks never chip, and the
+// master bus (mute + volume) honours chips exactly like every
+// other recipe
+// ================================================================
+check("the chip recipe is a named recipe and the pitch table is named, strictly descending with hp, all below the destruction pop", () => {
+  const g = boot(960, 600, { audio: true });
+  const r = g.q("SFX_BRICK_CHIP");
+  assert(r && r.wave === g.q("WAVE_SINE"),
+    `SFX_BRICK_CHIP.wave must be the named sine wave, got ${r && r.wave}`);
+  assert(Number.isFinite(r.dur) && r.dur > 0 && r.dur < g.q("SFX_BRICK_BREAK.dur"),
+    `SFX_BRICK_CHIP.dur must be a short positive duration (a blip, shorter than the pop), got ${r && r.dur}`);
+  const freqs = g.q("SFX_BRICK_CHIP_FREQ");
+  assert(Array.isArray(freqs) && freqs.length >= 4,
+    `SFX_BRICK_CHIP_FREQ must be a named table indexed by hp (at least [0, 1, 2, 3]), got ${JSON.stringify(freqs)}`);
+  for (let hp = 1; hp < freqs.length; hp += 1) {
+    assert(Number.isFinite(freqs[hp]) && freqs[hp] > 0,
+      `SFX_BRICK_CHIP_FREQ[${hp}] must be a positive frequency, got ${freqs[hp]}`);
+    if (hp > 1) {
+      assert(freqs[hp] < freqs[hp - 1],
+        `the pitch must descend with hp: tier-${hp} (${freqs[hp]}) must be lower than tier-${hp - 1} (${freqs[hp - 1]})`);
+    }
+    assert(freqs[hp] < g.q("SFX_BRICK_BREAK.freq"),
+      `tier-${hp} chip (${freqs[hp]} Hz) must sit below the destruction pop (${g.q("SFX_BRICK_BREAK.freq")} Hz)`);
+  }
+});
+
+check("non-lethal hits on a 3-hp brick chip: first hit at the tier-3 pitch, second at the lower tier-2 pitch; the fatal hit schedules the destruction pop and no chip", () => {
+  const g = boot(960, 600, { audio: true });
+  start(g);
+  g.q("random = () => 1; 1"); // the fatal kill must not release a capsule
+  const b0 = g.brickAt(0, 0);
+  assert(b0.tier === 0 && g.q(`bricks[0].hp`) === 3,
+    `setup: row 0 of level 1 must be a 3-hp tier, got tier=${b0.tier} hp=${g.q("bricks[0].hp")}`);
+  const freqs = g.q("SFX_BRICK_CHIP_FREQ");
+  const os0 = g.audio.rec.oscillators.length;
+  const bs0 = g.audio.rec.bufferSources.length;
+  // Hit 1: 3 hp -> 2 hp, non-lethal, tier-3 chip
+  const after1 = chipHit(g, 0, 0);
+  assert(after1.active && after1.hp === 2, `hit 1 must leave the brick alive at hp 2, hp=${after1.hp} active=${after1.active}`);
+  assert(g.audio.rec.oscillators.length === os0 + 1, `a non-lethal hit must schedule exactly one chip oscillator, got ${g.audio.rec.oscillators.length - os0}`);
+  assert(g.audio.rec.bufferSources.length === bs0,
+    `a non-lethal hit must not schedule the destruction pop, created ${g.audio.rec.bufferSources.length - bs0} buffer sources`);
+  const chip1 = g.audio.rec.oscillators[os0];
+  assert(chip1.type === g.q("WAVE_SINE"), `the chip must be the named sine wave, got ${chip1.type}`);
+  assert(chip1.frequency.value === freqs[3],
+    `the first chip (3-hp brick) must sound the tier-3 pitch ${freqs[3]} Hz, got ${chip1.frequency.value}`);
+  assertClose(chip1.stopTimes[0] - chip1.startTimes[0], g.q("SFX_BRICK_CHIP.dur"), 1e-9,
+    `the chip must last exactly SFX_BRICK_CHIP.dur`);
+  // Hit 2: 2 hp -> 1 hp, non-lethal, tier-2 chip (lower)
+  const os1 = g.audio.rec.oscillators.length;
+  const after2 = chipHit(g, 0, 0);
+  assert(after2.active && after2.hp === 1, `hit 2 must leave the brick alive at hp 1, hp=${after2.hp}`);
+  assert(g.audio.rec.oscillators.length === os1 + 1, "hit 2 must schedule exactly one chip oscillator");
+  assert(g.audio.rec.bufferSources.length === bs0, "hit 2 must not schedule the destruction pop");
+  const chip2 = g.audio.rec.oscillators[os1];
+  assert(chip2.frequency.value === freqs[2],
+    `the second chip (2-hp brick) must sound the tier-2 pitch ${freqs[2]} Hz, got ${chip2.frequency.value}`);
+  assert(chip2.frequency.value < chip1.frequency.value,
+    `the brick must weaken audibly: the tier-2 pitch (${chip2.frequency.value}) must be lower than the tier-3 pitch (${chip1.frequency.value})`);
+  // Hit 3: 1 hp -> 0 hp, fatal: the destruction pop, no chip
+  const os2 = g.audio.rec.oscillators.length;
+  const after3 = chipHit(g, 0, 0);
+  assert(!after3.active, `hit 3 must destroy the brick, active=${after3.active}`);
+  assert(g.audio.rec.bufferSources.length === bs0 + 1,
+    `the fatal hit must schedule the destruction pop (one buffer source), created ${g.audio.rec.bufferSources.length - bs0 - 1}`);
+  assert(g.audio.rec.oscillators.length === os2,
+    `the fatal hit must schedule NO chip, created ${g.audio.rec.oscillators.length - os2} extra oscillators`);
+});
+
+check("a 1-hp brick schedules only the destruction sound on its hit — no chip, no oscillator", () => {
+  const g = boot(960, 600, { audio: true });
+  start(g);
+  g.q("random = () => 1; 1"); // the kill must not release a capsule
+  const b0 = g.brickAt(2, 0);
+  assert(b0.tier === 2 && g.q(`bricks[${2 * g.q("BRICK_COLS")}].hp`) === 1,
+    `setup: row 2 of level 1 must be a 1-hp tier, got tier=${b0.tier} hp=${g.q(`bricks[${2 * g.q("BRICK_COLS")}].hp`)}`);
+  const os0 = g.audio.rec.oscillators.length;
+  const bs0 = g.audio.rec.bufferSources.length;
+  const after = chipHit(g, 2, 0);
+  assert(!after.active, `the 1-hp brick must die on its first hit, active=${after.active}`);
+  assert(g.audio.rec.bufferSources.length === bs0 + 1,
+    "the hit must schedule the destruction pop");
+  assert(g.audio.rec.oscillators.length === os0,
+    `a 1-hp brick must never chip, created ${g.audio.rec.oscillators.length - os0} extra oscillators`);
+});
+
+check("a fixed (unbreakable) brick stays silent: no chip, no pop, no hp or charge change", () => {
+  const g = boot(960, 600, { audio: true });
+  start(g);
+  const idx = 0 * g.q("BRICK_COLS") + 1; // row 0, col 1: a 3-hp brick
+  g.q(`bricks[${idx}].unbreakable = true; bricks[${idx}].hp = 9; 1`); // console-marked fixed
+  const n0 = soundParts(g);
+  const after = chipHit(g, 0, 1);
+  assert(after.active && after.hp === 9,
+    `a fixed brick must survive every hit with hp intact, hp=${after.hp} active=${after.active}`);
+  assert(g.q(`bricks[${idx}].charged`) === false,
+    "a fixed brick must never spend a damage charge");
+  assert(soundParts(g) === n0,
+    `a hit on a fixed brick must schedule no sound, scheduled ${soundParts(g) - n0} nodes`);
+});
+
+check("mute ON drives the chip through the bus at gain 0; unmuting at volume 50 plays the chip at SOUND_BASE x 0.5", () => {
+  const g = boot(960, 600, { audio: true });
+  start(g);
+  g.els["btn-mute"].click(); // mute ON
+  g.q("random = () => 1; 1"); // no capsule from any eventual kill
+  const e0 = envelopes(g).length;
+  const b = chipHit(g, 0, 0); // non-lethal: the chip still schedules...
+  assert(b.active && b.hp === 2, "setup: the chip hit must land on the 3-hp brick");
+  assert(envelopes(g).length === e0 + 1,
+    "a muted chip must still schedule its envelope (silence is the bus, not skipped scheduling)");
+  const [bus] = busGains(g);
+  assert(bus !== undefined, "setup: the bus must exist after a scheduled sound");
+  assertClose(bus.gain.value, 0, 0,
+    `with mute ON the chip must schedule at bus gain 0, got ${bus.gain.value}`);
+  g.els["btn-mute"].click(); // mute OFF
+  setVolume(g, 50);
+  chipHit(g, 0, 0);
+  assertClose(bus.gain.value, g.q("SOUND_BASE") * 0.5, 1e-9,
+    `after unmuting at volume 50 the chip must play at SOUND_BASE x 0.5, got ${bus.gain.value}`);
 });
 
 // ---------- summary ----------
