@@ -515,9 +515,10 @@ check("setPaddleX maps through getBoundingClientRect(), not window.innerWidth, a
   g.setRect({ left: (480 - w) / 2, top: (800 - h) / 2, width: w, height: h });
   assert(g.canvas.width === g.q("GAME_W * CANVAS_SCALE") && g.canvas.height === g.q("GAME_H * CANVAS_SCALE"),
     `the backing store must stay fixed at ${g.q("GAME_W * CANVAS_SCALE")}x${g.q("GAME_H * CANVAS_SCALE")}, got ${g.canvas.width}x${g.canvas.height}`);
-  g.mouseMove(120); // inside the rect
   const rect = g.canvas.rect;
   const want = ((120 - rect.left) / rect.width) * g.canvas.width; // 480
+  g.q("paddle.x = " + (want + 10) + ";"); // park within the #91 per-event cap
+  g.mouseMove(120); // inside the rect
   assertClose(g.paddleX(), want, 1,
     `post-resize mousemove clientX 120 must land the paddle at ${want} px (not (120/480)·width), got ${g.paddleX()}`);
 });
