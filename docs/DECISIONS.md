@@ -1926,3 +1926,50 @@ arcade physics).
   element stub map gains an id (the house trap from the last wave is
   vacuous here — verified: the new suite's stub map is byte-for-byte
   the existing one).
+
+## 2026-11-02 — Ticket #74: CLASSIC/EXCITING mode selector scaffold with drop-rate economy
+
+- **One named `MODES` table is the seam follow-ups branch on — not a
+  per-mode boolean flag.** Each mode is a row of named knobs
+  (`{ dropFactor }` for now); `beginRun()` snapshots both
+  `runMode = selectedMode` and the derived
+  `dropRate = preset.dropRate * MODES[runMode].dropFactor`, so a
+  mid-run click can never disturb a live run (the difficulty snapshot
+  precedent). The exciting-capsules ticket will add its knobs as
+  further fields on the `exciting` row; the alleyway ticket adds a
+  row plus one more `modeButtons` entry, and the mark/select loops
+  pick both up without changes. Alternatives rejected: a
+  `selectedMode === "exciting"` branch in `maybeDropCapsule`
+  (buries mode knowledge in the hot path and scales quadratically
+  with modes); a `selected`-attribute CSS approach (the
+  class-list precedent is what difficulty/theme already do).
+- **`EXCITING_DROP_FACTOR` is a top-level mutable `var` (2.0), and
+  `MODES.exciting.dropFactor` references it at module load** — the
+  `DIFFICULTY.normal` row precedent, keeping one source of truth;
+  the per-run snapshot freezes it for the run, so console retunes
+  apply to the next run, exactly like the difficulty knobs.
+  `EXCITING_DROP_FACTOR` sits beside `POWERUP_DROP_RATE` in the
+  power-up tuning block since it scales that quantity.
+- **Economy is a MULTIPLIER on the selected preset's rate, not a
+  fixed exciting rate** — so Easy+Exciting (0.35 × 2.0 = 0.70) and
+  Hard+Exciting (0.15 × 2.0 = 0.30) stay on their preset curves, and
+  classic remains bit-identical to the pre-ticket roll
+  (`× 1.0` is an exact identity in IEEE 754, asserted as a
+  regression in `tests/bricks-modes.test.mjs`). Alternative rejected:
+  a parallel `EXCITING_DROP_RATES` table (duplicates every future
+  difficulty knob for one mode's one tweak).
+- **Button ids follow the selector-family precedent
+  (`difficulty-easy`, `theme-classic`) as `mode-classic` /
+  `mode-exciting` with `data-mode` attributes**, rather than the
+  ticket's suggested `#btn-mode-*` ids — the ticket allows either,
+  and consistency with the two existing option rows beats the
+  suggestion. The new `tests/bricks-modes.test.mjs` pins the
+  `data-mode` static markup and drives behaviour through the
+  data-attribute-free stub ids; the gate gained the same
+  exactly-one-`selected`-on-`data-mode="classic"` check the
+  difficulty row has.
+- **NEW BOOT-TIME DOM ELEMENTS: `mode-classic` and `mode-exciting`
+  were added to ALL twenty bricks suites' element stub maps**
+  (verified by grep: one stub line per suite), not just the new
+  suite — the house trap from the last wave, applied once,
+  exhaustively.
