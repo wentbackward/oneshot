@@ -1670,4 +1670,43 @@ Follow-up to the entry above, from code review:
   `tryFire` reuses a laser slot without resetting `slot.dt`, so a
   fresh beam's first sweep segment is lengthened by the previous
   occupant's step (a short phantom reach behind the nose). Tracked
-  separately (issue #53), not fixed here.
+  separately (issue #67), not fixed here.
+
+### 2026-11-01 — laser: reset slot.dt on fire (ticket #67)
+
+Bug: `tryFire` reactivated a recycled laser slot without resetting
+`slot.dt`, and `checkLaserKills` rebuilds each beam's swept segment
+backwards as `pos - dir * LASER_SPEED * s.dt`. A fresh beam therefore
+carried its previous occupant's last step as phantom reach behind the
+muzzle (up to `LASER_SPEED / 30` ≈ 16.7 px at defaults): a rock parked
+just astern of the nose could score before the beam had visibly
+reached it, and the first-frame sweep was asymmetric with every later
+frame.
+
+Fix: `slot.dt = 0` at (re)initialization in `tryFire`, beside the
+existing x/y/dx/dy writes. The beam starts as a point at the muzzle
+and its swept segment grows from its own motion only.
+
+Rejected alternative: clamp or reject the first hit-test frame inside
+`checkLaserKills` (e.g. `if (s.framesLive === 1) use a point`) — it
+would add a per-frame branch in the hot loop to compensate for an
+initializer that should have been complete; fixing the writer is the
+single-line structural fix, and it matches the documented bootstrap
+behaviour (first rAF frame carries dt = 0; the beam releases from the
+nose as a point).
+
+Test: `tests/lasers.test.mjs` gains a recycled-slot fixture — the
+slot's previous occupant fires several frames, dies, the slot recycles
+to a fresh beam aimed at a rock parked ~10 px astern of the nose; the
+rock must NOT score on the fresh beam's first hit-test frame, and
+MUST score once the beam's own swept front crosses it a few frames
+later. The fixture probes the `tryFire -> checkLaserKills` hand-off
+state directly (the two calls, back to back): in the shipped frame
+order `tryFire` runs, then `updateLasers` overwrites `s.dt` with the
+fresh beam's OWN step before the first `checkLaserKills`, so the stale
+step never actually reaches the hit test in natural play at 60 fps
+(the stale step would equal the fresh one). The test therefore pins
+the initializer CONTRACT — if a future reordering hit-tested before
+`updateLasers`, the stale step would resurface, and the suite would
+catch it rather than shipping a rock that scores before the beam
+visibly reaches it.

@@ -301,6 +301,11 @@
       slot.y = ship.y + dy * nose;
       slot.dx = dx;
       slot.dy = dy;
+      slot.dt = 0; // a fresh beam is a POINT at the muzzle: checkLaserKills
+                   // rebuilds the sweep segment backwards as pos - dir *
+                   // LASER_SPEED * s.dt, so a recycled slot's stale last step
+                   // would append a phantom reach astern of the nose on the
+                   // first hit-test frame
       slot.age = 0; // sim-time lifetime starts at the shot
       slot.serial = ++laserSerial; // identity the shatter immunity below keys off (never 0)
       lastFireAt = gameTime;
