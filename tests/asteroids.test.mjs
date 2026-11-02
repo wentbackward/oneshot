@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 // ================================================================
-// Unit tests — asteroid subsystem (ticket #4)
+// Unit tests — asteroid subsystem (ticket #4, adapted for the tiered
+// rocks of ticket #51: single-size r fixtures replaced by tier-radius
+// fixtures, SCORE_PER_ASTEROID replaced by the per-tier knobs, and a
+// pinned-seed stream re-derived for the radius roll dropping out of the
+// spawn sequence)
 //
 // Same harness style as tests/lasers.test.mjs: runs the REAL
 // <script> from asteroids.html in a sandboxed vm context with stubbed
@@ -126,25 +130,30 @@ function boot(width = 960, height = 600) {
   };
 }
 
-// Manually place a live asteroid at (x, y) with a given radius.
-function placeAst(g, x, y, r = 20) {
+// Manually place a live asteroid at (x, y) with a given radius and tier.
+function placeAst(g, x, y, r, tier) {
   const s = g.q("asteroids.slots.find((a) => !a.active)");
   assert(s, "an inactive asteroid slot was available for the test fixture");
   g.q(`(() => { const s = asteroids.slots.find((a) => !a.active);
-    s.active = true; s.x = ${x}; s.y = ${y}; s.r = ${r};
+    s.active = true; s.x = ${x}; s.y = ${y}; s.r = ${r}; s.tier = ${tier};
     s.vx = 0; s.vy = 0;
     s.shape.length = 6; s.rot = 0; s.spin = 0; return true; })()`);
 }
 
 // ================================================================
-// Criterion 1 (constants): ASTEROID_BASE / ASTEROID_GROWTH / 
-// SCORE_PER_ASTEROID are named, mutable tuning constants with the
-// required defaults
+// Criterion 1 (constants): ASTEROID_BASE / ASTEROID_GROWTH and the
+// per-tier score knobs are named, mutable tuning constants with the
+// required defaults (#51: single SCORE_PER_ASTEROID replaced by
+// SCORE_PER_LARGE / MEDIUM / SMALL)
 // ================================================================
-check("ASTEROID_BASE and ASTEROID_GROWTH default to 6 / +2, and SCORE_PER_ASTEROID defaults to exactly 10", () => {
+check("ASTEROID_BASE and ASTEROID_GROWTH default to 6 / +2, and per-tier scores default to 20 / 10 / 5", () => {
   const g = boot();
-  assertClose(g.q("SCORE_PER_ASTEROID"), 10, 0, "default SCORE_PER_ASTEROID must be 10");
-  assertClose(g.q("ASTEROID_BASE"), 6, 0, "default ASTEROID_BASE must be 6 (wave 1 roster)");
+  assertClose(g.q("SCORE_PER_LARGE"), 20, 0, "default SCORE_PER_LARGE must be 20");
+  assertClose(g.q("SCORE_PER_MEDIUM"), 10, 0, "default SCORE_PER_MEDIUM must be 10");
+  assertClose(g.q("SCORE_PER_SMALL"), 5, 0, "default SCORE_PER_SMALL must be 5");
+  assert(g.q("typeof SCORE_PER_ASTEROID === 'undefined'") === true,
+    "the single-size SCORE_PER_ASTEROID must be gone (replaced by per-tier knobs)");
+  assertClose(g.q("ASTEROID_BASE"), 6, 0, "default ASTEROID_BASE must be 6 (wave 1 large-rock roster)");
   assertClose(g.q("ASTEROID_GROWTH"), 2, 0, "default ASTEROID_GROWTH must be 2");
   assert(Number.isInteger(g.q("ASTEROID_BASE")) && g.q("ASTEROID_BASE") > 0,
     "ASTEROID_BASE must be a positive integer by default");
@@ -168,6 +177,11 @@ check("zeroing the wave rosters stops all asteroid spawning", () => {
 check("active asteroid count builds up to the wave roster and follows reassignments", () => {
   const g = boot(400, 300);
   g.clearField();
+  // Invulnerable ship from the very first frame: rocks that strike the
+  // hull pass through WITHOUT shattering (#51 hull impacts now spawn
+  // fragments, and the first hit would shatter even with the extended
+  // INVULN_MS, pushing the live count past the large-rock roster).
+  g.q("INVULN_MS = 1e9; invulnUntil = Number.POSITIVE_INFINITY");
   // Deterministic seed chosen so a field of 2 fills within one spawn burst:
   g.q(`random = ${mulberry32Source(4)}`);
   // Wave-shaped world: flat roster, no drones.
@@ -241,17 +255,19 @@ check("edge spawns within the safe radius are rejected; a candidate outside it i
   // Ship sits near the left edge so the left edge band lies inside the 200 px safe disc.
   g.q("ship.x = 100; ship.y = 150; ship.vx = 0; ship.vy = 0");
   const before = g.count();
-  // Stream where every candidate lands at (-15,150), only 115 px from the ship:
-  // all retries must be rejected and the spawn abandoned.
+  // Stream where every candidate lands on the bottom edge within ~200 px
+  // of the ship: all retries must be rejected and the spawn abandoned.
   g.q(`random = (() => { const r = [0.5, 0.25, 0.5]; let i = 0; return () => r[i++ % r.length]; })()`);
   assert(g.q("spawnAsteroid()") === false,
     "candidates within the safe radius must be rejected (spawn returns false)");
   assert(g.count() === before, "rejected spawns must not change the field");
-  // Stream whose single candidate is the right edge at (317,150), 217 px from the ship.
+  // Stream whose single candidate is the right edge at (325,150) — the
+  // fixed large radius puts it at x = w + ASTEROID_R_LARGE + 1 — 225 px
+  // from the ship.
   g.q(`random = (() => { const r = [0.95, 0.5, 0.5]; let i = 0; return () => r[i++ % r.length]; })()`);
   assert(g.q("spawnAsteroid()") === true, "a candidate outside the safe disc must be accepted");
   const a = g.activeAsteroids()[0];
-  assertClose(a.x, 317, 1e-9, "accepted spawn is the deterministic candidate (317,150)");
+  assertClose(a.x, 325, 1e-9, "accepted spawn is the deterministic candidate (325,150)");
   assertClose(a.y, 150, 1e-9, "accepted spawn sits at the seeded edge coordinate");
   const ship = g.ship();
   assert(Math.hypot(a.x - ship.x, a.y - ship.y) >= g.q("SPAWN_SAFE_RADIUS"),
@@ -267,13 +283,14 @@ check("edge spawns within the safe radius are rejected; a candidate outside it i
 // teleport to y = 615 trivially satisfied.)
 check("spawned asteroids enter monotonically through their spawn edge (no wrap-teleport)", () => {
   const g = boot(960, 600); // ship (480,300) at centre: every edge is well outside the safe disc
-  // Seeded: top edge at (480, -17) (r = 16), jitter 0 -> straight down toward
-  // the centre at 100 px/s; with vy > 0, y must climb smoothly from -17 to 0.
+  // Seeded: top edge at (480, -25) (fixed large radius r = 24), jitter 0
+  // -> straight down toward the centre at 100 px/s; with vy > 0, y must
+  // climb smoothly from -25 to 0.
   const rands = [0.2, 0.5, 0.5, 0.5];
   g.q(`random = (() => { const r = [${rands}]; let i = 0; return () => r[i++ % r.length]; })()`);
   assert(g.q("spawnAsteroid()"), "fixture spawn succeeds");
   const a = g.activeAsteroids()[0]; // vm slot objects keep identity across ticks
-  assertClose(a.y, -17, 1e-9, "spawn sits just off the top edge at y = -(r+1)");
+  assertClose(a.y, -25, 1e-9, "spawn sits just off the top edge at y = -(r+1)");
   assert(a.vy > 0, "velocity is directed into the field (downward from the top edge)");
   let prev = a.y;
   for (let i = 0; i < 30 && a.y <= 0; i++) {
@@ -292,12 +309,14 @@ check("spawned asteroids enter monotonically through their spawn edge (no wrap-t
 // forever and silently eat a pool slot.
 check("outward-pointing spawn candidates are re-aimed into the field", () => {
   const g = boot(960, 600);
-  // Seeded: top edge at x = 0; direction to centre tilts ~33° off the
-  // inward normal, and the seeded jitter (~60°) rotates the heading a
-  // further ~60° the wrong way -> raw velocity points up and away from
-  // the field, but deep enough that the re-aim mirror leaves a solid
-  // inward component (~45 px/s > ASTEROID_INWARD_MIN).
-  const rands = [0.01, 0.5, 0, 0.8, 0.9, 0.85, 0.8, 0.95, 0.8, 0.85, 0.9, 0.0, 0.5];
+  // Seeded: top edge at x = 0 (y = -25 at the large radius); direction to
+  // centre tilts ~34° off the inward normal, and the seeded jitter (~60°)
+  // rotates the heading a further ~60° the wrong way -> raw velocity points
+  // up and away from the field, but deep enough that the re-aim mirror
+  // leaves a solid inward component (~44 px/s > ASTEROID_INWARD_MIN).
+  // (#51: no radius roll in the sequence anymore, so the x roll is the
+  // second value.)
+  const rands = [0.01, 0, 0.8, 0.9, 0.85, 0.8, 0.95, 0.8, 0.85, 0.9, 0.0, 0.5];
   g.q(`random = (() => { const r = [${rands}]; let i = 0; return () => r[i++ % r.length]; })()`);
   assert(g.q("spawnAsteroid()"), "corner candidate still spawns");
   const a = g.activeAsteroids()[0];
@@ -325,11 +344,12 @@ check("candidates whose inward component falls below ASTEROID_INWARD_MIN are rej
   assert(typeof g.q("ASTEROID_INWARD_MIN") === "number" && g.q("ASTEROID_INWARD_MIN") > 0,
     "ASTEROID_INWARD_MIN must be a named positive floor");
   const before = g.count();
-  // Seeded so every one of the 13-element cycle reproduces the same
-  // top-edge corner candidate at (0, -17) whose post-mirror inward vy
-  // is only ~1.6 px/s (< 20): with the floor in force all retries are
-  // rejected and the spawn is abandoned.
-  const rands = [0.01, 0.5, 0, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.2135, 0.5];
+  // Seeded so every one of the 8 retries reproduces the same top-edge
+  // corner candidate at (0, -25) whose post-mirror inward vy is only
+  // ~1.9 px/s (< 20): with the floor in force all retries are rejected
+  // and the spawn is abandoned. (#51: no radius roll in the sequence,
+  // so each full-candidate cycle is 12 values and the stream aligns.)
+  const rands = [0.01, 0, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.207, 0.5];
   g.q(`random = (() => { const r = [${rands}]; let i = 0; return () => r[i++ % r.length]; })()`);
   assert(g.q("spawnAsteroid()") === false,
     "a shallow-inward candidate must be rejected, not spawned with an unbounded entry time");
@@ -382,44 +402,49 @@ check("score starts at 0", () => {
 
 // ================================================================
 // Criterion 3 (kill): a laser crossing an asteroid destroys it and
-// adds exactly SCORE_PER_ASTEROID
+// adds exactly the TIER'S score (#51: per-tier knobs replace the
+// single-size SCORE_PER_ASTEROID; smallest tier kills cleanly, the
+// largest tier's live reassignment is pinned the same way)
 // ================================================================
-check("a laser crossing an asteroid destroys it and adds exactly SCORE_PER_ASTEROID", () => {
+check("a laser crossing a small rock destroys it and adds exactly SCORE_PER_SMALL (no fragments)", () => {
   const g = boot(960, 600); // ship (480,300) facing up
-  placeAst(g, 480, 300 - 40); // r=20 -> band 20..60 px above the ship; frame-1 beam sweep (23..34.7) crosses it
+  // The bootstrap tick integrates with dt = 0: the beam is released from
+  // the nose (y = 277) and hit-tests as that point, so park the rock to
+  // straddle it. (r=6, circle 266..278 -> the nose point 277 is inside.)
+  placeAst(g, 480, 272, g.q("ASTEROID_R_SMALL"), 2);
   g.q("ASTEROID_BASE = 0; ASTEROID_GROWTH = 0; DRONE_BASE = 0; DRONE_GROWTH = 0"); // zero rosters: only our fixtures exist
   g.key("Space", true);
-  g.tick(); // frame 1: beam spans 23..34.7 px above the ship
-  assertClose(g.q("score"), 10, 0, "first crossing scores exactly the default 10");
-  assert(g.count() === 0, "killed asteroid must be removed from the field");
+  g.tick(); // frame 1: the beam is released from the nose at y = 277
+  assertClose(g.q("score"), g.q("SCORE_PER_SMALL"), 0, "first crossing scores exactly the default SCORE_PER_SMALL");
+  assert(g.count() === 0, "killed small rock must be removed from the field and spawn nothing");
   g.tick(60); // no further kills possible: empty field
-  assertClose(g.q("score"), 10, 0, "score must not change without further kills");
+  assertClose(g.q("score"), g.q("SCORE_PER_SMALL"), 0, "score must not change without further kills");
 });
 
-check("each kill adds exactly SCORE_PER_ASTEROID and kills accumulate", () => {
+check("each kill adds exactly its tier's points and kills accumulate", () => {
   const g = boot(960, 600);
-  placeAst(g, 480, 300 - 40); // band 20..60 px -> crossed by the frame-1 sweep (23..34.7)
-  placeAst(g, 480, 300 - 90); // band 70..110 px -> crossed by the frame-5 sweep (69.7..81.3)
+  placeAst(g, 480, 272, g.q("ASTEROID_R_SMALL"), 2); // straddles the nose release point (277) on frame 1
+  placeAst(g, 480, 228, g.q("ASTEROID_R_SMALL"), 2); // crossed by the frame-6 sweep (218.7..230.3)
   g.q("ASTEROID_BASE = 0; ASTEROID_GROWTH = 0; DRONE_BASE = 0; DRONE_GROWTH = 0"); // zero rosters: only our fixtures exist
   g.key("Space", true);
   g.tick();
-  assertClose(g.q("score"), 10, 0, "one kill scores exactly 10");
-  assertClose(g.count(), 1, 0, "only the crossed asteroid is destroyed");
-  g.tick(); // beam sweeps 34.7..46.3 px: still short of the second asteroid's 70 px edge
-  assertClose(g.q("score"), 10, 0, "second asteroid untouched while the beam has not reached it");
-  g.tick(4); // beam sweeps up to 93 px: well inside the second asteroid's 70..110 band
-  assertClose(g.q("score"), 20, 0, "two kills score exactly 2 x SCORE_PER_ASTEROID");
-  assertClose(g.count(), 0, 0, "both asteroids removed");
+  assertClose(g.q("score"), g.q("SCORE_PER_SMALL"), 0, "one kill scores exactly SCORE_PER_SMALL");
+  assertClose(g.count(), 1, 0, "only the crossed asteroid is destroyed (small rocks spawn nothing)");
+  g.tick(); // beam sweeps 277..265.3 px: still short of the second rock's 234 edge
+  assertClose(g.q("score"), g.q("SCORE_PER_SMALL"), 0, "second rock untouched while the beam has not reached it");
+  g.tick(4); // beam sweeps up to 218.7 px: inside the second rock's 222..234 band
+  assertClose(g.q("score"), 2 * g.q("SCORE_PER_SMALL"), 0, "two kills score exactly 2 x SCORE_PER_SMALL");
+  assertClose(g.count(), 0, 0, "both rocks removed");
 });
 
-check("setting SCORE_PER_ASTEROID to 50 makes each kill worth exactly 50", () => {
+check("setting SCORE_PER_LARGE to 50 makes each kill worth exactly 50", () => {
   const g = boot(960, 600);
-  g.q("SCORE_PER_ASTEROID = 50");
+  g.q("SCORE_PER_LARGE = 50");
   g.q("ASTEROID_BASE = 0; ASTEROID_GROWTH = 0; DRONE_BASE = 0; DRONE_GROWTH = 0"); // zero rosters: only our fixtures exist
-  placeAst(g, 480, 300 - 40);
+  placeAst(g, 480, 300 - 40, g.q("ASTEROID_R_LARGE"), 0); // r=24 -> circle 236..284; straddles the nose release point
   g.key("Space", true);
   g.tick();
-  assertClose(g.q("score"), 50, 0, "kill must credit the reassigned constant");
+  assertClose(g.q("score"), 50, 0, "kill must credit the reassigned knob");
 });
 
 // ================================================================
@@ -428,7 +453,7 @@ check("setting SCORE_PER_ASTEROID to 50 makes each kill worth exactly 50", () =>
 // ================================================================
 check("rendering builds polygon paths per asteroid and draws the score text", () => {
   const g = boot(960, 600);
-  placeAst(g, 480, 220);
+  placeAst(g, 480, 220, g.q("ASTEROID_R_LARGE"), 0);
   g.ctxCalls.length = 0;
   g.tick();
   const calls = g.ctxCalls;

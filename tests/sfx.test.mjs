@@ -232,13 +232,13 @@ function boot({ audio = true, resumeRejects = false } = {}) {
     placeAst: (x, y, r = 20) =>
       q(`(() => { const s = asteroids.slots.find((a) => !a.active);
         if (!s) throw new Error("no free asteroid slot for fixture");
-        s.active = true; s.x = ${x}; s.y = ${y}; s.r = ${r};
+        s.active = true; s.tier = 0; s.x = ${x}; s.y = ${y}; s.r = ${r};
         s.vx = 0; s.vy = 0; s.rot = 0; s.spin = 0; s.entry = -1;
         s.shape.length = 6; return true; })()`),
     placeDrone: (x, y) =>
       q(`(() => { const s = drones.slots.find((d) => !d.active);
         if (!s) throw new Error("no free drone slot for fixture");
-        s.active = true; s.x = ${x}; s.y = ${y}; s.heading = 0;
+        s.active = true; s.tier = 0; s.x = ${x}; s.y = ${y}; s.heading = 0;
         return true; })()`),
   };
 }
@@ -488,8 +488,8 @@ check("an asteroid laser kill plays a low-passed white-noise burst with the aste
   g.press("Space");
   g.tick(2);
   g.release("Space");
-  waitUntil(g, () => g.score() === g.q("SCORE_PER_ASTEROID"), 120,
-    "the straight-ahead laser kill");
+  waitUntil(g, () => g.score() === g.q("SCORE_PER_LARGE"), 120,
+    "the straight-ahead laser kill"); // #51: the fixture keeps its default tier (0 large)
   const bs = bursts(g.rec);
   assert(bs.length === 1, `one asteroid kill must schedule exactly one noise burst, got ${bs.length}`);
   assertNoiseBurst(g, bs[0], "SFX_ASTEROID_KILL_HZ", "SFX_ASTEROID_KILL_LEVEL", "SFX_ASTEROID_KILL_S");

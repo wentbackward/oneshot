@@ -121,7 +121,7 @@ function boot(width = 960, height = 600) {
 function placeAst(g, x, y, r = 20) {
   g.q(`(() => { const s = asteroids.slots.find((a) => !a.active);
     if (!s) throw new Error("no free asteroid slot for fixture");
-    s.active = true; s.x = ${x}; s.y = ${y}; s.r = ${r};
+    s.active = true; s.tier = 0; s.x = ${x}; s.y = ${y}; s.r = ${r};
     s.vx = 0; s.vy = 0; s.rot = 0; s.spin = 0; s.entry = -1;
     s.shape.length = 6; return true; })()`);
 }

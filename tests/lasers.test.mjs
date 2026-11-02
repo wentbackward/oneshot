@@ -140,7 +140,7 @@ function boot(width = 960, height = 600) {
 // same fixture helper the asteroids suite uses.
 function placeAst(g, x, y, r = 20) {
   g.q(`(() => { const s = asteroids.slots.find((a) => !a.active);
-    s.active = true; s.x = ${x}; s.y = ${y}; s.r = ${r};
+    s.active = true; s.tier = 0; s.x = ${x}; s.y = ${y}; s.r = ${r};
     s.vx = 0; s.vy = 0;
     s.shape.length = 6; s.rot = 0; s.spin = 0; return true; })()`);
 }
@@ -541,17 +541,20 @@ check("a wrapped beam kills a rock sitting just inside the opposite edge (determ
   g.q("ASTEROID_BASE = 0; ASTEROID_GROWTH = 0; DRONE_BASE = 0; DRONE_GROWTH = 0");
   placeAst(g, 100, 188, 12); // rock fully inside, its skin touching the bottom edge (y = 200)
   soloBeam(g); // single beam straight up from (100,100)
-  const rock = () => g.q("asteroids.slots.find((a) => a.active)");
+  // #51: the fixture keeps its default tier (0 large), so the cross-seam
+  // kill is credited as a large-rock score and shatters the rock into
+  // 2 medium fragments (which stay immune to the shattering beam).
   for (let i = 0; i < 8; i++) { // beam still approaching / just past the top edge
     g.tick();
-    assert(rock(), `rock must survive tick ${i} — the unwrapped beam cannot reach it`);
+    assertClose(g.q("score"), 0, 0, `the unwrapped beam cannot reach the rock (tick ${i + 1})`);
   }
   for (let i = 0; i < 12; i++) { // the beam must cross the seam and sweep the rock
     g.tick();
-    if (!rock()) break;
+    if (g.q("score") > 0) break;
   }
-  assert(!rock(), "the rock just inside the bottom edge must be killed by the beam that wrapped around the top");
-  assertClose(g.q("score"), g.q("SCORE_PER_ASTEROID"), 0, "the cross-seam kill credits exactly one rock score");
+  assertClose(g.q("score"), g.q("SCORE_PER_LARGE"), 0, "the cross-seam kill credits exactly one rock score");
+  assert(g.q("asteroids.slots.filter((a) => a.active && a.tier === 1).length") === 2,
+    "the wrapped beam must have shattered the large fixture into 2 medium fragments");
 });
 
 // ================================================================

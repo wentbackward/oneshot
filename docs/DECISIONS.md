@@ -1586,3 +1586,88 @@
   instead of the retired `FRICTION`. Every other suite parks or zeros
   the ship velocity explicitly, so the old curve was never encoded in a
   fixture number.
+## 2026-11-01 — Ticket #51: split shot asteroids large -> 2 medium -> 2 small
+
+- **Tier geometry: `ASTEROID_R_LARGE = 24` px, geometric descent through
+  the named ratio `ASTEROID_SIZE_RATIO = 0.5` -> medium 12 px, small 6 px
+  (exactly the former `ASTEROID_MIN_R`); `ASTEROID_CHILDREN = [2, 2, 0]`
+  names the fragment count per tier.** The old random-radius range
+  (`ASTEROID_MIN_R`/`ASTEROID_MAX_R`) is gone: rocks of a tier are
+  indistinguishable except by spin, which reads cleaner at fixed sizes.
+  Scoring follows Paul's classic ordering: `SCORE_PER_LARGE = 20`,
+  `SCORE_PER_MEDIUM = 10`, `SCORE_PER_SMALL = 5` (mutable `var` knobs,
+  read on every kill so console retunes apply immediately). Edge spawns
+  are always the large tier — the wave rosters (`ASTEROID_BASE` /
+  `ASTEROID_GROWTH`) now count LARGE rocks, and the large-build pauses
+  while fragments hold pool slots. Alternatives: keep random radii with
+  a tier cut (rejected — two "medium" sizes would be indistinguishable
+  in score) or a three-level linear scale (rejected — the ticket names a
+  ratio, and a 2:1:1 cascade of equal halves is the arcade feel).
+- **Chain-kill protection is per-BEAM identity, not per frame: each beam
+  carries a monotonically rising `serial` (assigned in `tryFire`), and a
+  shatter fragment records its parent's killer in `splitBy` — immune to
+  that one beam for its whole remaining life (1.5 s), while any OTHER
+  beam (or the ship) can hit it normally. On the shattering frame, the
+  `bornFrame` stamp additionally shields fragments from every beam.** A
+  beam slot released by a test without `tryFire` keeps serial 0, which is
+  "identity unassigned" and grants no immunity. Alternatives:
+  birth-frame-only immunity (rejected — the shattering beam sweeps the
+  fragment band for up to 1.5 s and would eat its own cascade) or
+  permanent per-rock laser immunity (rejected — fragments would be
+  unkillable by the next shot, breaking the cascade game).
+- **Saturated-pool rule: a shatter frees the parent slot FIRST, then
+  spawns as many fragments as fit (never allocating).** With 48 slots a
+  saturated wave can lose at most `wanted − free` fragments; the rule is
+  pinned by the saturated-pool fixture (one free slot -> exactly one
+  medium spawns). Alternative: drop the shatter when no fragments fit
+  (rejected — the kill and its score must still stand).
+- **Wave completion generalizes ticket #7's gate: roster fully spawned
+  (`waveBuilt`, counted by edge spawns only) AND zero live hazards of ANY
+  tier — live fragments keep the wave open; a zero roster still cannot
+  complete.** Both directions are re-tested in `tests/asteroid-split.test.mjs`.
+- **Existing-suite adaptations (each documented at the change site):**
+  `asteroids.test.mjs` — per-tier score constants replace
+  `SCORE_PER_ASTEROID`; `placeAst` gains a tier argument; seeded spawn
+  streams re-derived (the radius roll left the spawn sequence, so cycle
+  lengths and coordinates shifted, e.g. right-edge candidate 317 -> 325,
+  top-edge spawn -17 -> -25); the population soak runs an invulnerable
+  ship (hull impacts now shatter and would push the live count past the
+  roster); the "frame-1 sweep 23..34.7 px" assumption was WRONG — the
+  bootstrap tick integrates with dt = 0, so the beam only releases from
+  the nose and hit-tests as a point; kill fixtures now straddle the nose
+  (y = 277). `lasers.test.mjs` — the cross-seam fixture's death is now
+  asserted via the large-rock score + its 2 medium fragments (the slot is
+  reused by its own fragment, so "rock gone" no longer terminates);
+  score expectations follow the fixture's default tier. `screens.test.mjs`
+  — the parked-rock kill leaves 2 medium fragments in the field (and the
+  death-residue precondition counts 3 x 2 shatter fragments from
+  `killShip`), and its laser kill pins `LASER_COOLDOWN_MS` so the held
+  Space never releases a second beam. `sfx.test.mjs` — kill expectation
+  follows the fixture's default tier. All other suites passed untouched.
+
+### 2026-11-01 — review folds: explicit hazard kind, dead edge-spawn stamp, explicit fixture tiers (ticket #51)
+
+Follow-up to the entry above, from code review:
+
+- `applyHullImpact(hazard, isRock)` now takes the hazard kind
+  explicitly from its two call sites instead of duck-typing
+  `hazard.tier !== undefined` — a drone slot that ever grew a `tier`
+  property would have been routed through `shatterAsteroid`
+  silently. Drones stay no-split by construction: the caller passes
+  `false`, the pipeline destroys the slot outright.
+- The edge-spawn `bornFrame = frameNo` stamp was removed: edge rocks
+  are born in `updateWaves`, which runs after `checkLaserKills` in
+  the same frame, so an edge rock is first hit-tested on
+  `frameNo + 1` and can never satisfy the `bornFrame === frameNo`
+  guard. Stamping the identity value `0` instead ("not birth-stamped
+  this frame"); shatter fragments keep their live stamp, which is the
+  only case where the guard can fire.
+- The `placeAst` fixture helpers in `lasers`, `drones`,
+  `ship-damage`, `screens` and `sfx` now set `s.tier = 0` explicitly
+  rather than relying on the pool slot's initial value surviving a
+  prior fragment occupancy.
+- Review also surfaced a pre-existing bug unrelated to this ticket:
+  `tryFire` reuses a laser slot without resetting `slot.dt`, so a
+  fresh beam's first sweep segment is lengthened by the previous
+  occupant's step (a short phantom reach behind the nose). Tracked
+  separately (issue #53), not fixed here.
