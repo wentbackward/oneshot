@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // ================================================================
 // Unit tests — bricks.html multi-hit brick durability (ticket #42)
+// and per-hit visual wear: shade ramp + crack (ticket #71)
 //
 // Same harness style as tests/bricks-grid.test.mjs: runs the REAL
 // <script> from bricks.html in a sandboxed vm context with stubbed
@@ -19,9 +20,9 @@
 //   AC2 — second (lethal) hit: brick deactivated, score credited
 //         with exactly BRICK_TIERS[tier].points once, bricksLeft
 //         decremented once.
-//   AC3 — damage renders distinctly: drawBricks carries a branch
-//         keyed on `b.hp < BRICK_TIERS[b.tier].hp` (source +
-//         behaviour); one-hit bricks render exactly as before.
+//   AC3 — (superseded by #71: the old dim branch is gone; damage now
+//         renders via the precomputed per-hit shade ramp + crack
+//         overlay — see the CRITERION 3 block below)
 //   AC4 — spawnLevel()/beginRun() reset every pool entry's hp from
 //         the tier table (mid-run A brick destroyed, board cleared,
 //         new board at full hp).
@@ -32,6 +33,26 @@
 //         contacts on an hp-2 brick charge exactly once (per-frame
 //         damage cap); BOTH bricks end the frame at hp 1, alive,
 //         and die only on a subsequent (next-frame) contact.
+//
+// Ticket #71 — per-hit visual wear (replaces the single two-state
+// "dimmed" fill with a per-damage-stage ramp + crack overlay):
+//   W1  — per-tier wear ramp: a precomputed table of one fill per
+//         remaining hp (ramp[0] = base colour, each later stage a
+//         distinct darker shade, adjacent stages >= ~15% relative
+//         lightness step); the fixed tier's ramp is its base colour.
+//   W2  — driven 3-hp brick: full -> 2hp -> 1hp paints three
+//         distinct fills, each exactly its tier ramp stage,
+//         monotonically darkening.
+//   W3  — crack overlay: absent at full hp, one polyline at 2hp,
+//         two at 1hp on a 3-hp brick.
+//   W4  — crack determinism: same brick index -> same crack across
+//         frames and across respawned boards; deepening keeps the
+//         stage-1 polyline untouched; other indices draw others.
+//   W5  — 1-hp bricks' fill never changes before destruction; the
+//         fixed brick renders the bare undamaged path (base colour
+//         fill, no crack strokes).
+//   W6  — pool identity invariant over repeated damage/respawn
+//         cycles; the wear draw paths allocate nothing per frame.
 //
 // Run: node tests/bricks-durability.test.mjs
 // ================================================================
@@ -276,6 +297,24 @@ function rectFill(g, b) {
   );
 }
 
+// The crack strokes recorded inside a brick's rect: the ordered
+// "op:x,y" sequence of its moveTo/lineTo points plus the polyline
+// count (each polyline opens with one moveTo). Cracks are drawn
+// wholly inside the brick rect, and the grid gaps keep neighbouring
+// rects disjoint, so rect containment isolates a brick's strokes.
+function crackSeq(g, b) {
+  const ops = g.draw.filter(
+    (d) =>
+      (d.op === "moveTo" || d.op === "lineTo") &&
+      d.args[0] >= b.x - 1e-6 && d.args[0] <= b.x + b.w + 1e-6 &&
+      d.args[1] >= b.y - 1e-6 && d.args[1] <= b.y + b.h + 1e-6
+  );
+  return {
+    seq: ops.map((d) => `${d.op}:${d.args[0]},${d.args[1]}`).join("|"),
+    lines: ops.filter((d) => d.op === "moveTo").length,
+  };
+}
+
 function renderPass(g) {
   g.draw.length = 0;
   g.q("draw()");
@@ -453,60 +492,232 @@ check("a three-hit tier-A brick takes exactly three side strikes, one score cred
 });
 
 // ================================================================
-// AC3: damage renders distinctly. (a) drawBricks carries a branch
-// keyed on `b.hp < BRICK_TIERS[b.tier].hp` (grep-able in the real
-// source); (b) behaviourally, a damaged brick paints its tier's
-// darkened fill while full-hp bricks — including every one-hit
-// brick — paint the tier colour exactly as before
+// Ticket #71 — per-hit visual wear: the single two-state "dimmed"
+// fill becomes a per-damage-stage shade ramp plus a deterministic
+// crack overlay. Replaces the former AC3 checks, which pinned the
+// old single-dark-variant mechanism.
 // ================================================================
-check("drawBricks contains the grep-able damage branch keyed on b.hp < BRICK_TIERS[b.tier].hp", () => {
-  const g = boot(960, 600);
-  start(g);
-  const src = g.q("drawBricks.toString()");
-  assert(src.includes("b.hp < BRICK_TIERS[b.tier].hp"),
-    "drawBricks must branch on `b.hp < BRICK_TIERS[b.tier].hp`");
-  const darks = g.q("BRICK_TIERS.map((t) => t.dark)");
-  darks.forEach((d, i) => {
-    const c = g.q(`BRICK_TIERS[${i}].color`);
-    assert(typeof d === "string" && d !== c,
-      `tier ${"ABC"[i]} needs a distinct damaged fill, got ${JSON.stringify(d)} vs ${c}`);
-    assert(rgbSum(d) < rgbSum(c),
-      `tier ${"ABC"[i]}'s damaged fill must be darker, ${d} vs ${c}`);
-  });
+check("wear ramp: each breakable tier carries a precomputed ramp of hp fills — base colour first, every later stage a distinct darker shade with a >=15% relative step; the fixed tier's ramp is its single base colour", () => {
+  const g = boot(960, 600); // no frame driven: the table must exist at module load
+  for (let t = 0; t < 3; t += 1) {
+    const tier = g.q(`BRICK_TIERS[${t}]`);
+    const ramp = g.q(`BRICK_TIERS[${t}].ramp`);
+    assert(Array.isArray(ramp), `tier ${"ABC"[t]} must carry a precomputed ramp table`);
+    assert(ramp.length === tier.hp,
+      `tier ${"ABC"[t]}'s ramp must hold one fill per remaining hp, got ${ramp.length} want ${tier.hp}`);
+    assert(ramp[0] === tier.color, `the ramp's first stage must be the tier's base colour`);
+    const sums = ramp.map(rgbSum);
+    for (let d = 0; d < ramp.length; d += 1) {
+      for (let e = 0; e < ramp.length; e += 1) {
+        if (d !== e) assert(ramp[d] !== ramp[e],
+          `stages ${d} and ${e} of tier ${"ABC"[t]} must be distinct fills, got ${ramp[d]}/${ramp[e]}`);
+      }
+      if (d > 0) {
+        assert(sums[d] < sums[d - 1],
+          `stage ${d} of tier ${"ABC"[t]} must be darker than stage ${d - 1}`);
+        const step = (sums[d - 1] - sums[d]) / sums[d - 1];
+        assert(step >= 0.15,
+          `stages ${d - 1} -> ${d} of tier ${"ABC"[t]} must differ by >=~15% relative lightness, got ${step.toFixed(3)}`);
+      }
+    }
+  }
+  const fixed = g.q("BRICK_TIERS[3]");
+  assert(Array.isArray(fixed.ramp) && fixed.ramp.length === 1 && fixed.ramp[0] === fixed.color,
+    "the unbreakable tier's ramp must be its single base colour (it cannot be damaged)");
 });
 
-check("damaged bricks render darkened; full-hp and one-hit bricks render the tier colour unchanged", () => {
+check("wear floor holds under EVERY theme: each theme's rebuilt ramp keeps distinct, >=15%-stepped stages for all breakable tiers", () => {
+  const g = boot(960, 600);
+  for (const name of g.q("Object.keys(THEMES)")) {
+    g.q(`applyTheme(${JSON.stringify(name)})`); // rebuilds the ramps from the row's tier colours
+    for (let t = 0; t < 3; t += 1) {
+      const ramp = g.q(`BRICK_TIERS[${t}].ramp`);
+      const sums = ramp.map(rgbSum);
+      for (let d = 1; d < ramp.length; d += 1) {
+        for (let e = 0; e < ramp.length; e += 1) {
+          if (d !== e) assert(ramp[d] !== ramp[e],
+            `${name}: stages ${d} and ${e} of tier ${"ABC"[t]} must be distinct`);
+        }
+        const step = (sums[d - 1] - sums[d]) / sums[d - 1];
+        assert(step >= 0.15,
+          `${name}: stages ${d - 1} -> ${d} of tier ${"ABC"[t]} must differ by >=~15% relative lightness, got ${step.toFixed(3)}`);
+      }
+    }
+  }
+});
+
+check("crack table: CRACK_POINTS holds one fixed path per pool index — CRACK_LINES_MAX polylines of three normalised points each, reproducible from the brick index alone", () => {
+  const g = boot(960, 600);
+  const grid = g.grid();
+  const rows = g.q("CRACK_POINTS");
+  assert(rows.length === grid, `the crack table must cover the whole pool, got ${rows.length} want ${grid}`);
+  const per = g.q("CRACK_LINES_MAX * CRACK_POINTS_PER");
+  for (let i = 0; i < grid; i += 1) {
+    const r = rows[i];
+    assert(r.length === per, `index ${i} must carry ${per} numbers, got ${r.length}`);
+    for (const v of r) {
+      assert(Number.isFinite(v) && v >= 0 && v <= 1, `index ${i} carries an out-of-range normalised point ${v}`);
+    }
+  }
+  const before = JSON.stringify(rows);
+  g.q("buildCrackPoints()"); // rebuild from scratch
+  assert(JSON.stringify(g.q("CRACK_POINTS")) === before,
+    "rebuilding the crack table must reproduce it exactly from the brick indices");
+});
+
+check("driven 3-hp brick: full -> 2hp -> 1hp paints three distinct fills, each exactly its documented tier ramp stage, monotonically darkening", () => {
   const g = boot(960, 600);
   start(g);
+  const b0 = g.brickAt(3, 0);
+  assert(b0.tier === 0 && b0.hp === 3, "setup: a three-hit brick at full hp");
+  const fills = [];
+  for (let hp = 3; hp >= 1; hp -= 1) {
+    renderPass(g);
+    const b = g.brickAt(3, 0);
+    assert(b.active === true && b.hp === hp, `stage setup: the brick must be standing at hp ${hp}`);
+    const f = rectFill(g, b);
+    assert(f, `the hp-${hp} brick must be painted`);
+    fills.push(f.fillStyle);
+    if (hp > 1) {
+      sidePark(g, 3, 0);
+      assert(g.q("collideBricks(balls[0])") === true, "the side contact must register");
+      g.tick(1); // frame boundary releases the per-frame damage charge
+    }
+  }
+  const ramp = g.q("BRICK_TIERS[0].ramp");
+  fills.forEach((s, d) => assert(s === ramp[d],
+    `damage stage ${d} must paint ramp[${d}] = ${ramp[d]}, got ${s}`));
+  assert(new Set(fills).size === 3, `the three stages must be three distinct fills, got ${JSON.stringify(fills)}`);
+  const sums = fills.map(rgbSum);
+  assert(sums[0] > sums[1] && sums[1] > sums[2],
+    `the fills must monotonically darken with damage, got sums ${JSON.stringify(sums)}`);
+});
 
-  // Baseline pass: everything full.
+check("crack overlay: absent at full hp, one polyline at 2hp, two at 1hp on a 3-hp brick", () => {
+  const g = boot(960, 600);
+  start(g);
   renderPass(g);
-  const c = g.brickAt(2, 5); // tier C: one-hit, always at full hp
-  const bFull = g.brickAt(4, 1); // tier B, undamaged
-  const fillC0 = rectFill(g, c);
-  const fillB0 = rectFill(g, bFull);
-  assert(fillC0 && fillB0, "the draw pass must paint the sampled bricks");
-  assert(fillC0.fillStyle === g.q("BRICK_TIERS[2].color"),
-    `a one-hit brick must render its tier colour, got ${fillC0.fillStyle}`);
-  assert(fillB0.fillStyle === g.q("BRICK_TIERS[1].color"),
-    `a full-hp two-hit brick must render its tier colour, got ${fillB0.fillStyle}`);
+  assert(crackSeq(g, g.brickAt(3, 0)).lines === 0, "a full-hp brick must show no crack");
+  sidePark(g, 3, 0);
+  g.q("collideBricks(balls[0])");
+  g.tick(1);
+  assert(g.brickAt(3, 0).hp === 2, "setup: the brick is at hp 2");
+  renderPass(g);
+  const at2 = crackSeq(g, g.brickAt(3, 0));
+  assert(at2.lines === 1, `at hp 2 exactly one crack polyline must be stroked, got ${at2.lines}`);
+  assert(at2.seq.startsWith("moveTo:"), "each crack polyline must open with a moveTo");
+  sidePark(g, 3, 0);
+  g.q("collideBricks(balls[0])");
+  g.tick(1);
+  assert(g.brickAt(3, 0).hp === 1, "setup: the brick is at hp 1");
+  renderPass(g);
+  assert(crackSeq(g, g.brickAt(3, 0)).lines === 2,
+    `at hp 1 two crack polylines must be stroked, got ${crackSeq(g, g.brickAt(3, 0)).lines}`);
+});
 
-  // Damage (4,2) non-lethally, then repaint.
-  strike(g, 4, 2);
-  assert(g.brickAt(4, 2).active === true && g.brickAt(4, 2).hp === 1,
-    "setup: (4,2) must be damaged and standing");
+check("crack is deterministic per brick index: identical across frames, a respawned board replays the same crack, and deepening keeps the stage-1 polyline untouched", () => {
+  const g = boot(960, 600);
+  start(g);
+  const hit = () => {
+    sidePark(g, 3, 0);
+    g.q("collideBricks(balls[0])");
+    g.tick(1);
+  };
+  hit(); // -> hp 2 (dmg 1)
   renderPass(g);
-  const dmg = g.brickAt(4, 2);
-  const fillD = rectFill(g, dmg);
-  assert(fillD, "the damaged brick must still be painted");
-  assert(fillD.fillStyle === g.q("BRICK_TIERS[1].dark"),
-    `the damaged brick must paint its tier's darkened fill, got ${fillD.fillStyle} want ${g.q("BRICK_TIERS[1].dark")}`);
-  const nb = g.brickAt(4, 1);
-  assert(rectFill(g, nb).fillStyle === g.q("BRICK_TIERS[1].color"),
-    "an undamaged neighbour must keep the tier colour");
-  const cAfter = g.brickAt(2, 5);
-  assert(rectFill(g, cAfter).fillStyle === g.q("BRICK_TIERS[2].color"),
-    "one-hit bricks must render exactly as before");
+  const s1 = crackSeq(g, g.brickAt(3, 0));
+  renderPass(g);
+  const s2 = crackSeq(g, g.brickAt(3, 0));
+  assert(s1.seq !== "" && s1.seq === s2.seq,
+    "the same damaged brick must stroke the same crack on every frame");
+  hit(); // -> hp 1 (dmg 2)
+  renderPass(g);
+  const s3 = crackSeq(g, g.brickAt(3, 0));
+  assert(s3.seq.indexOf(s1.seq) === 0,
+    "the deepened crack must keep the stage-1 polyline untouched (prefix stability)");
+  g.q("spawnLevel()"); // respawn the board into the same pool
+  assert(g.brickAt(3, 0).hp === 3, "setup: the respawned brick is full again");
+  hit(); // same index back to dmg 1
+  renderPass(g);
+  assert(crackSeq(g, g.brickAt(3, 0)).seq === s1.seq,
+    "a respawned brick must inherit the identical crack for its index");
+  g.q("bricks[1].hp = BRICK_TIERS[0].hp - 1"); // (0,1): another tier-A brick at the same stage
+  renderPass(g);
+  const s5 = crackSeq(g, g.brickAt(0, 1));
+  assert(s5.lines === 1 && s5.seq !== "",
+    "the second brick must carry one crack polyline at the same stage");
+  assert(s5.seq !== s1.seq, "different brick indices must not share the same crack path");
+});
+
+check("single-hit brick: its fill never changes before destruction (always the base tier colour, no crack ops)", () => {
+  const g = boot(960, 600);
+  start(g);
+  const c = g.brickAt(2, 5); // tier C: one-hit
+  assert(c.tier === 2 && c.hp === 1, "setup: a one-hit brick at full hp");
+  for (let i = 0; i < 3; i += 1) {
+    renderPass(g);
+    assert(rectFill(g, g.brickAt(2, 5)).fillStyle === g.q("BRICK_TIERS[2].color"),
+      `pass ${i}: a live one-hit brick must paint exactly the base tier colour`);
+    assert(crackSeq(g, g.brickAt(2, 5)).lines === 0,
+      `pass ${i}: a one-hit brick must show no crack while it stands`);
+    g.tick(1); // ordinary frames must not alter the fill either
+  }
+  parkUnder(g, 2, 5);
+  g.tick(1);
+  assert(g.brickAt(2, 5).active === false, "the one-hit brick dies on its first hit");
+});
+
+check("fixed brick: renders the bare undamaged path — exactly one base-colour fillRect, no crack strokes", () => {
+  const g = boot(960, 600);
+  start(g);
+  const idx = 4 * g.q("BRICK_COLS") + 9; // (4,9)
+  g.q(`destroyBrick(${idx})`);
+  const basePts = g.q("BRICK_TIERS[1].points");
+  assert(g.score() === basePts, "setup: the isolating kill credits its tier once");
+  g.q(`(function () {
+    var f = bricks[${idx}];
+    f.active = true; f.tier = 3; f.hp = 0; f.unbreakable = true;
+  })()`);
+  renderPass(g);
+  const f = g.brickAt(4, 9);
+  const fill = rectFill(g, f);
+  assert(fill, "the fixed brick must be painted");
+  assert(fill.fillStyle === g.q("BRICK_TIERS[3].color"),
+    `the fixed brick must paint its base tier colour, got ${fill.fillStyle}`);
+  const rects = g.draw.filter((d) => d.op === "fillRect" &&
+    Math.abs(d.args[0] - f.x) < 1e-6 && Math.abs(d.args[1] - f.y) < 1e-6 &&
+    Math.abs(d.args[2] - f.w) < 1e-6);
+  assert(rects.length === 1, `exactly one fillRect may cover the fixed brick, got ${rects.length}`);
+  const lineOps = g.draw.filter((d) => d.op === "moveTo" || d.op === "lineTo");
+  assert(lineOps.every((d) =>
+      d.args[0] < f.x - 1e-6 || d.args[0] > f.x + f.w + 1e-6 ||
+      d.args[1] < f.y - 1e-6 || d.args[1] > f.y + f.h + 1e-6),
+    "no crack polyline point may land inside the fixed brick's rect");
+});
+
+check("pool identity over repeated damage/respawn cycles: the bricks array and every entry keep their identity; the wear draw paths allocate nothing per frame", () => {
+  const g = boot(960, 600);
+  start(g);
+  const shape = () => g.q("bricks.map((b) => Object.keys(b).sort().join('|')).join(';')");
+  const keys0 = shape();
+  g.q("__pool = bricks; __entries = bricks.slice(0)");
+  for (let cycle = 0; cycle < 4; cycle += 1) {
+    sidePark(g, 3, 0); // tier A (survives dmg 1)
+    assert(g.q("collideBricks(balls[0])") === true, `cycle ${cycle}: the A contact must register`);
+    g.tick(1);
+    sidePark(g, 4, 2); // tier B (survives dmg 1)
+    assert(g.q("collideBricks(balls[0])") === true, `cycle ${cycle}: the B contact must register`);
+    g.tick(1);
+    renderPass(g); // exercise the ramp indexing and the crack strokes
+    g.q("spawnLevel()"); // respawn the board into the same pool
+    assert(g.q("__pool === bricks"), `cycle ${cycle}: the bricks array itself must not be reallocated`);
+    assert(g.q("bricks.every((b, i) => b === __entries[i])"),
+      `cycle ${cycle}: every pool entry must keep its identity`);
+  }
+  assert(shape() === keys0, "pool entries must keep their exact field set across cycles");
+  const noLit = (fn) => !/=\s*[{[]/.test(fn) && !/\bnew\b/.test(fn);
+  assert(noLit(g.q("drawBricks.toString()")), "drawBricks must allocate no per-frame objects");
+  assert(noLit(g.q("drawBrickCracks.toString()")), "drawBrickCracks must allocate no per-frame objects");
 });
 
 // ================================================================
