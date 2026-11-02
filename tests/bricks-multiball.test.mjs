@@ -538,7 +538,7 @@ check("once the sticky duration elapses, a subsequent paddle contact reflects th
   clearBricks(g);
   g.q("applyCapsule(KIND_STICKY)");
   // Ball descends slowly from y=200: it reaches the paddle top face
-  // at ~13.6 s, well after the 6 s sticky arm has expired.
+  // at ~13.6 s, after the 12 s sticky arm has expired.
   g.q(`paddle.x = 100;
        balls[0].x = 100; balls[0].y = 200; balls[0].vx = 0; balls[0].vy = 70; balls[0].attached = false;`);
   let bounced = false;
