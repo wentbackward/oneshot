@@ -46,6 +46,9 @@ const SCALE = 2;
 // margin is intentionally untouched.
 const WIDE_INSET = 40;
 const TOP_MARGIN = 64;
+// The "stays modest" guard for the widened inset: at most this
+// fraction of the field width (a widening, not a reflow).
+const MODIST_MAX_FRACTION = 0.1;
 
 // ---------- tiny test harness ----------
 let passed = 0;
@@ -269,11 +272,12 @@ check("classic: the outermost bricks sit exactly one widened inset from both sid
   g.start();
   assert(g.q("canvas.width") === CLASSIC_W * SCALE,
     `setup: landscape backing store, got ${g.q("canvas.width")}`);
+  const inset = g.q("BRICK_SIDE_MARGIN"); // live value; the pin check above anchors it to WIDE_INSET
   const s = g.sideProfile();
-  assert(s.leftGap === WIDE_INSET,
-    `the leftmost brick must start at the widened inset ${WIDE_INSET}, got ${s.leftGap}`);
-  assertClose(s.rightGap, WIDE_INSET, 1e-9,
-    `the rightmost brick must end at the widened inset ${WIDE_INSET} from the right wall`);
+  assert(s.leftGap === inset,
+    `the leftmost brick must start at the widened inset ${inset}, got ${s.leftGap}`);
+  assertClose(s.rightGap, inset, 1e-9,
+    `the rightmost brick must end at the widened inset ${inset} from the right wall`);
   assertClose(s.leftGap, s.rightGap, 1e-9,
     `the brick field must be symmetric (left ${s.leftGap} != right ${s.rightGap})`);
   assert(s.topY === g.q("BRICK_TOP_MARGIN"),
@@ -285,7 +289,7 @@ check("classic: the widened inset is visibly larger than the old 24 px gap while
   g.start();
   const margin = g.q("BRICK_SIDE_MARGIN");
   assert(margin > 24, `the gap must be larger than the old 24 px, got ${margin}`);
-  assert(margin <= 0.1 * g.q("canvas.width"),
+  assert(margin <= MODIST_MAX_FRACTION * g.q("canvas.width"),
     `the inset must stay a modest fraction of the field width, got ${margin} of ${g.q("canvas.width")}`);
 });
 
@@ -301,7 +305,7 @@ check("classic: 10 columns unchanged; column width derives from the widened inse
   assert(g.q("BRICK_ROWS") === CLASSIC_BRICK_ROWS,
     `BRICK_ROWS must stay the named ${CLASSIC_BRICK_ROWS}, got ${g.q("BRICK_ROWS")}`);
   const gap = g.q("BRICK_GAP");
-  const wantW = (CLASSIC_W * SCALE - 2 * WIDE_INSET - (CLASSIC_BRICK_COLS - 1) * gap) / CLASSIC_BRICK_COLS;
+  const wantW = (CLASSIC_W * SCALE - 2 * g.q("BRICK_SIDE_MARGIN") - (CLASSIC_BRICK_COLS - 1) * gap) / CLASSIC_BRICK_COLS;
   const s = g.sideProfile();
   assert(s.colW === wantW,
     `column width must be derived from the widened inset (${wantW}), got ${s.colW}`);
@@ -322,6 +326,8 @@ check("alleyway: BRICK_SIDE_MARGIN is the widened named value (40 canvas px) in 
     `setup: the persisted alleyway selection must drive the run, runMode=${g.q("runMode")}`);
   assert(g.q("BRICK_SIDE_MARGIN") === WIDE_INSET,
     `the named side inset must be the widened ${WIDE_INSET} canvas px in alleyway too, got ${g.q("BRICK_SIDE_MARGIN")}`);
+  assert(g.q("BRICK_TOP_MARGIN") === TOP_MARGIN,
+    `the top margin is intentionally untouched at ${TOP_MARGIN} in alleyway too, got ${g.q("BRICK_TOP_MARGIN")}`);
 });
 
 check("alleyway: the 5-col field sits one widened inset from both walls and is symmetric", () => {
@@ -329,13 +335,16 @@ check("alleyway: the 5-col field sits one widened inset from both walls and is s
   g.start();
   assert(g.q("canvas.width") === ALLEYWAY_W * SCALE,
     `setup: portrait backing store, got ${g.q("canvas.width")}`);
+  const inset = g.q("BRICK_SIDE_MARGIN"); // live value; the pin check above anchors it to WIDE_INSET
   const s = g.sideProfile();
-  assert(s.leftGap === WIDE_INSET,
-    `the leftmost brick must start at the widened inset ${WIDE_INSET}, got ${s.leftGap}`);
-  assertClose(s.rightGap, WIDE_INSET, 1e-9,
-    `the rightmost brick must end at the widened inset ${WIDE_INSET} from the right wall`);
+  assert(s.leftGap === inset,
+    `the leftmost brick must start at the widened inset ${inset}, got ${s.leftGap}`);
+  assertClose(s.rightGap, inset, 1e-9,
+    `the rightmost brick must end at the widened inset ${inset} from the right wall`);
   assertClose(s.leftGap, s.rightGap, 1e-9,
     `the portrait field must be symmetric (left ${s.leftGap} != right ${s.rightGap})`);
+  assert(s.topY === g.q("BRICK_TOP_MARGIN"),
+    `the top row must still sit at BRICK_TOP_MARGIN, got ${s.topY}`);
 });
 
 check("alleyway: 5 columns unchanged; the wide columns remain balanced (inset < column width, no crowding)", () => {
@@ -346,12 +355,12 @@ check("alleyway: 5 columns unchanged; the wide columns remain balanced (inset < 
   assert(g.q("BRICK_ROWS") === ALLEYWAY_BRICK_ROWS,
     `BRICK_ROWS must stay the named ${ALLEYWAY_BRICK_ROWS}, got ${g.q("BRICK_ROWS")}`);
   const gap = g.q("BRICK_GAP");
-  const wantW = (ALLEYWAY_W * SCALE - 2 * WIDE_INSET - (ALLEYWAY_BRICK_COLS - 1) * gap) / ALLEYWAY_BRICK_COLS;
+  const wantW = (ALLEYWAY_W * SCALE - 2 * g.q("BRICK_SIDE_MARGIN") - (ALLEYWAY_BRICK_COLS - 1) * gap) / ALLEYWAY_BRICK_COLS;
   const s = g.sideProfile();
   assert(s.colW === wantW,
     `portrait column width must derive from the widened inset (${wantW}), got ${s.colW}`);
-  assert(s.colW > WIDE_INSET,
-    `the 5 wide columns must stay wider than the inset so the portrait field reads balanced, got ${s.colW} vs ${WIDE_INSET}`);
+  assert(s.colW > g.q("BRICK_SIDE_MARGIN"),
+    `the 5 wide columns must stay wider than the inset so the portrait field reads balanced, got ${s.colW} vs ${g.q("BRICK_SIDE_MARGIN")}`);
 });
 
 // ---------- summary ----------
