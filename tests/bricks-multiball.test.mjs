@@ -516,6 +516,10 @@ check("a click launches the attached ball with the position-dependent angle logi
     guard += 1;
   }
   assert(g.ballList().find((b) => b.i === 0).attached, "setup: the ball is attached");
+  // Draw 0.5 is the launch jitter's zero-crossing, so this test keeps
+  // pinning the pure position-angle law; the jitter itself is covered
+  // by tests/bricks-serve-jitter.test.mjs.
+  g.q("random = function () { return 0.5; };");
   g.canvas.dispatch("click");
   const b0 = g.ballList().find((b) => b.i === 0);
   assert(!b0.attached, "the click must detach the ball");

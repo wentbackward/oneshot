@@ -199,9 +199,13 @@ function boot(width, height) {
     q("typeof gameState === 'undefined' ? 'undefined' : gameState");
   // Boot, click Start, pin the RNG — slot 0 is now the attached
   // serve ball and NOTHING else is launched (no canvas click).
+  // Draw 0.5 is the launch jitter's zero-crossing
+  // ((0.5*2-1)*LAUNCH_JITTER_ANGLE = 0), so the position-angle-law
+  // tests in this file stay exact; the jitter itself is covered by
+  // tests/bricks-serve-jitter.test.mjs.
   function startRun() {
     els["btn-start"].click();
-    q("random = function () { return 1; };"); // no capsule drops by chance
+    q("random = function () { return 0.5; };"); // no capsule drops by chance
   }
   return { canvas, els, q, tick, key, state, startRun };
 }
