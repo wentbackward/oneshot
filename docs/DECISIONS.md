@@ -2489,3 +2489,35 @@ arcade physics).
   kind.
 - **Extra/Life remain instant** (no duration var exists or is added),
   per the ticket.
+
+## 2026-11-02 — Ticket #99: start-screen legend of all capsule powerups
+
+- **A start-screen legend, not a help overlay.** The operator asked for "all the
+  powerups" visible where the player chooses a run; the start screen already
+  hosts the controls and leaderboard, so the legend joins it there rather than
+  inventing a new overlay state (a toggleable help panel adds a screen state,
+  a pause/transition path, and key handling — machinery the game does not
+  otherwise have, for one static table). Alternatives rejected: in-game HUD
+  icon (invisible until a capsule is caught late in a run); help overlay
+  (extra state machine + keyboard surface); per-mode filtering (explicitly
+  not wanted — "all the powerups").
+- **One data table, dynamic rows.** `CAPSULE_LEGEND = [{kind, label, blurb,
+  color}, …]` in kind order 0..7, defined next to `CAPSULE_DRAW_COLORS`;
+  `buildCapsuleLegend()` renders one row per entry at boot into
+  `#capsule-legend` (static markup holds only the empty container + heading,
+  so the harness diamond needs just the container id). Swatch colours index
+  the same colour constants the capsules draw with, so the legend cannot
+  drift from in-game play. The table is the single source of truth for
+  label + blurb + colour, so a ninth kind is one table row.
+- **Chosen values.** Two-column grid (eight rows on four compact lines),
+  14×8 px swatches matching the life-icon radius, 0.75 rem monospace
+  letter-spaced rows on the existing `--ink`/muted palette — theme-consistent
+  without a new colour token. Blurbs, kept tight: Expand "widens the
+  paddle", Extra "spawns a spare ball", Sticky "paddle catches the ball",
+  Life "restores a life", Multiplier "doubles the score", Invulnerable "ball
+  smashes through bricks", Multiball "each ball fans out to ten", Blast
+  "brick hits detonate a radius". "Extra" is named Extra (not "Life drop")
+  because `applyCapsule(KIND_EXTRA)` spawns a spare ball, not a life —
+  `KIND_LIFE` is the life.
+- **Placement.** Inside `#screen-start`, below the leaderboard block and
+  above the Reset High Score / Start buttons, per the ticket.
