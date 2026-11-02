@@ -1976,3 +1976,128 @@ arcade physics).
   (verified by grep: one stub line per suite), not just the new
   suite — the house trap from the last wave, applied once,
   exhaustively.
+
+## 2026-11-02 — Ticket #75: exciting-mode capsules — invulnerable, multiball x10, blast radius
+
+- **The three new kinds live in a SEPARATE `CAPSULE_KINDS_EXCITE` table
+  (`[0..7]`), appended after the untouched `CAPSULE_KINDS` (`[0..4]`);
+  `beginRun()` snapshots the selected mode's table onto `runCapsuleKinds`,
+  and `maybeDropCapsule()` rolls from that snapshot.** `CAPSULE_KINDS`
+  itself is pinned to exactly five rows by
+  `tests/bricks-capsules.test.mjs` (legacy exhaustive-table invariant),
+  and the ticket mandates classic's table stays filtered to the original
+  five. The MODES row carries the table reference (the ticket-74 seam
+  comment anticipated exactly this knob). Alternatives rejected:
+  filtering one shared eight-kind table by mode inside
+  `maybeDropCapsule` (buries mode knowledge in the per-kill roll path and
+  mutates a legacy-pinned constant); building the exciting list per run
+  with `.concat()` (allocates on every beginRun for a constant value).
+- **The ball pool is sized to `MAX_BALLS_EXCITE = 30` at boot; the
+  classic `MAX_BALLS = 5` survives as the normal-play cap via the
+  `runBallCap` run snapshot (classic → 5, exciting → 30), enforced by
+  `spawnExtraBall()` and the multiball spawner.** One 30-slot pool
+  serves both modes: the extra-ball catch is the only classic spawn
+  path and stops at its cap, so classic runs never see more than five
+  live balls. `tests/bricks-multiball.test.mjs`'s two pool-SIZE
+  assertions were re-pointed from `MAX_BALLS` to `MAX_BALLS_EXCITE` —
+  an explicit ticket mandate ("the pool is sized at boot for
+  MAX_BALLS_EXCITE = 30"), not a behaviour change; that suite's
+  MAX_BALLS-cap behaviour test is untouched and still green.
+  Alternatives rejected: a second 30-slot pool activated in exciting
+  (double memory, a second pool in every update/draw loop); lazily
+  growing the pool on multiball (violates the no-allocation house
+  rule and the "pool identity invariants" criterion).
+- **INVULNERABLE reuses the shared `destroyBrick()` kill path for every
+  pass-through brick — no reflection, no pinning — so scoring (tier
+  points × the armed multiplier), the brick-break SFX, and the
+  final-brick win all come for free; the ball keeps its exact vector.**
+  The window is the `invulnUntil` sim-time stamp (the expand/sticky/mult
+  `-1 = unarmed, expiry = now + full duration` convention), armed in
+  `applyCapsule()` and expired by `updatePowerups()`. Fixed bricks never
+  take the pass-through branch, so they stop the ball with a normal
+  bounce mid-window. A level is captured at the top of `collideBricks()`
+  and both window paths abort if it changed: a final-brick win calls
+  `serveBall()` mid-scan, which drains every ball slot — continuing the
+  scan would run against the freshly spawned level. Alternatives
+  rejected: a per-ball `invuln` flag (state smeared across pool slots
+  with no owner for the timer); an `updateBalls()`-side bypass of
+  collision (would have to re-implement scoring/drops/win in a second
+  place); suppressing drops by filtering the drop TABLE while invuln is
+  live (wastes the `random` rolls and would also suppress
+  blast-window drops, which must still drop).
+- **Drop suppression during the window lives in ONE guard —
+  `if (!invulnActive()) maybeDropCapsule(...)` inside `destroyBrick()`** —
+  so pass-through kills (the window's own kill source) release nothing,
+  while every non-invuln kill (including blast detonations, which this
+  ticket defines as non-invuln) keeps dropping exactly as before.
+  Cascade-free by construction: a brick destroyed by the pass-through
+  is inactive, so it is scored exactly once and rolls at most one
+  (suppressed) drop.
+- **The invuln tint is a named-colour pass in `drawBalls()`: while
+  `invulnActive()` every active ball gets one soft halo
+  (`INVULN_GLOW_RADIUS_PX` / `INVULN_GLOW_ALPHA`) plus a `COLOR_BALL_INVLUN`
+  core; after expiry the draw path is byte-for-byte the legacy one.**
+  Theme palettes were NOT extended with per-theme invuln colours: the
+  ticket asks for "a distinct tint/glow so the state is legible", not a
+  skinnable colour, and three more palette rows × three themes is
+  surface the PRD does not buy. Rejected: canvas `shadowBlur` glow
+  (measurably expensive in the hot draw path for a status effect).
+- **MULTIBALL fans from a SNAPSHOT roster: `spawnMultiball()` collects
+  the in-flight parent indices into a boot-allocated scratch
+  (`multiballParents`) and then fans each parent — iterating the live
+  pool while spawning would make clones clone themselves (a single
+  parent saturated the 30 cap on first run before the fix).** The fan
+  is `(j − 4) × MULTIBALL_SPREAD_STEP` about the incoming vector
+  (symmetric, speed-preserving, parent slot keeps its exact vector);
+  clones take free pool slots in pool order and spawning stops at the
+  per-spawn `liveBallCount() < runBallCap` check, so the ticket's
+  "excess spawns skipped in deterministic order" is exactly the
+  pool-order iteration order. Parked (attached) balls do not fan:
+  their velocity is zero, and rotating a zero vector is a degenerate
+  spawn — "every ACTIVE ball" is read as every in-flight ball.
+  Alternatives rejected: fanning from the paddle centre instead of the
+  parent position (loses "replaced by TEN" — the original must stay);
+  an even-spaced full-circle fan (the ticket says "the same speed
+  vector rotated by the spread", i.e. a fan about the incoming
+  direction).
+- **BLAST fires on every REFLECTED brick hit (breakable or fixed) while
+  `blastActive()`, at the ball's centre at contact; `blastAround()` is a
+  SINGLE radius-squared scan that destroys every breakable brick inside
+  `BLAST_RADIUS_PX` via the shared kill path — one radius per hit
+  event, structurally chain-free** (blast-destroyed bricks never pass
+  through the collision resolver, so they cannot detonate). Fixed
+  bricks are skipped by the scan but still reflect, so the ticket's
+  "anchor a blast without breaking" is the fixed-brick hit case
+  itself. The same level-captured-mid-scan guard as invuln applies.
+  Alternatives rejected: recursive chaining (explicitly excluded by the
+  ticket — one radius per hit event); a per-frame proximity field /
+  precomputed brick-distance table (the blast is an event, not a
+  steady state — one O(bricks) scan per hit costs nothing at 50 bricks);
+  measuring from the brick centre instead of the impact point (the
+  criterion is worded around "the impact point", i.e. where the ball
+  struck).
+- **The blast + invuln intersection: while the invuln window is live,
+  blast detonations are SUPPRESSED** (`!invulnActive()` on the trigger
+  line). During invuln the ball does not bounce off breakable bricks at
+  all, so the mechanic's trigger ("each brick hit") does not occur;
+  allowing a fixed-brick bounce mid-invuln to detonate would mix the
+  two window mechanics in a state neither description covers.
+  Documented here rather than silently chosen. Alternative rejected:
+  letting the fixed-brick bounce anchor blasts during invuln (a
+  surprise interaction the ticket's "rejected alternatives" note asked
+  us to decide against).
+- **Each new capture gets its OWN named recipe**
+  (`SFX_CATCH_INVULNERABLE` sine 880, `SFX_CATCH_MULTIBALL` square 990,
+  `SFX_CATCH_BLAST` noise 1200 — each distinct from
+  `SFX_POWERUP_CATCH` square 660 and from its siblings), scheduled
+  through the unchanged `scheduleSound()` bus, so the mute/volume
+  plumbing (`MASTER_GAIN`, master bus) applies with zero new wiring.
+  `applyCapsule()` picks the recipe before its effect dispatch.
+  Alternatives rejected: one shared recipe mutated per kind in place
+  (the `SFX_BRICK_CHIP` precedent exists for a continuously-varying
+  pitch, not four discrete captures); a fanfare of multiple blips per
+  capture (extra node churn for a status pickup).
+- **No new boot-time DOM elements** — all three effects are
+  canvas/render-state only (the mode buttons from ticket #74 already
+  exist), so none of the sibling suites' element stub maps needed
+  additions; the house trap was checked and does not apply.
