@@ -319,7 +319,8 @@ check("worst-case negative jitter (draw 0): vy is strictly negative across the f
     assert(b.vy < 0,
       `every launch must leave upward, rel=${rel} draw=0 gave vy=${b.vy}`);
     const ang = Math.atan2(b.vx, -b.vy);
-    assert(ang <= Math.PI / 3 + 0.14 + 1e-9 && ang >= -(Math.PI / 3 + 0.14 + 1e-9),
+    const jit = g.q("LAUNCH_JITTER_ANGLE"); // keep the tolerance tied to the live knob
+    assert(ang <= Math.PI / 3 + jit + 1e-9 && ang >= -(Math.PI / 3 + jit + 1e-9),
       `the launch angle must stay inside the documented bound at rel=${rel}, ang=${ang}`);
   }
 });

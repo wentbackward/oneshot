@@ -203,7 +203,8 @@ function boot(width, height, seedStore = {}) {
   const q = (expr) => vm.runInContext(expr, context);
   const state = () =>
     q("typeof gameState === 'undefined' ? 'undefined' : gameState");
-  // Enter live play: start, then launch the serve ball straight up.
+  // Enter live play: start, then launch the serve ball (with the pinned
+  // random=1 the #97 launch jitter is +LAUNCH_JITTER_ANGLE from vertical).
   function startAndLaunch() {
     els["btn-start"].click();
     q("random = function () { return 1; };"); // no capsule drops by chance
