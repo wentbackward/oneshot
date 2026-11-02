@@ -164,6 +164,29 @@
     border-color: var(--accent);
     background: rgba(92, 242, 176, 0.12);
   }
+  /* Start-screen mode selector (ticket #74): one group of named
+     play modes; the active mode carries .selected. The row accepts
+     a further option button without restyling (alleyway is next). */
+  .modes {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .mode-opt {
+    font-family: inherit;
+    font-size: 0.8rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--ink);
+    background: transparent;
+    border: 1px solid rgba(92, 242, 176, 0.4);
+    padding: 0.5em 1.2em;
+    cursor: pointer;
+  }
+  .mode-opt.selected {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: rgba(92, 242, 176, 0.12);
+  }
   /* Top-five leaderboard (ticket #48): one ranked row per entry,
      rebuilt in place on insert, reset, or boot; an empty list
      renders as a single placeholder row. */
@@ -274,6 +297,10 @@
       <button id="theme-neon" type="button" class="theme-opt" data-theme="neon">Neon</button>
       <button id="theme-minimal" type="button" class="theme-opt" data-theme="minimal">Minimal</button>
     </div>
+    <div class="modes">
+      <button id="mode-classic" type="button" class="mode-opt selected" data-mode="classic">Classic</button>
+      <button id="mode-exciting" type="button" class="mode-opt" data-mode="exciting">Exciting</button>
+    </div>
     <div class="sound">
       <button id="btn-mute" type="button" class="sound-opt">Sound On</button>
       <label class="vol">Vol<input id="sound-volume" type="range" min="0" max="100" value="100"></label>
@@ -339,7 +366,11 @@
 // persisted in localStorage under their own named key, driven by
 // one THEMES table that at boot and on every selection change
 // applies the CSS custom properties and the canvas palette in a
-// single pass; and a start-screen sound toggle with a volume
+// single pass; named start-screen play modes (Classic / Exciting)
+// persisted in localStorage under their own named key, snapshotted
+// per run — today differing only in the capsule drop-rate economy
+// (classic × 1.0, exciting × the named EXCITING_DROP_FACTOR);
+// and a start-screen sound toggle with a volume
 // slider, persisted as JSON { muted, volume } under their own
 // named key and driving the master bus level live (mute wins over
 // volume), and a start-screen ball-speed slider (50-150%, persisted
@@ -496,6 +527,9 @@ function buildTierRamps() {
 buildTierRamps();
 // Power-ups (PRD section 4): capsules released by destroyed bricks
 var POWERUP_DROP_RATE = 0.25;      // normal-preset baseline; the run rolls its snapshot
+// EXCITING-mode multiplier (ticket #74): the mode's capsule drop
+// rate = the selected preset's rate × this factor (classic × 1.0).
+var EXCITING_DROP_FACTOR = 2.0;
 var CAPSULE_FALL_SPEED = 200;      // descent speed, px/s
 var CAPSULE_W = 24;                // capsule footprint, internal px
 var CAPSULE_H = 14;
@@ -542,6 +576,24 @@ var DIFFICULTY = {
     dropRate: POWERUP_DROP_RATE,
   },
   hard: { serveSpeed: 560, paddleWidth: 96, dropRate: 0.15 },
+};
+
+// Play modes (ticket #74): the start-screen choice maps to one row
+// of named knobs. beginRun() snapshots the selected row onto the
+// run, so switching modes between runs never mutates the global
+// tuning above. Today the only knob is dropFactor — classic stays
+// exactly 1.0 (legacy economy); exciting multiplies the preset's
+// drop rate by the named EXCITING_DROP_FACTOR var. The follow-up
+// tickets (exciting capsules, the alleyway mode) branch on this
+// single table and add rows/knobs without touching the selector
+// plumbing.
+var MODE_KEY = "brickbreaker.mode";
+var DEFAULT_MODE = "classic";
+var MODES = {
+  classic: { dropFactor: 1.0 },
+  // exciting references the named var, keeping a single source of
+  // truth (the DIFFICULTY.normal row precedent).
+  exciting: { dropFactor: EXCITING_DROP_FACTOR },
 };
 
 // ---- Palette (the page accent lives in the CSS --accent property;
@@ -748,6 +800,13 @@ var themeButtons = [
   [document.getElementById("theme-neon"), "neon"],
   [document.getElementById("theme-minimal"), "minimal"],
 ];
+// [element, mode-name] pairs for the start-screen play modes
+// (ticket #74); the list is what mark/select iterate, so a third
+// button (alleyway) slots in as one more row here and in MODES.
+var modeButtons = [
+  [document.getElementById("mode-classic"), "classic"],
+  [document.getElementById("mode-exciting"), "exciting"],
+];
 var btnMute = document.getElementById("btn-mute");
 var soundVolumeInput = document.getElementById("sound-volume");
 var ballSpeedInput = document.getElementById("ball-speed");
@@ -816,8 +875,13 @@ var serveCeiling = MAX_BALL_SPEED;
 // back-step lands exactly where a pristine forward run stands.
 var runServeBase = BALL_SERVE_SPEED;
 // Runtime capsule drop rate: the run's snapshot of the selected
-// preset's dropRate (default preset before the first run).
+// preset's dropRate, scaled by the selected mode's dropFactor
+// (default preset and default mode before the first run).
 var dropRate = DIFFICULTY[DEFAULT_DIFFICULTY].dropRate;
+// Runtime play mode: the run's snapshot of selectedMode (default
+// mode before the first run) — the seam follow-up tickets branch
+// on (see the MODES table above).
+var runMode = DEFAULT_MODE;
 // Held keys per direction: one set entry per distinct held code.
 // Auto-repeat keydowns re-add the same code (idempotent), so the
 // set size mirrors the fingers on the deck, not the re-dispatches.
@@ -1072,6 +1136,59 @@ for (var i = 0; i < themeButtons.length; i += 1) {
       selectTheme(name);
     });
   })(themeButtons[i][1]);
+}
+
+// ---- Mode selection (persisted, ticket #74) ----
+// The start-screen play-mode choice, persisted as a JSON string
+// under the named key (the high-score / difficulty / theme
+// encoding precedent). Unknown or corrupt stored values fall back
+// to the default mode: a botched write must never break boot.
+function loadMode() {
+  try {
+    var value = JSON.parse(localStorage.getItem(MODE_KEY));
+    return typeof value === "string" &&
+      Object.prototype.hasOwnProperty.call(MODES, value)
+      ? value
+      : DEFAULT_MODE;
+  } catch {
+    return DEFAULT_MODE; // storage unavailable, blocked, or corrupt: play on
+  }
+}
+function saveMode() {
+  try {
+    localStorage.setItem(MODE_KEY, JSON.stringify(selectedMode));
+  } catch {
+    // Non-persistent storage (e.g. blocked): the session still works.
+  }
+}
+var selectedMode = loadMode();
+// Mark exactly one option button; called at boot (storage may
+// override the static classic default) and on every selection
+// change.
+function markSelectedMode(name) {
+  for (var i = 0; i < modeButtons.length; i += 1) {
+    var pair = modeButtons[i];
+    pair[0].className =
+      pair[1] === name ? "mode-opt selected" : "mode-opt";
+  }
+}
+markSelectedMode(selectedMode);
+// A click re-selects the mode and persists it; the effect lands on
+// the NEXT run (beginRun snapshots it) — a mid-run click never
+// disturbs a live run. Re-clicking the active option is a no-op,
+// so no redundant storage write fires.
+function selectMode(name) {
+  if (name === selectedMode) return;
+  selectedMode = name;
+  saveMode();
+  markSelectedMode(name);
+}
+for (var i = 0; i < modeButtons.length; i += 1) {
+  (function (name) {
+    modeButtons[i][0].addEventListener("click", function () {
+      selectMode(name);
+    });
+  })(modeButtons[i][1]);
 }
 
 // ---- Sound settings: mute toggle + volume slider (ticket #47) ----
@@ -1733,7 +1850,10 @@ function beginRun() {
   runServeBase = preset.serveSpeed * speedFactor;
   basePaddleW = preset.paddleWidth;
   paddleW = basePaddleW;
-  dropRate = preset.dropRate;
+  // The selected mode's knobs are snapshotted beside the
+  // difficulty's: a mid-run mode click applies to the NEXT run.
+  runMode = selectedMode;
+  dropRate = preset.dropRate * MODES[runMode].dropFactor;
   simTime = 0;
   expandUntil = -1;
   stickyUntil = -1;
