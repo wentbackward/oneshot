@@ -226,7 +226,9 @@
     border-color: var(--accent);
     background: rgba(92, 242, 176, 0.12);
   }
-  .sound .vol {
+  /* Shared start-screen control treatment: the volume row and the
+     ball-speed row (ticket #73) both pair a label with a range slider. */
+  .sound .vol, .speed .vol {
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -235,29 +237,17 @@
     text-transform: uppercase;
     color: var(--ink);
   }
-  #sound-volume {
+  #sound-volume, #ball-speed {
     width: 120px;
     accent-color: var(--accent);
   }
   /* Start-screen ball-speed option (ticket #73): the slider follows
-     the volume slider's row treatment, on its own tidy row. */
+     the volume slider's row treatment, on its own tidy row. The .vol
+     and range rules are shared with the sound row above. */
   .speed {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-  }
-  .speed .vol {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.8rem;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    color: var(--ink);
-  }
-  #ball-speed {
-    width: 120px;
-    accent-color: var(--accent);
   }
 </style>
 </head>
