@@ -508,7 +508,7 @@ check("an expand capsule on hard widens from the run base width and relaxes back
     `the widen must be run-base × factor (${expected}), got ${widened}`);
   assert(widened !== g.q("BASE_PADDLE_W"),
     `the widened width must not collapse to the raw constant, got ${widened}`);
-  g.q("simTime += 7;");
+  g.q("simTime += PADDLE_EXPAND_DURATION_S + 1;"); // step past the full window
   g.tick(1);
   assert(g.q("paddleW") === base,
     `the widen must expire back to the run's base width (${base}), got ${g.q("paddleW")}`);

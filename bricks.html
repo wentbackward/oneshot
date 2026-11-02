@@ -668,16 +668,16 @@ var CAPSULE_COLORS = [
 var CAPSULE_DRAW_COLORS = CAPSULE_COLORS.concat(
   COLOR_CAPSULE_INVULN, COLOR_CAPSULE_MULTIBALL, COLOR_CAPSULE_BLAST);
 var PADDLE_EXPAND_FACTOR = 1.6;         // widened width = the run's base paddle width * factor
-var PADDLE_EXPAND_DURATION_S = 6;       // simulated seconds of widen
-var STICKY_DURATION_S = 6;              // simulated seconds the paddle still catches
+var PADDLE_EXPAND_DURATION_S = 12;      // simulated seconds of widen
+var STICKY_DURATION_S = 12;             // simulated seconds the paddle still catches
 var MULT_VALUE = 2;                     // armed kills are worth this many times their tier points
-var MULT_DURATION_S = 6;                // simulated seconds the multiplier window stays armed
+var MULT_DURATION_S = 12;               // simulated seconds the multiplier window stays armed
 // EXCITING-mode capsule effects (ticket #75): console-retunable
 // durations/radii in the house style of the effect knobs above.
-var INVULNERABLE_DURATION_S = 6;        // simulated seconds the ball smashes through breakable bricks
+var INVULNERABLE_DURATION_S = 12;       // simulated seconds the ball smashes through breakable bricks
 var MULTIBALL_CLONES = 9;               // per in-flight ball: 1 + 9 clones = 10 concurrent balls
 var MULTIBALL_SPREAD_STEP = Math.PI / 12; // angular step between adjacent fan slots
-var BLAST_DURATION_S = 5;               // simulated seconds brick hits detonate the blast radius
+var BLAST_DURATION_S = 10;              // simulated seconds brick hits detonate the blast radius
 var BLAST_RADIUS_PX = 90;               // detonation radius around the impact point, canvas px
 var COLOR_BALL_INVLUN = "#7dffa8";      // the ball's tint + halo colour while invuln is active
 var INVULN_GLOW_ALPHA = 0.35;           // the halo's opacity
