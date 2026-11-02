@@ -582,6 +582,120 @@ check("retuned LASER_LIFETIME_S = 0.2 recycles beams early, on the simulation cl
   assertClose(g.activeCount(), 0, 0, "beam must be recycled at the retuned lifetime, not the default");
 });
 
+// ================================================================
+// CRITERION 1 (ticket #67): a fresh beam in a recycled slot must not
+// inherit the previous occupant's last step — tryFire initializes
+// slot.dt = 0 in the same line-cluster as x/y/dx/dy/age/serial, with
+// a note on the sweep-segment reasoning (checkLaserKills rebuilds the
+// swept segment backwards as pos - dir * LASER_SPEED * s.dt).
+// ================================================================
+check("tryFire initializes slot.dt = 0 in the slot-setup cluster, with a sweep-segment note", () => {
+  const start = gameSource.indexOf("function tryFire");
+  const end = gameSource.indexOf("function updateLasers");
+  assert(start !== -1 && end > start, "tryFire body must be locatable");
+  const body = gameSource.slice(start, end);
+  const iDt = body.indexOf("slot.dt = 0");
+  assert(iDt !== -1, "tryFire must set slot.dt = 0 on slot (re)initialization");
+  // Same line-cluster as the other slot fields (between the aim vectors
+  // and the serial/identity fields, i.e. neither before the placement
+  // nor after the serial).
+  const iY = body.indexOf("slot.y =");
+  const iSerial = body.indexOf("slot.serial =");
+  assert(iY !== -1 && iSerial !== -1, "tryFire must still initialize slot.y and slot.serial");
+  assert(iY < iDt && iDt < iSerial,
+    "the dt reset belongs in the initialization cluster (after y, before serial)");
+  assert(/sweep/i.test(body.slice(iDt, iDt + 400)),
+    "the dt reset must carry a comment noting the sweep-segment reasoning");
+});
+
+// Drive one beam to its lifetime expiry so the pool slot it occupied
+// is free but still holds the occupant's last step (the pre-fix state
+// the ticket describes). Returns the index of the freed slot.
+function recycleOccupiedSlot(g, ticksMax = 40) {
+  g.q("LASER_LIFETIME_S = 0.2"); // short life: expiry well inside the test window
+  g.key("Space", true);
+  g.tick(); // bootstrap frame (dt = 0): the shot releases from the nose
+  g.key("Space", false);
+  for (let i = 0; i < ticksMax; i++) {
+    if (g.activeCount() === 0) break;
+    g.tick();
+  }
+  assert(g.activeCount() === 0, "the occupant beam must have expired and freed its slot");
+  const staleDt = g.q("laserPool.slots[0].dt");
+  assert(staleDt > 1 / 120,
+    `fixture precondition: the recycled slot still carries the occupant's last step (got dt=${staleDt})`);
+  return 0; // tryFire's indexed scan reuses the first free slot
+}
+
+// ================================================================
+// CRITERION 2a (ticket #67): a rock parked ~10 px astern of the nose
+// survives the FIRST hit-test frame of a fresh beam that reuses a
+// recycled slot — the phantom sweep reach must be gone. Probed by
+// calling tryFire() and then checkLaserKills() directly, i.e. the
+// fresh beam's first hit test in the state the fire-frame hand-off
+// creates, before updateLasers writes its own step into slot.dt.
+// (At exactly 60 fps the stale step equals the fresh step, so a
+// full-frame drive cannot expose the pre-fix state deterministically.)
+// ================================================================
+check("a rock ~10 px astern of the nose survives the first hit-test frame of a fresh beam in a recycled slot", () => {
+  const g = boot(1000, 1000);
+  g.q("ASTEROID_BASE = 0; ASTEROID_GROWTH = 0; DRONE_BASE = 0; DRONE_GROWTH = 0;");
+  const shipX = g.q("ship.x");
+  const noseY = g.q("ship.y") - g.q("SHIP_RADIUS + LASER_LENGTH / 2"); // heading up
+  recycleOccupiedSlot(g); // free slot 0 with a stale step in slot.dt
+  // Placed AFTER the recycle loop so the occupant beam never saw it;
+  // no tick runs after placement, so the hull's own hit test never
+  // gets a chance to contest the rock. 10 px astern of the nose —
+  // inside the previous occupant's last step (~LASER_SPEED/60 =
+  // 11.67 px at defaults), clear of a point at the muzzle.
+  placeAst(g, shipX, noseY + 10, 2);
+  // Fire the fresh beam and hit-test it in the fire-hand-off state:
+  g.key("Space", true);
+  g.q("tryFire()");
+  const idx = 0; // tryFire's indexed scan reuses the first free slot
+  const slot = g.q(`laserPool.slots[${idx}]`);
+  assert(slot.active, "the fresh beam must occupy the recycled slot");
+  assert(slot.x === shipX && slot.y === noseY, "the fresh beam starts exactly at the muzzle");
+  assert(slot.dt === 0,
+    `the fresh beam must start as a POINT at the muzzle (dt = 0), not inherit the recycled slot's last step (dt=${slot.dt})`);
+  g.q("checkLaserKills()"); // the fresh beam's first hit-test, in the fire-hand-off state
+  assert(g.q("score") === 0, "no score on the fresh beam's first hit-test frame");
+  assert(g.q("asteroids.slots.reduce((n, a) => n + (a.active && a.r === 2 ? 1 : 0), 0)") === 1,
+    "the rock astern of the muzzle must still be alive after the first hit-test frame");
+});
+
+// ================================================================
+// CRITERION 2b (ticket #67): legitimate reach is intact — a rock in
+// the beam's forward path is NOT killed before the beam's own swept
+// front reaches it, and IS killed on the frame its own segment
+// covers it. Guards against an over-aggressive fix that would mute
+// the fresh beam's own first-frame sweep.
+// ================================================================
+check("a rock in the forward path is killed only when the fresh beam's own swept front reaches it", () => {
+  const g = boot(1000, 1000);
+  g.q("ASTEROID_BASE = 0; ASTEROID_GROWTH = 0; DRONE_BASE = 0; DRONE_GROWTH = 0;");
+  const shipX = g.q("ship.x");
+  const noseY = g.q("ship.y") - g.q("SHIP_RADIUS + LASER_LENGTH / 2"); // heading up
+  recycleOccupiedSlot(g); // free slot 0 with a stale step in slot.dt
+  // Placed AFTER the recycle loop so the occupant beam never saw it.
+  // 40 px ahead of the muzzle, radius 3: its leading skin sits 37 px
+  // out — past three 11.67 px steps (35 px), inside the fourth (46.67).
+  placeAst(g, shipX, noseY - 40, 3);
+  g.key("Space", true);
+  g.tick(); // fire frame: own segment covers 0..11.67 px ahead
+  g.key("Space", false);
+  assert(g.q("score") === 0, "the fresh beam must not over-reach before its swept front arrives (fire frame)");
+  g.tick(); // own segment covers 11.67..23.33 px ahead
+  assert(g.q("score") === 0, "the rock must survive until its own swept front arrives (frame 2)");
+  g.tick(); // own segment covers 23.33..35 px ahead: still 2 px short
+  assert(g.q("score") === 0, "the rock must survive until its own swept front arrives (frame 3)");
+  g.tick(); // own segment covers 35..46.67 px ahead: covers the rock
+  assert(g.q("score") === g.q("SCORE_PER_LARGE"),
+    "the rock must be killed by the beam's own swept segment once it reaches it (frame 4)");
+  assert(g.q("asteroids.slots.reduce((n, a) => n + (a.active && a.r === 3 ? 1 : 0), 0)") === 0,
+    "the fixture rock must be gone, not just unscored");
+});
+
 // ---------- summary ----------
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);
