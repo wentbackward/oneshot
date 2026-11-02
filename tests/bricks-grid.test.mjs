@@ -703,6 +703,10 @@ check("launching the level-2 ball flies at exactly level 1 speed x LEVEL_SPEED_G
   const g = boot(960, 600);
   start(g);
   winLevel(g);
+  // Draw 0.5 is the launch jitter's zero-crossing, so the exact-speed
+  // equality below stays deterministic; the jitter itself is covered
+  // by tests/bricks-serve-jitter.test.mjs.
+  g.q("random = function () { return 0.5; };");
   g.canvasClick();
   const n = g.ball();
   const want = g.q("BALL_SERVE_SPEED") * g.q("LEVEL_SPEED_GROWTH");
