@@ -63,6 +63,14 @@ function check(name, fn) {
 function assert(cond, msg) {
   if (!cond) throw new Error(msg);
 }
+// The right field edge is derived (margin + 9 column steps) and can
+// carry a binary-float rounding residual; the left edge IS the named
+// margin, so only the derived edge gets a sub-nanopixel tolerance.
+function assertClose(actual, expected, tol, msg) {
+  if (Math.abs(actual - expected) > tol) {
+    throw new Error(`${msg} (got ${actual}, want ${expected} ± ${tol})`);
+  }
+}
 
 // A DOM element stub: records styles, text, listeners and classes.
 function makeEl(id) {
@@ -264,9 +272,9 @@ check("classic: the outermost bricks sit exactly one widened inset from both sid
   const s = g.sideProfile();
   assert(s.leftGap === WIDE_INSET,
     `the leftmost brick must start at the widened inset ${WIDE_INSET}, got ${s.leftGap}`);
-  assert(s.rightGap === WIDE_INSET,
-    `the rightmost brick must end at the widened inset ${WIDE_INSET} from the right wall, got ${s.rightGap}`);
-  assert(s.leftGap === s.rightGap,
+  assertClose(s.rightGap, WIDE_INSET, 1e-9,
+    `the rightmost brick must end at the widened inset ${WIDE_INSET} from the right wall`);
+  assertClose(s.leftGap, s.rightGap, 1e-9,
     `the brick field must be symmetric (left ${s.leftGap} != right ${s.rightGap})`);
   assert(s.topY === g.q("BRICK_TOP_MARGIN"),
     `the top row must still sit at BRICK_TOP_MARGIN, got ${s.topY}`);
@@ -324,9 +332,9 @@ check("alleyway: the 5-col field sits one widened inset from both walls and is s
   const s = g.sideProfile();
   assert(s.leftGap === WIDE_INSET,
     `the leftmost brick must start at the widened inset ${WIDE_INSET}, got ${s.leftGap}`);
-  assert(s.rightGap === WIDE_INSET,
-    `the rightmost brick must end at the widened inset ${WIDE_INSET} from the right wall, got ${s.rightGap}`);
-  assert(s.leftGap === s.rightGap,
+  assertClose(s.rightGap, WIDE_INSET, 1e-9,
+    `the rightmost brick must end at the widened inset ${WIDE_INSET} from the right wall`);
+  assertClose(s.leftGap, s.rightGap, 1e-9,
     `the portrait field must be symmetric (left ${s.leftGap} != right ${s.rightGap})`);
 });
 

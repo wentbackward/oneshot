@@ -488,8 +488,16 @@ var ALLEYWAY_BRICK_ROWS = 10;     // alleyway portrait grid rows
 var ALLEYWAY_BRICK_COLS = 5;      // alleyway portrait grid columns
 var BRICK_ROWS = CLASSIC_BRICK_ROWS; // runtime: beginRun() (re)sets per mode
 var BRICK_COLS = CLASSIC_BRICK_COLS; // runtime: beginRun() (re)sets per mode
-var BRICK_SIDE_MARGIN = 24;
-var BRICK_TOP_MARGIN = 64;
+// BRICK_SIDE_MARGIN was 24 px (ticket #98): that left the outermost
+// bricks so close to the side walls that the limited angles the
+// paddle can impart made off-centre bricks almost unreachable.
+// Widened to 40 canvas px in BOTH modes (classic 10-col and
+// alleyway 5-col portrait — see the #98 entry in docs/DECISIONS.md)
+// so balls have breathing room to develop reflection angles; the
+// field stays centred and symmetric because layoutBricks() derives
+// the column width from the margin. Modest, not a reflow.
+var BRICK_SIDE_MARGIN = 40;
+var BRICK_TOP_MARGIN = 64;   // untouched by the #98 widening
 var BRICK_GAP = 6;
 var BRICK_HEIGHT = 26;
 // Hard bound on the post-hit seam drain in updateBalls(). With
