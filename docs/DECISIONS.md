@@ -2383,3 +2383,42 @@ arcade physics).
   "already rattled" flag (hidden state in the hot path, changes
   corner semantics); throttling by sim time (allocation-free but
   arbitrary and unpinnable in deterministic tests).
+## 2026-11-02 — Ticket #97: randomise the serve launch direction
+
+- **Jitter is additive on the launch angle, not a fixed minimum
+  angle.** A floor (e.g. "at least 5° off vertical") would make every
+  centre serve deterministically biased to one side once the sign rule
+  is known, so a skilled player could pre-compensate with a fixed
+  paddle nudge and re-create the straight column; a symmetric uniform
+  jitter in `[-LAUNCH_JITTER_ANGLE, +LAUNCH_JITTER_ANGLE]` drawn
+  through the existing mutable `random` hook has zero mean, zero
+  pattern to learn, and stays bit-reproducible under test pins.
+  Alternatives rejected: a fixed minimum angle (learnable bias, above);
+  choosing a random paddle contact point instead (changes perceived
+  ball position at serve — worse than moving the invisible angle);
+  per-difficulty jitter (the exploit exists on every preset; the knob
+  is globally retunable if tuning ever wants per-preset values).
+- **`LAUNCH_JITTER_ANGLE = 0.12` rad (~6.9°).** Midpoint of the
+  ticket's 0.10–0.14 rad suggestion: large enough to visibly break
+  the column rhythm, small enough that a well-timed player still reads
+  the launch as "their" serve. Declared as a top-level `var` beside
+  `MAX_PADDLE_BOUNCE_ANGLE` (console-retunable, matching the house
+  knob style).
+- **The upward guarantee is analytic, not clamped:**
+  `|rel * MAX_PADDLE_BOUNCE_ANGLE + jitter| <= PI/3 + 0.12 < PI/2`
+  for all `rel in [-1,1]`, so `cos(ang) > 0` and `vy < 0` always.
+  Clamping `ang` would silently distort the angle law at the rims and
+  is dead weight while the bound holds; the bound itself is asserted
+  in `tests/bricks-serve-jitter.test.mjs`.
+- **Extra-ball catches (`spawnExtraBall`) keep their straight-up
+  spawn.** The ticket scopes the fix to serve launches
+  (`launchAttachedBalls`); a catch-spawned ball is already in live
+  play at full speed and the paddle can intercept a vertical one —
+  it is not the parked-serve exploit.
+- **Pre-existing exact angle-law tests pin the jitter to its
+  zero-crossing (`random() = 0.5`) rather than widening their
+  tolerance.** They exist to pin the position-angle law itself;
+  drawing 0.5 makes the jitter term exactly 0 with zero
+  approximation error, and the jitter behaviour gets its own dedicated
+  suite (`tests/bricks-serve-jitter.test.mjs`). Widening the epsilon
+  would have turned exact-law assertions into fuzzy ones.
