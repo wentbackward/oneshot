@@ -14,9 +14,9 @@
 // Pointer tracking is window-level (ticket #40): the harness fires
 // mousemove/touchmove at the recorded WINDOW listeners, mirroring a
 // browser that delivers cursor motion even outside the canvas.
-// Ticket #91 supersedes the #40 edge-clamp: in-rect positions map
-// through the rect and follow (per-event step capped at
-// POINTER_MAX_STEP); out-of-rect positions HOLD the paddle.
+// Ticket #95 redesigns the #91 rules: every in-rect position maps
+// through the rect and the paddle is SET there in one event (1:1);
+// out-of-rect positions HUG the matching wall.
 //
 // Run: node tests/bricks-paddle.test.mjs
 // ================================================================
@@ -223,8 +223,7 @@ function boot(width = 960, height = 600) {
       fireWin("blur", { type: "blur" });
     },
     mouseMove(clientX, clientY) {
-      // An omitted clientY sits at the rect's vertical midline —
-      // inside the rect (ticket #91's containment test uses both axes).
+      // An omitted clientY sits at the rect's vertical midline.
       fireWin("mousemove", {
         clientX,
         clientY: clientY === undefined ? canvas.rect.top + canvas.rect.height / 2 : clientY,
@@ -402,13 +401,13 @@ check("auto-repeat keydowns of one held key do not change the paddle speed", () 
 });
 
 // ================================================================
-// Criteria (ticket #40, steering rules superseded by #91): pointer
+// Criteria (ticket #40, steering rules superseded by #95): pointer
 // tracking is window-level — mousemove / touchmove register on
 // window, not canvas. In-rect positions map through the canvas
-// bounding rect (fixed-aspect stage, #39) and clamp to the field;
-// the per-event step is capped at POINTER_MAX_STEP (#91). Out-of-
-// rect positions HOLD the paddle instead of clamping to the nearest
-// edge (#91 supersedes the #40 edge-clamp).
+// bounding rect (fixed-aspect stage, #39) and the paddle is SET to
+// the mapped, field-clamped x in one event (1:1, #95). Out-of-
+// rect positions HUG the matching wall (#95; the #91 per-event cap
+// and hold are gone, the #40 edge-clamp is superseded).
 // ================================================================
 check("mousemove and touchmove listeners are registered on window, not on the canvas", () => {
   const g = boot(960, 600);
@@ -422,15 +421,15 @@ check("mousemove and touchmove listeners are registered on window, not on the ca
     "the canvas must no longer carry a touchmove listener");
 });
 
-check("a mousemove dispatched on window sets the paddle x to the rect-mapped cursor x (within 1 px)", () => {
+check("a mousemove dispatched on window sets the paddle x to the rect-mapped cursor x (exact, one event)", () => {
   const g = boot(960, 600); // rect fills the viewport: {0, 0, 960, 600}
   start(g);
-  g.q("paddle.x = 210;"); // park within the #91 per-event cap of the target
+  g.q("paddle.x = 1700;"); // park far away: the event must land in ONE step
   g.mouseMove(100); // delivered to the window listener
   const rect = g.canvas.rect;
   const want = ((100 - rect.left) / rect.width) * g.canvas.width; // 200
-  assertClose(g.paddleX(), want, 1,
-    `window mousemove clientX 100 must land the paddle at ${want} px, got ${g.paddleX()}`);
+  assertClose(g.paddleX(), want, 1e-9,
+    `window mousemove clientX 100 must land the paddle at ${want} px in one event, got ${g.paddleX()}`);
 });
 
 check("a mousemove dispatched only to the canvas no longer moves the paddle", () => {
@@ -446,31 +445,27 @@ check("a mousemove dispatched only to the canvas no longer moves the paddle", ()
     `a canvas-only mousemove must be ignored, paddle moved from ${x} to ${g.paddleX()}`);
 });
 
-check("a pointer left of the rect holds the paddle in place (ticket #91 superseded the #40 edge-pin)", () => {
+check("a pointer left of the rect hugs the LEFT wall (ticket #95 wall-hug replaces the #91 hold and the #40 edge-pin)", () => {
   const g = boot(960, 600);
   start(g);
   // Letterboxed stage: a 480-wide rect centred in a wider viewport.
   g.setRect({ left: 240, top: 0, width: 480, height: 300 });
-  const x0 = g.paddleX();
+  g.q("paddle.x = canvas.width / 2;"); // far from the left wall
   g.mouseMove(-10000); // far left of the rect, in the letterbox bar
-  g.tick(5);
-  assert(g.paddleX() === x0,
-    `a pointer outside the rect must HOLD the paddle at ${x0}, got ${g.paddleX()}`);
-  assert(g.paddleX() !== g.q("paddleW / 2"),
-    `the paddle must NOT be pinned to the left wall, got ${g.paddleX()}`);
+  g.tick(5); // the hug must stick across play frames
+  assert(g.paddleX() === g.q("paddleW / 2"),
+    `a pointer left of the rect must HUG the left wall (paddleW/2), got ${g.paddleX()}`);
 });
 
-check("a pointer right of the rect holds the paddle in place (ticket #91 superseded the #40 edge-pin)", () => {
+check("a pointer right of the rect hugs the RIGHT wall (ticket #95 wall-hug replaces the #91 hold and the #40 edge-pin)", () => {
   const g = boot(960, 600);
   start(g);
   g.setRect({ left: 240, top: 0, width: 480, height: 300 });
-  const x0 = g.paddleX();
+  g.q("paddle.x = canvas.width / 2;"); // far from the right wall
   g.mouseMove(10000); // far right of the rect, in the letterbox bar
   g.tick(5);
-  assert(g.paddleX() === x0,
-    `a pointer outside the rect must HOLD the paddle at ${x0}, got ${g.paddleX()}`);
-  assert(g.paddleX() !== g.q("canvas.width - paddleW / 2"),
-    `the paddle must NOT be pinned to the right wall, got ${g.paddleX()}`);
+  assert(g.paddleX() === g.q("canvas.width - paddleW / 2"),
+    `a pointer right of the rect must HUG the right wall, got ${g.paddleX()}`);
 });
 
 check("cursor: none sits on the single-line #game rule (gate-locked), not in a page-wide (html/body) rule", () => {
@@ -519,9 +514,9 @@ check("setPaddleX maps through getBoundingClientRect(), not window.innerWidth, a
     `the backing store must stay fixed at ${g.q("GAME_W * CANVAS_SCALE")}x${g.q("GAME_H * CANVAS_SCALE")}, got ${g.canvas.width}x${g.canvas.height}`);
   const rect = g.canvas.rect;
   const want = ((120 - rect.left) / rect.width) * g.canvas.width; // 480
-  g.q("paddle.x = " + (want + 10) + ";"); // park within the #91 per-event cap
+  g.q("paddle.x = " + (want + 10) + ";"); // park off-target
   g.mouseMove(120); // inside the rect
-  assertClose(g.paddleX(), want, 1,
+  assertClose(g.paddleX(), want, 1e-9,
     `post-resize mousemove clientX 120 must land the paddle at ${want} px (not (120/480)·width), got ${g.paddleX()}`);
 });
 
@@ -537,52 +532,52 @@ check("a degenerate bounding rect (width 0) never poisons the paddle — the mov
   assertClose(g.paddleX(), before, 1e-9,
     `a degenerate-rect mousemove must leave the paddle alone, got ${g.paddleX()}, want ${before}`);
   g.setRect({ left: 0, top: 0, width: 960, height: 600 }); // viewport reappears
-  g.q("paddle.x = 210;"); // park within the #91 per-event cap of the target
+  g.q("paddle.x = 1700;"); // park far from the target
   g.mouseMove(100);
   const want = (100 / 960) * g.canvas.width;
-  assertClose(g.paddleX(), want, 1,
+  assertClose(g.paddleX(), want, 1e-9,
     `after the rect recovers the mapping must work again, want ${want}, got ${g.paddleX()}`);
 });
 
-check("a mousemove into an offset rect lands the paddle at (clientX - rect.left) / rect.width · canvas.width; outside the rect holds", () => {
+check("a mousemove into an offset rect lands the paddle at (clientX - rect.left) / rect.width · canvas.width; outside the rect hugs the matching wall (ticket #95)", () => {
   const g = boot(960, 600);
   start(g);
   // Wide 1600×900 viewport: the letterbox is a 1440×900 rect at left 80.
   g.setRect({ left: 80, top: 0, width: 1440, height: 900 });
   const rect = g.canvas.rect;
-  g.q("paddle.x = 565;"); // park within the #91 per-event cap of the target
+  g.q("paddle.x = 565;"); // park off-target
   g.mouseMove(500); // inside the rect
   const want = ((500 - rect.left) / rect.width) * g.canvas.width; // 560
-  assertClose(g.paddleX(), want, 1,
+  assertClose(g.paddleX(), want, 1e-9,
     `a clientX inside an offset rect must use (clientX - rect.left)/rect.width, want ${want}, got ${g.paddleX()}`);
   g.mouseMove(rect.left - 2000); // outside the rect, far left
-  assertClose(g.paddleX(), want, 1e-9,
-    `a pointer left of the rect must HOLD the paddle at ${want}, got ${g.paddleX()}`);
+  assert(g.paddleX() === g.q("paddleW / 2"),
+    `a pointer left of the rect must HUG the left wall, got ${g.paddleX()}`);
   g.mouseMove(rect.left + rect.width + 2000); // outside the rect, far right
-  assertClose(g.paddleX(), want, 1e-9,
-    `a pointer right of the rect must HOLD the paddle at ${want}, got ${g.paddleX()}`);
+  assert(g.paddleX() === g.q("canvas.width - paddleW / 2"),
+    `a pointer right of the rect must HUG the right wall, got ${g.paddleX()}`);
 });
 
-check("a dispatched touchmove drag (window) sets the paddle x the same way (within 1 px)", () => {
+check("a dispatched touchmove drag (window) sets the paddle x the same way (exact, one event)", () => {
   const g = boot(960, 600);
   start(g);
-  g.q("paddle.x = 610;"); // park within the #91 per-event cap of the target
+  g.q("paddle.x = 610;"); // park far from the target
   g.touchDrag(300);
   const want = (300 / 960) * g.canvas.width; // 600
-  assertClose(g.paddleX(), want, 1,
+  assertClose(g.paddleX(), want, 1e-9,
     `touchmove clientX 300 must land the paddle at ${want} px, got ${g.paddleX()}`);
 });
 
-check("pointer positions outside the rect hold the paddle — no clamp-to-edge (ticket #91)", () => {
+check("pointer positions outside the rect HUG the matching wall (ticket #95 replaces the #91 hold)", () => {
   const g = boot(960, 600);
   start(g);
-  const x0 = g.paddleX();
+  g.q("paddle.x = canvas.width / 2;"); // start mid-stage
   g.mouseMove(-5000); // outside the rect (boot rect fills the viewport)
-  assert(g.paddleX() === x0,
-    `a pointer outside the rect must HOLD the paddle at ${x0}, got ${g.paddleX()}`);
+  assert(g.paddleX() === g.q("paddleW / 2"),
+    `a far-left pointer must HUG the left wall, got ${g.paddleX()}`);
   g.mouseMove(50000);
-  assert(g.paddleX() === x0,
-    `a far-right pointer must HOLD the paddle at ${x0}, got ${g.paddleX()}`);
+  assert(g.paddleX() === g.q("canvas.width - paddleW / 2"),
+    `a far-right pointer must HUG the right wall, got ${g.paddleX()}`);
 });
 
 // The window pointer listeners are deliberately state-ungated; this
@@ -593,10 +588,10 @@ check("pointer positions outside the rect hold the paddle — no clamp-to-edge (
 // the paddle always follows the cursor.)
 check("pointer listeners are state-ungated: a window mousemove dispatched during 'start' still moves the paddle", () => {
   const g = boot(960, 600);
-  g.q("paddle.x = 210;"); // park within the #91 per-event cap of the target
+  g.q("paddle.x = 1700;"); // park far from the target
   g.mouseMove(100); // state "start"; cursor is over the start overlay
   const want = (100 / 960) * g.canvas.width;
-  assertClose(g.paddleX(), want, 1,
+  assertClose(g.paddleX(), want, 1e-9,
     `the window mousemove listener is state-ungated and must set the paddle x in 'start' too, got ${g.paddleX()}`);
 });
 

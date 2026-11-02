@@ -415,9 +415,10 @@ check("AC3: at 50% the keyboard-held paddle moves 0.5× the base keyspeed per fr
 // ================================================================
 // AC5: the pointer-driven paddle follows POSITION, never a speed
 // — the same gesture must land the paddle at the bitwise-same x
-// at any slider setting (the #91 per-event step cap included).
+// at any slider setting (the mapping is a pure function of the
+// rect and the cursor, #95).
 // ================================================================
-check("AC5: pointer-driven paddle displacement is unchanged by the factor (100% vs 150%)", () => {
+check("AC5: pointer-driven paddle landing is unchanged by the factor (100% vs 150%)", () => {
   const slow = boot(960, 600);
   const fast = boot(960, 600);
   start(slow);
@@ -425,8 +426,10 @@ check("AC5: pointer-driven paddle displacement is unchanged by the factor (100% 
   start(fast);
   const gesture = (g) => {
     g.q("paddle.x = canvas.width / 2;");
-    // A far in-rect move: the #91 cap clamps the step, so the
-    // landing is a pure function of the cap and the start x.
+    // A far in-rect move, then a second event: with 1:1 tracking
+    // the landing is a pure function of the rect mapping — the
+    // cursor's final clientX (890/960 · canvas.width), whatever the
+    // run's factor.
     g.mouseMove(900);
     g.mouseMove(890);
     return g.paddleX();
@@ -435,9 +438,9 @@ check("AC5: pointer-driven paddle displacement is unchanged by the factor (100% 
   const xFast = gesture(fast);
   assert(xSlow === xFast,
     `the pointer gesture must land the paddle at the identical x regardless of the run's factor: 100% -> ${xSlow}, 150% -> ${xFast}`);
-  const want = slow.q("canvas.width / 2 + 2 * POINTER_MAX_STEP");
+  const want = slow.q("(890 / 960) * canvas.width");
   assert(xFast === want,
-    `sanity: two capped pointer steps must land at centre + 2·POINTER_MAX_STEP (${want}), got ${xFast}`);
+    `the gesture's final event must land the paddle at the rect-mapped x (${want}), got ${xFast}`);
 });
 
 // ================================================================

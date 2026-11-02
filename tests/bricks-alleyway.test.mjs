@@ -22,8 +22,9 @@
 //   AC3 — classic run regression (960×600, 5 rows × 10 cols) and
 //         alleyway → menu → classic restores everything (no residue)
 //   AC4 — pointer mapping through the fitted portrait rect: right
-//         edge clientX → paddle at the right wall (not 960-space);
-//         per-event steps capped and outside-the-rect holds (#91)
+//         edge clientX → paddle at the right wall in ONE event
+//         (not 960-space); off-field positions hug the matching
+//         wall (#95 supersedes the #91 cap and hold)
 //   AC5 — (structure) the table's geometry is named, the pattern
 //         table is a SEPARATE portrait table, and every pattern is
 //         provably clearable (flood-fill from the bottom)
@@ -612,10 +613,10 @@ check("alleyway run → menu → classic run: stage, grid, dimensions and paddle
 
 // ================================================================
 // Acceptance 4 — pointer mapping through the portrait rect
-// (steering rules superseded by #91: per-event steps are capped at
-// POINTER_MAX_STEP and outside-the-rect positions hold)
+// (steering rules superseded by #95: instant 1:1 rect-mapped
+// tracking; off-field positions hug the matching wall)
 // ================================================================
-check("pointer at the RIGHT EDGE of the portrait-fitted canvas lands the paddle at the right wall (rect-mapped, not 960-space)", () => {
+check("pointer at the RIGHT EDGE of the portrait-fitted canvas lands the paddle at the right wall in ONE event (rect-mapped, not 960-space)", () => {
   const g = boot(400, 700, { [KEY]: '"alleyway"' });
   g.els["btn-start"].click();
   // The fitted CSS rect the game itself computed (400×700 viewport).
@@ -625,40 +626,29 @@ check("pointer at the RIGHT EDGE of the portrait-fitted canvas lands the paddle 
   assert(g.canvas.style.width === rw + "px" && g.canvas.style.height === rh + "px",
     `setup: the fitted rect must be ${rw}×${rh}, got ${g.canvas.style.width}×${g.canvas.style.height}`);
   g.canvas.rect = { left: 0, top: 0, width: rw, height: rh };
-  const cap = g.q("POINTER_MAX_STEP");
 
-  // #91: one event may walk at most POINTER_MAX_STEP — park just
-  // inside the cap of the right wall so the single right-edge event
-  // lands deterministically.
-  g.q(`paddle.x = canvas.width - paddleW / 2 - ${Math.min(10, cap - 1)};`);
+  // #95: no per-event cap — park at the opposite (left) wall so a
+  // single right-edge event must travel the full portrait width in
+  // one step.
+  g.q("paddle.x = paddleW / 2;");
   g.win.dispatch("mousemove", { clientX: rw, clientY: rh / 2 }); // right edge
-  const rightEdge = g.q("paddle.x");
-  assert(rightEdge === g.canvas.width - g.q("paddleW") / 2,
-    `the right-edge clientX must map to the full-rect fraction and pin the paddle at the portrait right wall (${g.canvas.width - g.q("paddleW") / 2}), got ${rightEdge}`);
+  assert(g.q("paddle.x") === g.canvas.width - g.q("paddleW") / 2,
+    `the right-edge clientX must map to the full-rect fraction and pin the paddle at the portrait right wall (${g.canvas.width - g.q("paddleW") / 2}) in one event, got ${g.q("paddle.x")}`);
 
-  // The centre is further than one cap step: fire bounded repeated
-  // events; the stateless per-event walk converges EXACTLY on the
-  // rect-mapped centre, which proves portrait-space mapping.
-  const budget = Math.ceil(
-    (g.q("paddle.x") - g.canvas.width / 2) / cap) + 1; // from the right wall
-  let prev = -1;
-  let steps = 0;
-  let cur = g.q("paddle.x");
-  do {
-    prev = cur;
-    g.win.dispatch("mousemove", { clientX: rw / 2, clientY: rh / 2 }); // centre
-    cur = g.q("paddle.x");
-    assert(++steps <= budget,
-      `centre events must converge within ~distance/cap steps, took ${steps}`);
-  } while (cur !== prev);
+  // Centre in ONE event from the right wall — a single event landing
+  // on the rect-mapped centre proves portrait-space 1:1 mapping.
+  g.win.dispatch("mousemove", { clientX: rw / 2, clientY: rh / 2 }); // centre
   assert(g.q("paddle.x") === g.canvas.width / 2,
-    `sustained centre events must converge on the backing-store centre (${g.canvas.width / 2}), got ${g.q("paddle.x")}`);
+    `one centre event must land the paddle exactly on the backing-store centre (${g.canvas.width / 2}), got ${g.q("paddle.x")}`);
 
-  // #91 supersedes the #40 edge-clamp: off-field holds, not clamps.
-  const held = g.q("paddle.x");
+  // #95 supersedes the #91 hold: off-field hugs the matching wall,
+  // it does not freeze the paddle.
   g.win.dispatch("mousemove", { clientX: -100, clientY: rh / 2 }); // off-field left
-  assert(g.q("paddle.x") === held,
-    `an off-field position must HOLD the paddle at ${held} (not clamp to ${g.q("paddleW") / 2}), got ${g.q("paddle.x")}`);
+  assert(g.q("paddle.x") === g.q("paddleW") / 2,
+    `an off-field-left position must HUG the left wall (${g.q("paddleW") / 2}), got ${g.q("paddle.x")}`);
+  g.win.dispatch("mousemove", { clientX: rw + 100, clientY: rh / 2 }); // off-field right
+  assert(g.q("paddle.x") === g.canvas.width - g.q("paddleW") / 2,
+    `an off-field-right position must HUG the right wall, got ${g.q("paddle.x")}`);
 });
 
 // ================================================================
