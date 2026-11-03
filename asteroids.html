@@ -219,6 +219,31 @@
     ship.x = canvas.width / 2;
     ship.y = canvas.height / 2;
 
+    // ---- Native full screen (ticket #114) ----
+    // document.body is the toggle target: asteroids already draws a
+    // full-window canvas, so taking the body full screen simply scales
+    // the whole stage up — no wrapper DOM (docs/DECISIONS.md). The
+    // single source of truth is document.fullscreenElement.
+    function toggleFullscreen() {
+      // Feature-support guard: a browser without the API gets a
+      // silent no-op, never an error.
+      if (typeof document.requestFullscreen !== "function") return;
+      // Both calls return a promise; a permission denial or transient
+      // failure must NEVER throw into a user gesture.
+      const promise = document.fullscreenElement
+        ? document.exitFullscreen()
+        : document.body.requestFullscreen();
+      if (promise && typeof promise.catch === "function") {
+        promise.catch(() => {});
+      }
+    }
+    // Full screen does NOT guarantee a window "resize" event, so the
+    // canvas is refit by the fullscreenchange listener itself, explicitly
+    // — by the time it fires, document.fullscreenElement already reflects
+    // the browser's real state (Esc exits natively through the same path;
+    // we never bind Escape ourselves).
+    document.addEventListener("fullscreenchange", resize);
+
     // ================================================================
     // INPUT — arrow keys and WASD both handled
     // ================================================================
@@ -226,6 +251,17 @@
 
     window.addEventListener("keydown", (e) => {
       initAudio(); // first gesture: create/resume the AudioContext (no-op before then, silent without Web Audio)
+      // Native full screen toggle (ticket #114): valid in ANY game
+      // state (a keydown is a user-activation gesture), and checked
+      // BEFORE the screen-transition and gameplay paths so F can never
+      // be swallowed as an input (F is not in KEY_CODES). The repeat
+      // guard stops a HELD F flapping the toggle — only the press
+      // edge counts (docs/DECISIONS.md).
+      if (e.code === "KeyF") {
+        if (e.repeat) return;
+        toggleFullscreen();
+        return;
+      }
       // Screen transitions are edge-triggered and state-gated: Enter
       // starts from the start screen; Enter or R restarts from game
       // over. Neither acts in any other state (a play-run is never
@@ -979,6 +1015,7 @@
       ctx.font = `${UI_HUD_PX}px ${UI_FONT}`;
       ctx.fillText("ARROWS / WASD  MOVE", cx, cy + 64);
       ctx.fillText("SPACE  FIRE", cx, cy + 92);
+      ctx.fillText("F  FULL SCREEN", cx, cy + 120);
       ctx.textAlign = "left";
     }
 

@@ -97,7 +97,10 @@ function boot(width = 960, height = 600) {
         (listeners[type] ??= []).push(cb);
       },
     },
-    document: { getElementById: (id) => (id === "game" ? canvasStub : null) },
+    document: {
+      getElementById: (id) => (id === "game" ? canvasStub : null),
+      addEventListener: () => {}, // ticket #114: fullscreenchange registers on document at boot
+    },
     requestAnimationFrame: (cb) => {
       rafCallback = cb;
       return 1;

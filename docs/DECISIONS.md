@@ -2689,3 +2689,49 @@ arcade physics).
   option-button padding again (second bite out of #111's compaction
   budget; the row would also feel cramped) and a 0.6rem gap (only ~6 px
   clearance — too thin next to the calibration-margin policy).
+## 2026-11-02 — Ticket #114: native full screen mode (F key, start-screen hint)
+
+- **Parity with the bricks fullscreen ticket (#113): the Fullscreen API
+  targets `document.body`, and `document.fullscreenElement` is the single
+  source of truth.** Asteroids already draws a full-window canvas (no
+  letterbox, no overlay DOM beyond the canvas), so making the body full
+  screen just scales the whole stage up — no wrapper element is needed.
+  Alternatives: targeting the canvas element itself (rejected — the same
+  visual result, but `resize()` reads `window.innerWidth/Height` and the
+  body target matches the bricks precedent, keeping both games
+  comparable).
+- **`toggleFullscreen()` guards for the `document.requestFullscreen`
+  function (silent no-op when absent) and attaches `.catch(() => {})`
+  to the returned promise.** Unsupported browsers get a silent no-op (the game still
+  boots and starts), and a permission denial — which the API reports
+  ASYNCHRONOUSLY as a rejected promise — can never surface as an
+  unhandled rejection out of the keydown gesture. Alternative:
+  try/catch (rejected — it cannot catch the async denial path).
+- **The `fullscreenchange` listener calls the existing `resize()`
+  explicitly.** Entering/leaving full screen does NOT guarantee a
+  window `"resize"` event, so without the explicit refit the canvas
+  would keep its pre-fullscreen size and stretch. When the event
+  fires, `document.fullscreenElement` is already the browser's actual
+  state, so one listener serves BOTH entry and the native Esc
+  exit — Escape is deliberately left unbound.
+- **KeyF is checked before the screen-transition and gameplay key
+  handling, with an `e.repeat` guard.** F must work in ANY game state
+  and can never be swallowed as movement/fire input or mistaken for
+  Enter/KeyR's jobs. Verified against the current bindings: KEY_CODES
+  is arrows/WASD/Space only — F is not among them, and the nearest
+  neighbours (KeyA/KeyD turn, KeyR restart, Enter start/restart) are
+  distinct codes, so no adjacency conflict; that verification is what
+  this bullet records. The repeat guard stops a HELD F flapping the
+  toggle — only the press edge counts (same precedent as bricks #113).
+  Alternative: letting F fall into the gameplay path (rejected — the
+  ticket forbids swallowing it as input).
+- **The start-screen hint is a canvas-drawn line ("F  FULL SCREEN")**
+  in the same `UI_HUD_PX` monospace font and two-space-separator style
+  as "ARROWS / WASD  MOVE"/"SPACE  FIRE", centred at the existing
+  control-list rhythm — no new DOM element. Alternative: a dedicated
+  smaller caption (rejected — the existing prompt style is what the
+  ticket designates).
+- **Test stubs: the vm `document` stubs in the nine existing asteroids
+  suites gained a no-op `addEventListener` (same precedent as bricks
+  #113)** because the fullscreenchange listener registers on document
+  at boot. The element-id stub maps are unchanged (no new DOM).
