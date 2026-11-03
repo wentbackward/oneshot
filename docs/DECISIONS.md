@@ -2626,6 +2626,12 @@ arcade physics).
   ~14 px on "normal" line-height (≈1.17× the 12 px font); 1.25 would have
   made them 15 px — *taller*. 1.15 (13.8 px) is both a tiny additional
   saving and deterministic across browsers, whose "normal" metric varies.
+- **Deliberate side effect: the `.screen` gap change (1.25rem → 0.75rem)
+  tightens the pause and game-over overlays too, not just the start
+  panel.** Those screens share the `.screen` class and now sit a bit more
+  compactly — intended (the ticket allows trimming generic section
+  spacing) and visually benign (fewer rows, no clipping; both remain
+  centred). Recorded here so it is not mistaken for drift later.
 - **Safety net is `overflow-y: auto` + `justify-content: safe center` on
   #screen-start.** Plain `overflow-y: auto` alone still suffers the
   flexbox centring trap: on overflow, centered content clips at the top

@@ -137,7 +137,13 @@ function fontSizePx(sel, rules = RULES) {
   return lenPx(v);
 }
 function lineHeightPx(sel, font, rules = RULES) {
-  const v = rules.find((r) => r.sel === sel)?.decls["line-height"];
+  // Last-wins, exactly like declOf (CSS cascade): find() here would
+  // disagree with the rest of the model the day a second rule for the
+  // same selector gains a line-height.
+  let v;
+  for (const r of rules) {
+    if (r.sel === sel && "line-height" in r.decls) v = r.decls["line-height"];
+  }
   if (v === undefined || v === "normal") return font * NORMAL_LINE;
   if (/^[\d.]+$/.test(v)) return font * parseFloat(v);
   return lenPx(v, font);
