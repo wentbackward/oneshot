@@ -237,15 +237,12 @@
         promise.catch(() => {});
       }
     }
-    function onFullscreenChange() {
-      // Full screen does NOT guarantee a window "resize" event, so the
-      // canvas is refit here, explicitly — by the time this fires,
-      // document.fullscreenElement already reflects the browser's real
-      // state (Esc exits natively through the same path; we never
-      // bind Escape ourselves).
-      resize();
-    }
-    document.addEventListener("fullscreenchange", onFullscreenChange);
+    // Full screen does NOT guarantee a window "resize" event, so the
+    // canvas is refit by the fullscreenchange listener itself, explicitly
+    // — by the time it fires, document.fullscreenElement already reflects
+    // the browser's real state (Esc exits natively through the same path;
+    // we never bind Escape ourselves).
+    document.addEventListener("fullscreenchange", resize);
 
     // ================================================================
     // INPUT — arrow keys and WASD both handled
