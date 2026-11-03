@@ -2551,3 +2551,55 @@ arcade physics).
   deterministically in the vm harness and sweeps 12 viewport sizes to pin the
   ratio, the min-of-axes letterbox, the native boundary and the backing-store
   invariance.
+
+## 2026-11-02 — Ticket #102: right-mouse hold fast-forward (1.5x / 2.0x / 3.0x)
+
+- **One timeScale on the simulation dt, not scaled velocities per system.**
+  `frame()` computes `simDt = dt * (rmbHeld && fastFwdMult > 0 ? fastFwdMult : 1)`
+  and passes `simDt` into `update()`, so every gameplay system (ball
+  integration and its sub-stepping, capsules, powerup timers, simTime
+  stamps for expand/sticky/multiplier, score) accelerates consistently:
+  a 12 s-of-game-time powerup elapses in 12/mult seconds of real time.
+  Alternatives rejected: scaling each velocity/timer individually — the
+  expiry stamps are sim-time comparisons, so per-system scaling would
+  desynchronise them (a "timed" powerup would outlive or undercut the
+  warped ball physics), and it would need a scale passed through every
+  update path with a chance to leak one; the ball's tunnel-prevention
+  (sub-steps by `travel = speed * dt`) would silently stop protecting
+  unless remembered per call site.
+- **Clamp BEFORE scale.** The real frame dt is clamped to
+  MAX_FRAME_SECONDS and only then multiplied, so a stalled tab under a
+  held warp costs at most MAX_FRAME_SECONDS × mult of sim time — never
+  a 5-second stall teleported ×3. Verified in
+  `tests/bricks-fastfwd.test.mjs` ("stalled frame" check).
+- **Render stays on real frames.** Only sim time scales; `draw()` still
+  runs once per raf callback, so the warp can never desynchronise or
+  multiply renders (the "full-stage clear once per driven frame" check
+  pins this at 1x and 3x).
+- **Context menu is suppressed over the canvas at ALL states**, not just
+  during play (ticket left the scope to implementer judgement). Reason:
+  the right button is stage vocabulary wherever the stage is visible;
+  the overlay screens (start/pause/gameover) sit ABOVE the canvas, so
+  their own context menus are untouched — the suppression only bites on
+  the visible stage. A play-only gate would add a state branch to a
+  handler whose whole job is "this surface has no menu".
+- **The multiplier is a LIVE knob, not a per-run snapshot.** Unlike
+  mode/difficulty (which `beginRun()` snapshots), `fastFwdMult` is read
+  by the frame loop every frame: a click on the start screen arms or
+  disarms the warp on the next frame, and the OFF row zeroes it even if
+  the button is already held. Simplest semantics that fits "hold
+  right-mouse to expedite" — the hold and the setting compose
+  multiplicatively with no snapshot to drift.
+- **Option buttons are STATIC markup with ids** (`fastfwd-off`,
+  `fastfwd-1-5`, `fastfwd-2-0`, `fastfwd-3-0`), mirroring the
+  difficulty/theme/mode rows exactly (`data-fastfwd` + `.fastfwd-opt
+  selected`), rather than being boot-generated like the capsule legend.
+  Cost: four new stub ids in every bricks-*.test.mjs stub map (the
+  standing harness diamond); benefit: uniformity with the other three
+  selector rows and zero new element APIs in the stubs (no
+  setAttribute/dataset needed).
+- Persistence: own key `brickbreaker.fastfwd`, JSON-string-encoded,
+  default `"2.0"`, corrupt/unknown → default — same read/write style as
+  `brickbreaker.mode` et al. `FAST_FWD_KEY`, `FAST_FWD_OPTIONS`,
+  `DEFAULT_FAST_FWD`, `fastFwdMult`, `rmbHeld` are all console-
+  retunable top-level vars per house style.

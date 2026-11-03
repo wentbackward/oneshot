@@ -188,6 +188,29 @@
     border-color: var(--accent);
     background: rgba(92, 242, 176, 0.12);
   }
+  /* Start-screen fast-forward selector (ticket #102): the warp
+     multiplier applied while the right mouse button is held; the
+     active option carries .selected. */
+  .fastfwd {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .fastfwd-opt {
+    font-family: inherit;
+    font-size: 0.8rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--ink);
+    background: transparent;
+    border: 1px solid rgba(92, 242, 176, 0.4);
+    padding: 0.5em 1.2em;
+    cursor: pointer;
+  }
+  .fastfwd-opt.selected {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: rgba(92, 242, 176, 0.12);
+  }
   /* Top-five leaderboard (ticket #48): one ranked row per entry,
      rebuilt in place on insert, reset, or boot; an empty list
      renders as a single placeholder row. */
@@ -371,6 +394,12 @@
       <label class="vol" id="ball-speed-label">Ball Speed<span id="ball-speed-value">100%</span>
         <span class="slider"><input id="ball-speed" type="range" min="50" max="150" step="5" value="100"></span>
       </label>
+    </div>
+    <div class="fastfwd">
+      <button id="fastfwd-off" type="button" class="fastfwd-opt" data-fastfwd="off">Off</button>
+      <button id="fastfwd-1-5" type="button" class="fastfwd-opt" data-fastfwd="1.5">1.5&times;</button>
+      <button id="fastfwd-2-0" type="button" class="fastfwd-opt selected" data-fastfwd="2.0">2.0&times;</button>
+      <button id="fastfwd-3-0" type="button" class="fastfwd-opt" data-fastfwd="3.0">3.0&times;</button>
     </div>
     <div class="leaderboard" id="leaderboard-start"></div>
     <div class="capsule-legend-heading">Capsules</div>
@@ -1045,6 +1074,15 @@ var modeButtons = [
   [document.getElementById("mode-exciting"), "exciting"],
   [document.getElementById("mode-alleyway"), "alleyway"],
 ];
+// [element, option-name] pairs for the four start-screen
+// fast-forward options (ticket #102); the list is what mark/select
+// iterate, in the FAST_FWD_OPTIONS key order.
+var fastfwdButtons = [
+  [document.getElementById("fastfwd-off"), "off"],
+  [document.getElementById("fastfwd-1-5"), "1.5"],
+  [document.getElementById("fastfwd-2-0"), "2.0"],
+  [document.getElementById("fastfwd-3-0"), "3.0"],
+];
 var btnMute = document.getElementById("btn-mute");
 var soundVolumeInput = document.getElementById("sound-volume");
 var ballSpeedInput = document.getElementById("ball-speed");
@@ -1452,6 +1490,72 @@ for (var i = 0; i < modeButtons.length; i += 1) {
   })(modeButtons[i][1]);
 }
 
+// ---- Fast forward: hold the right mouse to expedite time (ticket #102) ----
+// The start-screen warp-multiplier choice, persisted as a JSON
+// string under the named key (the high-score / difficulty / theme /
+// mode encoding precedent). Unknown or corrupt stored values fall
+// back to the default multiplier: a botched write must never break
+// boot. Unlike mode/difficulty the choice is LIVE: the frame loop
+// reads fastFwdMult every frame, so a click arms or disarms the
+// warp immediately — there is no per-run snapshot.
+var FAST_FWD_KEY = "brickbreaker.fastfwd";
+var FAST_FWD_OPTIONS = {
+  off: 0,
+  "1.5": 1.5,
+  "2.0": 2.0,
+  "3.0": 3.0
+};
+var DEFAULT_FAST_FWD = "2.0";
+function loadFastFwd() {
+  try {
+    var value = JSON.parse(localStorage.getItem(FAST_FWD_KEY));
+    return typeof value === "string" &&
+      Object.prototype.hasOwnProperty.call(FAST_FWD_OPTIONS, value)
+      ? value
+      : DEFAULT_FAST_FWD;
+  } catch {
+    return DEFAULT_FAST_FWD; // storage unavailable, blocked, or corrupt: play on
+  }
+}
+function saveFastFwd() {
+  try {
+    localStorage.setItem(FAST_FWD_KEY, JSON.stringify(selectedFastFwd));
+  } catch {
+    // Non-persistent storage (e.g. blocked): the session still works.
+  }
+}
+var selectedFastFwd = loadFastFwd();
+// The live warp knob the frame loop multiplies into the simulation
+// dt; 0 (OFF) disarms the warp outright. Console-retunable.
+var fastFwdMult = FAST_FWD_OPTIONS[selectedFastFwd];
+// Mark exactly one option button; called at boot (storage may
+// override the static 2.0 default) and on every selection change.
+function markSelectedFastFwd(name) {
+  for (var i = 0; i < fastfwdButtons.length; i += 1) {
+    var pair = fastfwdButtons[i];
+    pair[0].className =
+      pair[1] === name ? "fastfwd-opt selected" : "fastfwd-opt";
+  }
+}
+markSelectedFastFwd(selectedFastFwd);
+// A click re-selects, persists and moves the live knob at once
+// (the warp arms or disarms on the press itself). Re-clicking the
+// active option is a no-op, so no redundant storage write fires.
+function selectFastFwd(name) {
+  if (name === selectedFastFwd) return;
+  selectedFastFwd = name;
+  fastFwdMult = FAST_FWD_OPTIONS[name];
+  saveFastFwd();
+  markSelectedFastFwd(name);
+}
+for (var i = 0; i < fastfwdButtons.length; i += 1) {
+  (function (name) {
+    fastfwdButtons[i][0].addEventListener("click", function () {
+      selectFastFwd(name);
+    });
+  })(fastfwdButtons[i][1]);
+}
+
 // ---- Sound settings: mute toggle + volume slider (ticket #47) ----
 // { muted, volume } persisted as JSON under the named key (the
 // high-score / difficulty / theme encoding precedent). Corrupt or
@@ -1739,10 +1843,39 @@ function onBlur() {
   levelSkipKeys.clear();
   keys.left.clear();
   keys.right.clear();
+  rmbHeld = false; // a blurred release cannot leave the warp stuck
 }
 window.addEventListener("keydown", onKeyDown);
 window.addEventListener("keyup", onKeyUp);
 window.addEventListener("blur", onBlur);
+// Fast-forward hold (ticket #102): only button 2 (the right mouse)
+// arms the flag; a window-level mouseup (button 2), blur, or cancel
+// releases it, so a button-up that lands off-page, a tab switch, or
+// an aborted track can never leave a stuck warp.
+var rmbHeld = false;
+function onRmbDown(e) {
+  if (e.button === 2) rmbHeld = true;
+}
+function releaseRmbHeld(e) {
+  if (e.button === 2) rmbHeld = false;
+}
+// A genuine window "cancel" (tracking aborted) normally carries no
+// reliable `button`, so it releases unconditionally — clearing the
+// warp on an aborted track is the safe direction (the only risk it
+// trades is a harmless no-op clear, never a stuck warp).
+function cancelRmbHeld() {
+  rmbHeld = false;
+}
+window.addEventListener("mousedown", onRmbDown);
+window.addEventListener("mouseup", releaseRmbHeld);
+window.addEventListener("cancel", cancelRmbHeld);
+// Right-click over the stage is game input (fast-forward), not a
+// browser menu: the context menu is suppressed over the canvas at
+// ALL states (documented judgement, ticket #102 — the overlays
+// cover the stage except in play, where the suppression matters).
+canvas.addEventListener("contextmenu", function (e) {
+  e.preventDefault();
+});
 // The canvas CSS footprint is the letterboxed stage rect, so the
 // client-px -> internal-px transform maps through the bounding
 // rect: a fraction of the visible stage width becomes a fraction
@@ -2479,6 +2612,10 @@ function renderLives() {
 // Per-frame order: resize -> update(dt) -> syncScore -> draw, so a
 // record overtaken inside update persists on the same frame it happens.
 function frame(time) {
+  // Clamp the REAL frame first: a stalled tab yields at most one
+  // MAX_FRAME_SECONDS step, and the warp below multiplies the
+  // CLAMPED value (ticket #102 ordering: clamp, THEN scale), so
+  // tab-stall + held warp can never produce a giant simDt.
   var dt = lastFrameTime === null
     ? 0
     : Math.min(Math.max(0, (time - lastFrameTime) / 1000), MAX_FRAME_SECONDS);
@@ -2487,7 +2624,14 @@ function frame(time) {
     resizePending = false;
     resizeCanvas();
   }
-  if (gameState === "playing") update(dt);
+  // Warp (ticket #102): right mouse held with a non-OFF knob scales
+  // the single simulation dt that EVERY gameplay system consumes
+  // (ball integration + its sub-stepping, capsules, powerup timers,
+  // level/score) — the whole sim accelerates consistently. The
+  // render still runs once per REAL frame below, so draw can never
+  // desynchronise from the sim.
+  var simDt = dt * (rmbHeld && fastFwdMult > 0 ? fastFwdMult : 1);
+  if (gameState === "playing") update(simDt);
   syncScore();
   draw();
   requestAnimationFrame(frame);
