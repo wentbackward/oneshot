@@ -151,6 +151,7 @@ function boot(viewW, viewH) {
     "lives": makeEl("lives"),
     "btn-reset-hiscore": makeEl("btn-reset-hiscore"),
     "leaderboard-start": makeEl("leaderboard-start"),
+    "capsule-legend": makeEl("capsule-legend"),
     "leaderboard-gameover": makeEl("leaderboard-gameover"),
   };
   const winListeners = {};
