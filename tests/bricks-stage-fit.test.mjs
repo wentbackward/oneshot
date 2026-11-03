@@ -310,6 +310,17 @@ check("aspect sweep: the CSS ratio always equals GAME_W/GAME_H across 12 viewpor
     const relErr = Math.abs(css.w / css.h - aspect) / aspect;
     assert(relErr < 0.01,
       `viewport ${vw}x${vh}: CSS ratio ${css.w}/${css.h}=${(css.w / css.h).toFixed(4)} must stay within 1% of the stage aspect ${aspect}`);
+    // Property anchor (formula-independent): the TIGHTER axis fills the
+    // viewport and the looser axis fits within it. A symmetric/averaging
+    // regression would leave both axes short and fail this.
+    const tightWidth = vw / CLASSIC_W <= vh / CLASSIC_H;
+    if (tightWidth) {
+      assert(Math.abs(css.w - vw) <= 1, `viewport ${vw}x${vh}: width-binding axis must fill the viewport, css.w=${css.w} vs vw=${vw}`);
+      assert(css.h <= vh + 1, `viewport ${vw}x${vh}: height must fit within the viewport, css.h=${css.h} vs vh=${vh}`);
+    } else {
+      assert(Math.abs(css.h - vh) <= 1, `viewport ${vw}x${vh}: height-binding axis must fill the viewport, css.h=${css.h} vs vh=${vh}`);
+      assert(css.w <= vw + 1, `viewport ${vw}x${vh}: width must fit within the viewport, css.w=${css.w} vs vw=${vw}`);
+    }
   }
 });
 
