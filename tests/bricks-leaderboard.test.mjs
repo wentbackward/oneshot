@@ -150,6 +150,7 @@ function boot(width, height, initialStore = {}) {
     "fastfwd-2-0": makeEl("fastfwd-2-0"),
     "fastfwd-3-0": makeEl("fastfwd-3-0"),
     "btn-reset-hiscore": makeEl("btn-reset-hiscore"),
+    "btn-fullscreen": makeEl("btn-fullscreen"),
     "btn-mute": makeEl("btn-mute"),
     "sound-volume": makeEl("sound-volume"),
     "ball-speed": makeEl("ball-speed"),
@@ -204,6 +205,7 @@ function boot(width, height, initialStore = {}) {
     document: {
       getElementById: (id) => els[id] ?? null,
       createElement: (tag) => makeEl(tag),
+      addEventListener: () => {}, // ticket #113: fullscreenchange registers on document at boot
     },
     requestAnimationFrame: (cb) => {
       rafCb = cb;

@@ -95,6 +95,11 @@
   #screen-start {
     overflow-y: auto;
     justify-content: safe center;
+    /* Ticket #113: the added full screen row costs ~40px of the
+       577px fold budget; tightening ONLY the start panel's gap
+       (the other overlays keep 0.75rem) buys the headroom back
+       without touching the locked type scale. */
+    gap: 0.55rem;
   }
   .screen h1 {
     margin: 0;
@@ -216,6 +221,30 @@
     cursor: pointer;
   }
   .fastfwd-opt.selected {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: rgba(92, 242, 176, 0.12);
+  }
+  /* Start-screen native full screen toggle (ticket #113): one
+     STATIC button — not a radio row — whose label and state the
+     fullscreenchange pass keeps in sync with
+     document.fullscreenElement. */
+  .fullscreen {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .fs-opt {
+    font-family: inherit;
+    font-size: 0.8rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--ink);
+    background: transparent;
+    border: 1px solid rgba(92, 242, 176, 0.4);
+    padding: 0.45em 1.2em;
+    cursor: pointer;
+  }
+  .fs-opt.active {
     color: var(--accent);
     border-color: var(--accent);
     background: rgba(92, 242, 176, 0.12);
@@ -410,6 +439,9 @@
       <button id="fastfwd-1-5" type="button" class="fastfwd-opt" data-fastfwd="1.5">1.5&times;</button>
       <button id="fastfwd-2-0" type="button" class="fastfwd-opt selected" data-fastfwd="2.0">2.0&times;</button>
       <button id="fastfwd-3-0" type="button" class="fastfwd-opt" data-fastfwd="3.0">3.0&times;</button>
+    </div>
+    <div class="fullscreen">
+      <button id="btn-fullscreen" type="button" class="fs-opt">Full Screen</button>
     </div>
     <div class="leaderboard" id="leaderboard-start"></div>
     <div class="capsule-legend-heading">Capsules</div>
@@ -1096,6 +1128,7 @@ var fastfwdButtons = [
 var btnMute = document.getElementById("btn-mute");
 var soundVolumeInput = document.getElementById("sound-volume");
 var ballSpeedInput = document.getElementById("ball-speed");
+var btnFullscreen = document.getElementById("btn-fullscreen");
 
 // ---- State ----
 var gameState = "start"; // "start" | "playing" | "paused" | "gameover"
@@ -1566,6 +1599,52 @@ for (var i = 0; i < fastfwdButtons.length; i += 1) {
   })(fastfwdButtons[i][1]);
 }
 
+// ---- Native full screen (ticket #113) ----
+// document.body is the toggle target: the canvas, HUD and overlay
+// screens go full screen together — no wrapper DOM (see
+// docs/DECISIONS.md). The SINGLE source of truth is
+// document.fullscreenElement; the button is a pure mirror synced
+// by the fullscreenchange pass. Esc is left to the browser (it
+// exits natively and the pass below reacts to the change).
+var FS_LABEL_OFF = "Full Screen";
+var FS_LABEL_ON = "Exit Full Screen";
+function toggleFullscreen() {
+  // Feature-support guard: browsers without the API get a silent
+  // no-op, never an error.
+  if (typeof document.requestFullscreen !== "function") return;
+  // Both calls return a promise; a permission denial or transient
+  // failure must NEVER throw into a user gesture (docs/DECISIONS.md).
+  var promise = document.fullscreenElement
+    ? document.exitFullscreen()
+    : document.body.requestFullscreen();
+  if (promise && typeof promise.catch === "function") {
+    promise.catch(function () {});
+  }
+}
+// Reflect the browser's actual state onto the button; called at
+// boot and on every fullscreenchange.
+function syncFullscreenButton() {
+  var active = !!document.fullscreenElement;
+  btnFullscreen.textContent = active ? FS_LABEL_ON : FS_LABEL_OFF;
+  // Toggle ONLY the `active` token, leaving any other class on the
+  // button untouched (a wholesale className write would clobber them).
+  var tokens = btnFullscreen.className.split(" ").filter(function (t) { return t !== "" && t !== "active"; });
+  if (active) tokens.push("active");
+  btnFullscreen.className = tokens.join(" ");
+}
+// Full screen does NOT guarantee a window "resize" event, so this
+// pass enqueues the SAME deferred refit the resize path uses —
+// applied on the next frame via the shared resizePending flag.
+function onFullscreenChange() {
+  syncFullscreenButton();
+  resizePending = true;
+}
+document.addEventListener("fullscreenchange", onFullscreenChange);
+btnFullscreen.addEventListener("click", function () {
+  toggleFullscreen();
+});
+syncFullscreenButton(); // boot: before the first frame
+
 // ---- Sound settings: mute toggle + volume slider (ticket #47) ----
 // { muted, volume } persisted as JSON under the named key (the
 // high-score / difficulty / theme encoding precedent). Corrupt or
@@ -1805,6 +1884,13 @@ function onKeyDown(e) {
     // no churn on game over), and browser auto-repeat of a held M
     // lands in "start" after the first edge, so it is a no-op too.
     if (gameState === "paused") quitToMenu();
+  } else if (e.code === "KeyF") {
+    // Native full screen toggle (ticket #113): valid in ANY game
+    // state (a keydown is a user gesture). No preventDefault
+    // needed. The repeat guard stops a HELD F flapping the toggle
+    // — only the press edge counts (docs/DECISIONS.md).
+    if (e.repeat) return;
+    toggleFullscreen();
   } else if (e.code === "KeyL" || e.code === "KeyK") {
     // Secret level-skip keys (ticket #77, deliberately undocumented
     // in the UI — docs/DECISIONS.md is the record): Shift+L advances

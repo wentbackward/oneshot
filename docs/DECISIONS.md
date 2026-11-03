@@ -2651,3 +2651,41 @@ arcade physics).
   Unknown top-level blocks fail the suite loudly rather than passing
   silently. The 14 px model margin over the 577 px limit absorbs residual
   font-metric drift.
+
+## 2026-11-02 — Ticket #113: native full screen mode (button + F key)
+
+- **Toggle target is `document.body`, not a wrapper element.** Requesting
+  body fullscreens the canvas, HUD and overlay screens together with no new
+  wrapper DOM, and the CSS layout is untouched — body is already the
+  single-screen root. Alternatives: wrapping everything in a new `#app`
+  div (extra DOM layer, would have to absorb the `position: fixed`
+  centering and the repo's `#game` cursor gate) and fullscreening only
+  the canvas (HUD/overlays stay letterboxed — defeats the ticket's
+  rationale that no-letterbox removes the pointer-tracking issues at the
+  source).
+- **`document.fullscreenElement` is the single source of truth; the
+  button is a pure mirror.** The `fullscreenchange` listener re-syncs the
+  label ("Full Screen" ↔ "Exit Full Screen") and the `.active` class on
+  every change, so the native Esc exit is a no-op state-wise: we do NOT
+  bind Escape ourselves (binding it would collide with the existing
+  pause/resume Escape key and duplicate the browser's own exit).
+- **The Fullscreen API promise is swallowed with `.catch(() => {})`.**
+  Permission denial or a transient failure must never throw into a user
+  gesture (the toggle is invoked from a click / keydown handler). On a
+  denial nothing else happens — no state moved, so the mirrored label is
+  already correct; no internal "we are fullscreen" flag exists to drift.
+- **KeyF ignores browser auto-repeat (`e.repeat`).** Without the guard a
+  HELD F would flap the toggle every ~500 ms of key repeat. The press
+  edge alone counts — simpler than a held-set (no blur cleanup path
+  needed). No `preventDefault`: the page cannot scroll (overflow: hidden)
+  and suppressing it would only break focused-CTA semantics for nothing.
+- **Start-screen compaction to make room for the new row.** The fold lock
+  (ticket #111, 577 px) had ~15 px of headroom; the new ~40 px row
+  outgrew it. Chosen: tighten ONLY `#screen-start`'s flex gap
+  0.75rem → 0.55rem (the pause/game-over overlays keep the shared
+  `.screen` 0.75rem). Model result: 14 blocks, content ~560.6 px —
+  ~16.4 px of clearance, zero font-size changes (the locked type scale
+  in bricks-start-fold.test.mjs is untouched). Alternatives: shrinking
+  option-button padding again (second bite out of #111's compaction
+  budget; the row would also feel cramped) and a 0.6rem gap (only ~6 px
+  clearance — too thin next to the calibration-margin policy).
