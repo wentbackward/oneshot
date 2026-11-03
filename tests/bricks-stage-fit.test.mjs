@@ -110,6 +110,9 @@ function boot(viewW, viewH) {
     width: 0,
     height: 0,
     style: {},
+    // Placeholder pre-fit rect (viewport-sized). The pointer-mapping
+    // test re-sets this to the fitted CSS size after g.viewport(), which
+    // is what models the real browser layout.
     rect: { left: 0, top: 0, width: viewW, height: viewH },
     getBoundingClientRect: () => canvas.rect,
     listeners: {},
@@ -249,7 +252,7 @@ check("large viewport: fit > 1 and the CSS stage upscales proportionally (2560x1
     `the backing store must stay at the native logical resolution ${CLASSIC_H * SCALE}, got ${g.q("canvas.height")}`);
 });
 
-check("large viewport: growth stays proportional to the stage aspect (1920x2400 wide-short monitor)", () => {
+check("large viewport: growth stays proportional to the stage aspect (1920x2400 tall monitor, width axis binds)", () => {
   const g = boot(CLASSIC_W, CLASSIC_H);
   g.start();
   g.viewport(1920, 2400);
