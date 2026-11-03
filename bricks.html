@@ -208,6 +208,45 @@
   .leaderboard-row.placeholder {
     color: rgba(159, 180, 199, 0.5);
   }
+  /* Capsule legend (ticket #99): the static start-screen listing of
+     every powerup. The container holds exactly one row per kind,
+     rendered from CAPSULE_LEGEND at boot — a 2-column grid keeps all
+     eight rows on four compact lines. Swatches reuse the in-game
+     per-kind capsule colours so the legend can't drift from play. */
+  .capsule-legend-heading {
+    margin: 0;
+    font-size: 0.75rem;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: rgba(159, 180, 199, 0.7);
+  }
+  .capsule-legend {
+    display: grid;
+    grid-template-columns: repeat(2, max-content);
+    gap: 0.25rem 2rem;
+    font-size: 0.75rem;
+  }
+  .capsule-legend-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .capsule-legend-swatch {
+    display: inline-block;
+    width: 14px;
+    height: 8px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  .capsule-legend-label {
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink);
+  }
+  .capsule-legend-blurb {
+    letter-spacing: 0.05em;
+    color: rgba(159, 180, 199, 0.7);
+  }
   /* The reset control (ticket #48): clears high score AND
      leaderboard alike — a secondary action, styled as a muted
      opt button, not the primary accent CTA. */
@@ -334,6 +373,8 @@
       </label>
     </div>
     <div class="leaderboard" id="leaderboard-start"></div>
+    <div class="capsule-legend-heading">Capsules</div>
+    <div class="capsule-legend" id="capsule-legend"></div>
     <button id="btn-reset-hiscore" type="button">Reset High Score</button>
     <button id="btn-start" type="button">Start Game</button>
   </section>
@@ -667,6 +708,21 @@ var CAPSULE_COLORS = [
 // itself keeps exactly one row per classic kind (legacy invariant).
 var CAPSULE_DRAW_COLORS = CAPSULE_COLORS.concat(
   COLOR_CAPSULE_INVULN, COLOR_CAPSULE_MULTIBALL, COLOR_CAPSULE_BLAST);
+// Start-screen legend (ticket #99): one entry per ENUMERATED kind,
+// in kind order, covering all eight kinds regardless of mode. The
+// rows render statically from this table at boot; labels, blurbs
+// and swatch colours all come from it, so the legend can never
+// drift from the capsules it describes.
+var CAPSULE_LEGEND = [
+  { kind: KIND_EXPAND, label: "Expand", blurb: "widens the paddle", color: COLOR_CAPSULE_EXPAND },
+  { kind: KIND_EXTRA, label: "Extra", blurb: "spawns a spare ball", color: COLOR_CAPSULE_EXTRA },
+  { kind: KIND_STICKY, label: "Sticky", blurb: "paddle catches the ball", color: COLOR_CAPSULE_STICKY },
+  { kind: KIND_LIFE, label: "Life", blurb: "restores a life", color: COLOR_CAPSULE_LIFE },
+  { kind: KIND_MULTIPLIER, label: "Multiplier", blurb: "doubles the score", color: COLOR_CAPSULE_MULT },
+  { kind: KIND_INVULNERABLE, label: "Invulnerable", blurb: "ball smashes through bricks", color: COLOR_CAPSULE_INVULN },
+  { kind: KIND_MULTIBALL, label: "Multiball", blurb: "each ball fans out to ten", color: COLOR_CAPSULE_MULTIBALL },
+  { kind: KIND_BLAST, label: "Blast", blurb: "brick hits detonate a radius", color: COLOR_CAPSULE_BLAST },
+];
 var PADDLE_EXPAND_FACTOR = 1.6;         // widened width = the run's base paddle width * factor
 var PADDLE_EXPAND_DURATION_S = 12;      // simulated seconds of widen
 var STICKY_DURATION_S = 12;             // simulated seconds the paddle still catches
@@ -943,6 +999,30 @@ var livesEl = document.getElementById("lives");
 var btnResetHighScore = document.getElementById("btn-reset-hiscore");
 var leaderboardStartEl = document.getElementById("leaderboard-start");
 var leaderboardGameoverEl = document.getElementById("leaderboard-gameover");
+var capsuleLegendEl = document.getElementById("capsule-legend");
+// Renders the static capsule legend (ticket #99): one row per
+// CAPSULE_LEGEND entry — swatch, label, blurb. Built once at boot;
+// the kind set is fixed, so there is no rebuild path.
+function buildCapsuleLegend() {
+  for (var i = 0; i < CAPSULE_LEGEND.length; i += 1) {
+    var entry = CAPSULE_LEGEND[i];
+    var row = document.createElement("div");
+    row.className = "capsule-legend-row";
+    var swatch = document.createElement("span");
+    swatch.className = "capsule-legend-swatch";
+    swatch.style.background = entry.color;
+    var label = document.createElement("span");
+    label.className = "capsule-legend-label";
+    label.textContent = entry.label;
+    var blurb = document.createElement("span");
+    blurb.className = "capsule-legend-blurb";
+    blurb.textContent = entry.blurb;
+    row.appendChild(swatch);
+    row.appendChild(label);
+    row.appendChild(blurb);
+    capsuleLegendEl.appendChild(row);
+  }
+}
 // Both on-screen containers; the single render pass re-draws both.
 var leaderboardEls = [leaderboardStartEl, leaderboardGameoverEl];
 // [element, preset-name] pairs for the three start-screen options.
@@ -2585,6 +2665,7 @@ serveBall();
 setScreen("start");
 renderLives();
 renderLeaderboards();
+buildCapsuleLegend();
 syncHud();
 requestAnimationFrame(frame);
 </script>

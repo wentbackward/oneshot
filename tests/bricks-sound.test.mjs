@@ -237,6 +237,7 @@ function boot(width = 960, height = 600, opts = {}) {
     game: canvas,
     "screen-start": makeEl("screen-start"),
     "btn-start": makeEl("btn-start"),
+    "capsule-legend": makeEl("capsule-legend"),
     "leaderboard-start": makeEl("leaderboard-start"),
     "leaderboard-gameover": makeEl("leaderboard-gameover"),
     "btn-reset-hiscore": makeEl("btn-reset-hiscore"),

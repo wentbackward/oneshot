@@ -122,6 +122,7 @@ function boot(width, height) {
     "screen-pause": makeEl("screen-pause"),
     "screen-gameover": makeEl("screen-gameover"),
     "btn-start": makeEl("btn-start"),
+    "capsule-legend": makeEl("capsule-legend"),
     "difficulty-easy": makeEl("difficulty-easy"),
     "difficulty-normal": makeEl("difficulty-normal"),
     "difficulty-hard": makeEl("difficulty-hard"),
