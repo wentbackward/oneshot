@@ -205,6 +205,7 @@ function blockHeight(block) {
   if (block.cls === "modes") return buttonBoxH(".mode-opt");
   if (block.cls === "sound") return buttonBoxH(".sound-opt");
   if (block.cls === "fastfwd") return buttonBoxH(".fastfwd-opt");
+  if (block.cls === "fullscreen") return buttonBoxH(".fs-opt");
   if (block.cls === "speed") return RANGE_ROW_H;
   if (block.cls === "leaderboard") {
     const font = fontSizePx(".leaderboard");
@@ -229,7 +230,8 @@ function blockHeight(block) {
   if (block.id === "btn-start") return buttonBoxH("#btn-start");
   throw new Error(`layout model has no rule for block <${block.tag}${sel ? " " + sel : ""}> — the start markup changed; extend the model deliberately`);
 }
-const PANEL_GAP_PX = () => lenPx(declOf(".screen", "gap").trim().split(/\s+/)[0]);
+const PANEL_GAP_PX = () => lenPx(
+  (declOf("#screen-start", "gap") ?? declOf(".screen", "gap")).trim().split(/\s+/)[0]);
 function panelContentH() {
   const blocks = topLevelBlocks();
   const sum = blocks.reduce((acc, b) => acc + blockHeight(b), 0);
@@ -296,7 +298,7 @@ function boot() {
   const ids = [
     "screen-start", "screen-pause", "screen-gameover",
     "btn-start", "btn-resume", "btn-restart", "btn-menu", "btn-mute",
-    "btn-reset-hiscore", "capsule-legend",
+    "btn-reset-hiscore", "btn-fullscreen", "capsule-legend",
     "difficulty-easy", "difficulty-normal", "difficulty-hard",
     "theme-classic", "theme-neon", "theme-minimal",
     "mode-classic", "mode-exciting", "mode-alleyway",
@@ -319,6 +321,7 @@ function boot() {
     document: {
       getElementById: (id) => els[id] ?? null,
       createElement: (tag) => makeEl(tag),
+      addEventListener: () => {}, // ticket #113: fullscreenchange registers on document at boot
     },
     requestAnimationFrame: () => 1,
   };
@@ -334,12 +337,12 @@ function legendKindCount() {
 // ================================================================
 // verify — the model sees every top-level block of the panel
 // ================================================================
-check("layout model recognises all 13 top-level blocks of #screen-start in order", () => {
+check("layout model recognises all 14 top-level blocks of #screen-start in order", () => {
   const blocks = topLevelBlocks();
   const seen = blocks.map((b) => (b.id ? `#${b.id}` : b.cls ? `.${b.cls}` : b.tag));
-  assert(blocks.length === 13,
-    `expected 13 top-level blocks, found ${blocks.length}: ${seen.join(", ")}`);
-  assert(seen.join("|") === "h1|p|.difficulty|.themes|.modes|.sound|.speed|.fastfwd|#leaderboard-start|.capsule-legend-heading|#capsule-legend|#btn-reset-hiscore|#btn-start",
+  assert(blocks.length === 14,
+    `expected 14 top-level blocks, found ${blocks.length}: ${seen.join(", ")}`);
+  assert(seen.join("|") === "h1|p|.difficulty|.themes|.modes|.sound|.speed|.fastfwd|.fullscreen|#leaderboard-start|.capsule-legend-heading|#capsule-legend|#btn-reset-hiscore|#btn-start",
     `unexpected block sequence: ${seen.join(", ")}`);
 });
 
