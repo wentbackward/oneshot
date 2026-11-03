@@ -90,9 +90,12 @@ function boot(width = 960, height = 600, apiMode = "full") {
       fsLog.docExits += 1;
       return Promise.resolve();
     };
-    bodyStub.requestFullscreen = (arg) => {
+    bodyStub.requestFullscreen = (...args) => {
       fsLog.bodyRequests += 1;
-      docStub.__fsBodyArg = arg;
+      fsLog.lastArgs = args;
+      // The element making the request IS this body: record it (the
+      // host keeps the plain stub, so identity is asserted host-side).
+      docStub.__fsBodyArg = docStub.body;
       return apiMode === "reject"
         ? Promise.reject(new Error("permission denied"))
         : Promise.resolve();
@@ -167,6 +170,8 @@ function boot(width = 960, height = 600, apiMode = "full") {
       return null;
     },
     fsLog,
+    fsBodyArg: () => docStub.__fsBodyArg,
+    fsBodyTarget: () => docStub.body,
     hasFsChangeListener: () => (docListeners["fullscreenchange"] ?? []).length > 0,
     gameState: () => q("gameState"),
     canvasSize: () => q("[canvas.width, canvas.height]"),
@@ -225,8 +230,9 @@ check("toggleFullscreen() requests full screen on document.body (element argumen
   const g = boot();
   g.q("toggleFullscreen()");
   assert(g.fsLog.bodyRequests === 1, `first toggle must call document.body.requestFullscreen once, got ${g.fsLog.bodyRequests}`);
-  assert(g.q("document.__fsBodyArg === document.body"),
-    "the element passed to requestFullscreen must BE document.body");
+  assert(g.fsBodyArg() === g.fsBodyTarget(),
+    "the element that requested full screen must BE document.body");
+  assert(g.fsLog.lastArgs.length === 0, "requestFullscreen must be called with no options argument");
   assert(g.fsLog.docExits === 0, "the first toggle must not call exitFullscreen");
 });
 
