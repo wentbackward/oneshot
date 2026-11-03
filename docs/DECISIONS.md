@@ -2603,3 +2603,51 @@ arcade physics).
   `brickbreaker.mode` et al. `FAST_FWD_KEY`, `FAST_FWD_OPTIONS`,
   `DEFAULT_FAST_FWD`, `fastFwdMult`, `rmbHeld` are all console-
   retunable top-level vars per house style.
+
+## 2026-11-02 — Ticket #111: start screen overflows short viewports
+
+- **Compaction, not reflow.** The ticket prefers tightening the vertical
+  rhythm over restructuring the panel, and the arithmetic agrees: the
+  legend alone could only yield ~10 px, so the section gap carried most
+  of the load. Chosen spacings (CSS only, no DOM changes, type scale and
+  the 2-column legend untouched): `.screen` gap 1.25rem → 0.75rem
+  (−96 px across 12 sections), option-button vertical padding
+  0.5em → 0.45em on all six selector rows incl. Reset High Score
+  (−7.7 px), legend row gap 0.25rem → 0.15rem (−4.8 px), legend
+  line-height pinned to 1.15 (−0.8 px). Result, measured in a real
+  1280×577 window: content 563.8 px, btn-start bottom y=570.4 (was
+  625.1) — 6.6 px of clearance, zero font-size changes.
+  Alternatives: reordering/removing rows (rejected — reflow), smaller
+  title/tagline (rejected — the ticket bans shrinking the type scale),
+  gap 1rem alone (insufficient: content would land at 625 px, still
+  past the fold).
+- **Legend line-height pinned to 1.15, not the ticket's suggested ~1.25.**
+  Calibration against the repro window showed the rows already render at
+  ~14 px on "normal" line-height (≈1.17× the 12 px font); 1.25 would have
+  made them 15 px — *taller*. 1.15 (13.8 px) is both a tiny additional
+  saving and deterministic across browsers, whose "normal" metric varies.
+- **Deliberate side effect: the `.screen` gap change (1.25rem → 0.75rem)
+  tightens the pause and game-over overlays too, not just the start
+  panel.** Those screens share the `.screen` class and now sit a bit more
+  compactly — intended (the ticket allows trimming generic section
+  spacing) and visually benign (fewer rows, no clipping; both remain
+  centred). Recorded here so it is not mistaken for drift later.
+- **Safety net is `overflow-y: auto` + `justify-content: safe center` on
+  #screen-start.** Plain `overflow-y: auto` alone still suffers the
+  flexbox centring trap: on overflow, centered content clips at the top
+  and the scroll range starts *below* it. `safe center` degrades to
+  start-alignment only when the panel genuinely overflows (an
+  extremely-short-window case the compaction makes unobservable in
+  practice), keeping the CTA scrollable into view from the top; verified
+  at a 400 px viewport (btn-start fully visible after scrolling).
+  Unsupported browsers fall back to `center` — today's behaviour.
+- **The fold test measures a deterministic layout model fed by the real
+  CSS, calibrated on Chrome.** The vm harness cannot rasterize, so
+  `bricks-start-fold.test.mjs` parses the actual `<style>` block and
+  derives every block height from real declarations (font-size, padding,
+  borders, gaps, grid geometry); "normal" line-height resolves with
+  Chrome's monospace metric 1.15625 (calibration: 64 px title rendered
+  74 px; model 671.6 px vs measured 673.1 px pre-fix — 1.5 px apart).
+  Unknown top-level blocks fail the suite loudly rather than passing
+  silently. The 14 px model margin over the 577 px limit absorbs residual
+  font-metric drift.
