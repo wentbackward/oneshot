@@ -1849,9 +1849,9 @@ window.addEventListener("keydown", onKeyDown);
 window.addEventListener("keyup", onKeyUp);
 window.addEventListener("blur", onBlur);
 // Fast-forward hold (ticket #102): only button 2 (the right mouse)
-// arms the flag; a window-level mouseup / blur / cancel releases it,
-// so a button-up that lands off-page or a tab switch can never
-// leave a stuck warp.
+// arms the flag; a window-level mouseup (button 2), blur, or cancel
+// releases it, so a button-up that lands off-page, a tab switch, or
+// an aborted track can never leave a stuck warp.
 var rmbHeld = false;
 function onRmbDown(e) {
   if (e.button === 2) rmbHeld = true;
@@ -1859,9 +1859,16 @@ function onRmbDown(e) {
 function releaseRmbHeld(e) {
   if (e.button === 2) rmbHeld = false;
 }
+// A genuine window "cancel" (tracking aborted) normally carries no
+// reliable `button`, so it releases unconditionally — clearing the
+// warp on an aborted track is the safe direction (the only risk it
+// trades is a harmless no-op clear, never a stuck warp).
+function cancelRmbHeld() {
+  rmbHeld = false;
+}
 window.addEventListener("mousedown", onRmbDown);
 window.addEventListener("mouseup", releaseRmbHeld);
-window.addEventListener("cancel", releaseRmbHeld);
+window.addEventListener("cancel", cancelRmbHeld);
 // Right-click over the stage is game input (fast-forward), not a
 // browser menu: the context menu is suppressed over the canvas at
 // ALL states (documented judgement, ticket #102 — the overlays

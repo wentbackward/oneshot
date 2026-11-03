@@ -462,6 +462,17 @@ check("window mouseup, blur and cancel each clear a stuck rmbHeld", () => {
   }
 });
 
+check("a genuine window cancel (no button property) still clears a stuck rmbHeld", () => {
+  const g = boot(960, 600);
+  g.dispatchWin("mousedown", { button: 2 }); // arm via the real press path
+  assert(g.q("rmbHeld") === true, `setup: button 2 down must arm rmbHeld`);
+  // A legacy UIEvent cancel carries NO `button` — the release path
+  // must not depend on one, or a stuck warp survives an aborted track.
+  g.dispatchWin("cancel", {});
+  assert(g.q("rmbHeld") === false,
+    `a button-less cancel must still clear the hold, got ${g.q("rmbHeld")}`);
+});
+
 // Warp behaviour (ticket VM test b): OFF (fastFwdMult 0) means no
 // speedup even with rmbHeld true.
 check("with OFF (fastFwdMult 0), holding the right mouse does not speed the simulation up", () => {
@@ -596,9 +607,12 @@ check("under a 3x warp a high-speed ball still cannot tunnel through a brick fac
 });
 
 // The same geometry WITHOUT the warp must behave identically at
-// the same speed (the baseline: sub-stepping already held pre-#102
-// and must still hold now that the dt it consumes is the simDt).
-check("at 1.0x the same high-speed ball registers the brick contact (baseline)", () => {
+// the same SPEED PER SIMULATED TIME: it covers the SAME DISTANCE in
+// one (unwarped) frame as the warped ball covers in one (warped)
+// frame, so the per-frame travel — and therefore the sub-stepping
+// load — is identical. (Baseline: sub-stepping already held pre-#102
+// and must still hold now that the dt it consumes is the simDt.)
+check("at 1.0x the same-distance high-speed ball registers the brick contact (baseline)", () => {
   const g = boot(960, 600);
   g.els["btn-start"].click();
   g.tick(2);
