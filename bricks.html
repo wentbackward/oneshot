@@ -1626,7 +1626,11 @@ function toggleFullscreen() {
 function syncFullscreenButton() {
   var active = !!document.fullscreenElement;
   btnFullscreen.textContent = active ? FS_LABEL_ON : FS_LABEL_OFF;
-  btnFullscreen.className = active ? "fs-opt active" : "fs-opt";
+  // Toggle ONLY the `active` token, leaving any other class on the
+  // button untouched (a wholesale className write would clobber them).
+  var tokens = btnFullscreen.className.split(" ").filter(function (t) { return t !== "" && t !== "active"; });
+  if (active) tokens.push("active");
+  btnFullscreen.className = tokens.join(" ");
 }
 // Full screen does NOT guarantee a window "resize" event, so this
 // pass enqueues the SAME deferred refit the resize path uses —

@@ -332,6 +332,9 @@ await check("AC(1): toggleFullscreen() requests fullscreen on document.body (ele
 // ================================================================
 await check("AC(2): while fullscreenElement is set the next toggle calls exitFullscreen, and the label follows both phases", () => {
   const g = boot(CLASSIC_W, CLASSIC_H);
+  // Model the button's markup class (the stub starts blank); the game's
+  // boot-time sync ran before this and preserved whatever was present.
+  g.els["btn-fullscreen"].className = "fs-opt";
   g.q("toggleFullscreen()");
   g.browserGrantsFullscreen();
   assert(g.label() === "Exit Full Screen",
@@ -400,7 +403,7 @@ await check("AC(5): KeyF enters full screen from the start screen (no preventDef
     `KeyF at start must enter full screen, got ${JSON.stringify(g.fsLog)}`);
 });
 
-await check("AC(5): KeyF enters while playing, then exits while paused (both directions, other game states)", () => {
+await check("AC(5): KeyF toggles in ANY game state — playing (enter), paused (exit), gameover (enter)", () => {
   const g = boot(CLASSIC_W, CLASSIC_H);
   g.start();
   g.keyF();
@@ -411,6 +414,14 @@ await check("AC(5): KeyF enters while playing, then exits while paused (both dir
   g.keyF();
   assert(g.fsLog.length === 2 && g.fsLog[1].api === "exit",
     `KeyF while paused AND fullscreen must exit, got ${JSON.stringify(g.fsLog)}`);
+  g.browserExitsFullscreen(); // the browser completes the exit before the next phase
+  // gameover: the F toggle must still work once the run is over
+  // (the overlay is up, but full screen is a window concern).
+  g.q("gameState = 'gameover'");
+  assert(g.state() === "gameover", `setup: gameover, state=${g.state()}`);
+  g.keyF();
+  assert(g.fsLog.length === 3 && g.fsLog[2].api === "enter",
+    `KeyF while in the gameover screen must enter full screen, got ${JSON.stringify(g.fsLog)}`);
 });
 
 // ================================================================
