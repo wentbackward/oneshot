@@ -17,6 +17,8 @@
     "grep -q 'id=\"leaderboard-start\"' bricks.html && grep -q 'id=\"btn-reset-hiscore\"' bricks.html",
     "grep -q 'ENGINE_FLAME_MIN_PX' asteroids.html",
     "grep -q 'ASTEROID_R_LARGE' asteroids.html",
+    "grep -q 'toggleFullscreen' bricks.html",
+    "grep -q 'toggleFullscreen' asteroids.html",
     "for f in tests/*.test.mjs; do timeout 60 node \"$f\" || exit 1; done"
   ],
   "heavy": { "slots": 2 },
