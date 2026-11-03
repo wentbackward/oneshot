@@ -1630,17 +1630,21 @@ ballSpeedLabel.addEventListener("dblclick", resetBallSpeed);
 // follows it via resizeCanvas(). The visible size is the largest
 // stage-shaped rectangle fitting the viewport, written as CSS px
 // (letterbox, centered by CSS) — fit, not stretch (PRD section 5
-// responsive scaling). The fit is capped at the native stage size:
-// larger monitors render the stage at most 1:1 in CSS, so
-// CANVAS_SCALE keeps the raster sharp without blurring it on an
-// upscale.
+// responsive scaling). The fit is UNCAPPED: on large viewports the
+// stage up-scales (fit > 1) so the game grows with the screen,
+// and on small viewports it still down-scales (fit < 1), always
+// preserving the stage aspect. The backing store stays
+// GAME_W × CANVAS_SCALE — the browser scales the bitmap via the
+// CSS size, which suits the chunky retro raster (see
+// docs/DECISIONS.md, ticket #101).
 function resizeCanvas() {
   if (canvas.width !== GAME_W * CANVAS_SCALE) canvas.width = GAME_W * CANVAS_SCALE;
   if (canvas.height !== GAME_H * CANVAS_SCALE) canvas.height = GAME_H * CANVAS_SCALE;
   fitStageCss();
 }
 function fitStageCss() {
-  var fit = Math.min(window.innerWidth / GAME_W, window.innerHeight / GAME_H, 1);
+  // No 1:1 cap (ticket #101): the stage grows with the screen.
+  var fit = Math.min(window.innerWidth / GAME_W, window.innerHeight / GAME_H);
   var w = Math.round(GAME_W * fit) + "px";
   var h = Math.round(GAME_H * fit) + "px";
   if (canvas.style.width !== w) canvas.style.width = w;

@@ -1146,13 +1146,13 @@
   (wrong — fabricates a move the player never made), or leave the
   divide alone and rely on `clampPaddle` (poisons: NaN comparisons are
   false, so the paddle stays NaN forever).
-- **The letterbox fit is capped at the native stage size (scale ≤ 1):
-  a viewport larger than 960×600 renders the stage at 960×600 CSS px,
-  never upscaled.** Paul's "optimal size irrespective of screen size"
-  reads as the stage having a definite size; upsampling a 2× raster
-  past 1:1 only blurs, and the canvas already carries the CANVAS_SCALE
-  supersample for smaller fits. Alternative: uncapped aspect-fit
-  (rejected — blurs on large monitors).
+- **SUPERSEDED 2026-11-02 by ticket #101 (see that entry): the letterbox fit WAS capped
+  at the native stage size (scale ≤ 1): a viewport larger than 960×600 rendered
+  the stage at 960×600 CSS px, never upscaled.** The original rationale was that
+  Paul's "optimal size irrespective of screen size" reads as the stage having a
+  definite size and that upsampling a 2× raster past 1:1 only blurs. The operator
+  later explicitly asked for the stage to grow with the screen; see the
+  ticket #101 entry for the current behaviour.
 
 ## 2026-10-31 — Ticket #40: the window-level touchmove keeps page-wide `preventDefault`
 
@@ -2521,3 +2521,33 @@ arcade physics).
   `KIND_LIFE` is the life.
 - **Placement.** Inside `#screen-start`, below the leaderboard block and
   above the Reset High Score / Start buttons, per the ticket.
+## 2026-11-02 — Ticket #101: drop the 1:1 cap — the stage fits (and grows) the viewport
+
+- **`fitStageCss()` now uses `fit = min(innerWidth / GAME_W, innerHeight / GAME_H)`
+  with the old `, 1` cap removed.** On large viewports the stage up-scales
+  (fit > 1) so the game grows with the screen, as the operator asked; on small
+  viewports it still down-scales, and the native-size viewport remains exactly
+  the fit == 1 boundary. Aspect-fit + letterbox centring is unchanged — fit is
+  still the MIN of the two axes, so nothing stretches, and the pointer mapping
+  (`setPaddleX` via `getBoundingClientRect`) is unaffected because it divides by
+  the rendered rect, not the CSS cap (verified by
+  `tests/bricks-stage-fit.test.mjs`, incl. the upscaled-rect cases).
+- **Why upscaling is acceptable here: the retro aesthetic is deliberately
+  chunky, and the bitmap is already 2×-supersampled** (`CANVAS_SCALE = 2`,
+  so the backing store is 1920×1200 for the classic stage). Bilinear up to a
+  2.4× fit lands at effective ~1.2 device px per logical px on typical
+  displays — soft-edged but legible, in keeping with the vector-shape art;
+  the operator traded that softness for a stage that fills the monitor.
+  Crispness note: no `image-rendering: pixelated` is added — pixel-snapping a
+  vector-art, anti-aliased raster would only make ball motion judderier at
+  non-integer fits, and the soft look fits the aesthetic better.
+  Alternatives rejected: DPR-aware backing-store re-rasterisation (changes the
+  logical resolution and every geometry constant — rejected, the ticket keeps
+  the backing store at GAME_W × CANVAS_SCALE); optional pixelated CSS toggle
+  (extra DOM/UI the ticket forbids).
+- **Supersedes** the scale ≤ 1 bullet in the ticket #2-era responsive-scaling
+  entry (marked SUPERSEDED in place). The suite
+  `tests/bricks-stage-fit.test.mjs` drives `window.innerWidth/innerHeight`
+  deterministically in the vm harness and sweeps 12 viewport sizes to pin the
+  ratio, the min-of-axes letterbox, the native boundary and the backing-store
+  invariance.
