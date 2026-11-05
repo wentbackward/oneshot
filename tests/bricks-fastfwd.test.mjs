@@ -299,7 +299,11 @@ check("the static default-selection mark sits on the 2.0 node only", () => {
 });
 
 check("the file gains no external references", () => {
-  const ext = (html.match(/(src|href)=/g) ?? []).length;
+  // The hub back link (href="index.html") is a same-folder navigation
+  // link, not an external asset — strip it before counting (matches the
+  // refined gate check; see docs/DECISIONS.md 2026-11-03).
+  const noHub = html.replace(/href=["']index\.html["']/g, "");
+  const ext = (noHub.match(/(src|href)=/g) ?? []).length;
   assert(ext === 0, `bricks.html must stay self-contained (0 src/href), found ${ext}`);
 });
 

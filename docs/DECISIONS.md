@@ -2735,3 +2735,57 @@ arcade physics).
   suites gained a no-op `addEventListener` (same precedent as bricks
   #113)** because the fullscreenchange listener registers on document
   at boot. The element-id stub maps are unchanged (no new DOM).
+
+## 2026-11-03 — Operator request: hub page + drop-in demo package
+
+- **`index.html` is a pure-CSS page: no `<script>` at all.** The hub has
+  nothing to compute — no clock, no canvas, no state. The starfield is
+  four tiled `radial-gradient` dot layers and the blinking coin a CSS
+  `steps()` animation (disabled under `prefers-reduced-motion`).
+  Fewer moving parts means nothing to break on an arbitrary host, and
+  the gate check `grep -c '<script' index.html == 0` pins the property
+  permanently. Alternatives: a JS-drawn intro (rejected — complexity
+  with zero payoff for a three-item menu), shared game assets (rejected
+  — the repo rule is one file, no external refs, per game AND now per
+  page).
+- **Every link is a bare relative href (`bricks.html`, `index.html`).**
+  No root-absolute paths, no query strings: the `oneshot/` folder then
+  serves identically at any mount depth on any static host — the
+  WordPress-under-a-subfolder case is what motivated this. The packager
+  copies files as-is; nothing is rewritten at build time.
+- **The games' back links are inert static markup (anchor + 6-line
+  `<style>`), added with zero JS and no boot-time `getElementById`.**
+  The vm suites boot the real `<script>` of each game file, and any id
+  queried at boot needs a stub in ~35 suites (the recurring harness
+  diamond); an anchor the script never touches is invisible to the
+  harness — the full 46-suite loop confirms. Alternative: inject the
+  link from a shared snippet at build time (rejected — the games must
+  also work directly from the repo, and a build step violates the
+  "the .html file IS the deployable artifact" invariant the packager
+  relies on).
+- **The no-external-refs gate checks on the two games now exclude
+  exactly one exception: `href="index.html"`.** The original rule
+  (zero `src=`/`href=`) encoded "no external assets, playable when
+  opened directly" — a sibling-page navigation link violates neither,
+  and narrowing the check keeps the real protection (assets, CDN,
+  cross-origin) while allowing the hub round trip. A missing
+  `index.html` (e.g. opening a copied `bricks.html` alone) degrades to
+  a dead link, not a broken game.
+- **`scripts/package-oneshot.sh` shells out to python3 std-lib
+  `zipfile`** rather than the `zip` binary (not guaranteed installed)
+  or tar.gz (WordPress/Windows users expect `.zip`). ZipInfo
+  timestamps are pinned (1980-01-01) and attributes fixed (0644), so
+  identical sources produce a byte-identical archive — the test asserts
+  this by building twice and comparing sha256. Rejected: a Makefile
+  target (no Makefile exists; the scripts/ dir is the convention), a
+  build step that renders the games into a template (there is nothing
+  to render — the files already are the artifacts).
+- **`tests/oneshot-pack.test.mjs` locks the package contract**: the
+  hub is doctype-valid, script-free and free of external refs; the hub
+  links both games; both games link back to the hub; the packager
+  output contains EXACTLY `oneshot/{index,bricks,asteroids}.html`,
+  each member byte-identical (sha256) to its repo source. Node has no
+  built-in zip reader, so the manifest is read back via the same
+  python3 std-lib the packager uses (still hermetic: no network, no
+  wall-clock dependence — the determinism check is on build output, not
+  on time).

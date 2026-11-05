@@ -572,7 +572,12 @@ check("a throwing setItem never crashes the loop when the live score rises", () 
 // Supporting: the page is self-contained (mirrors the gate grep)
 // ================================================================
 check("the page is self-contained: no external src=/href= references", () => {
-  assert(!/(src|href)=/.test(html), "bricks.html must not reference any external resource");
+  // The hub back link (href="index.html") is a same-folder navigation
+  // link, not an external asset — strip it before checking (matches the
+  // refined gate check; see docs/DECISIONS.md 2026-11-03).
+  const noHub = html.replace(/href=["']index\.html["']/g, "");
+  assert(!/(src|href)=/.test(noHub),
+    "bricks.html must not reference any external resource (the hub back link is exempt)");
 });
 
 // ---------- summary ----------

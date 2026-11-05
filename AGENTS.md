@@ -4,7 +4,19 @@ Arcade game collection. Campaign 1: the asteroid shooter in
 `asteroids.html` (see `ASTEROIDS.PRD.md`). Campaign 2: the brick-breaker in
 `bricks.html` (see `BRICKBREAKER.PRD.md`). Each game is a standalone single
 file (vanilla HTML5 + CSS + Canvas 2D + Web Audio, no external assets or
-libraries).
+libraries). `index.html` is the hub page (pure CSS, no JS) linking all the
+games; each game carries an inert back link to it.
+
+## Distribution
+
+The repo root IS the deployable: `index.html`, `bricks.html`, `asteroids.html`
+are exactly the files a host needs. `scripts/package-oneshot.sh` bundles them
+into `dist/oneshot.zip` (folder `oneshot/`, python3 std-lib, byte-
+deterministic) for drop-in hosting — e.g. extract under a WordPress site and
+serve `/oneshot/index.html`. `dist/` is gitignored. The pack's contract is
+locked by `tests/oneshot-pack.test.mjs`; when a new game joins the collection,
+add it to the packager's `FILES` array, the hub, and the test's expected
+members.
 
 ## Engineering rules
 

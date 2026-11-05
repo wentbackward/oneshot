@@ -3,3 +3,5 @@ pi-
 tmp/
 node_modules/
 .DS_Store
+.pi/extensions/*/node_modules/
+dist/

@@ -284,9 +284,13 @@ check("the HTML has exactly one leaderboard container on the start screen and on
 });
 
 check("the game stays free of external src/href references", () => {
-  const extRefs = html.match(/(src|href)=/g) ?? [];
+  // The hub back link (href="index.html") is a same-folder navigation
+  // link, not an external asset — strip it before counting (matches the
+  // refined gate check; see docs/DECISIONS.md 2026-11-03).
+  const noHub = html.replace(/href=["']index\.html["']/g, "");
+  const extRefs = noHub.match(/(src|href)=/g) ?? [];
   assert(extRefs.length === 0,
-    `bricks.html must not reference external resources, found ${extRefs.length} src/href attributes`);
+    `bricks.html must not reference external resources (the hub back link is exempt), found ${extRefs.length} src/href attributes`);
 });
 
 // ================================================================

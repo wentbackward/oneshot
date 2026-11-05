@@ -818,9 +818,13 @@ check("bricks.html introduces no `new Image(` / `new Worker(` constructors and n
   const ctorHits = html.match(/\bnew\s+(Image|Worker)\(/gi) ?? [];
   assert(ctorHits.length === 0,
     `bricks.html must contain no new Image()/new Worker() constructors, found ${ctorHits.length}`);
-  const extHits = html.match(/(src|href)=/g) ?? [];
+  // The hub back link (href="index.html") is a same-folder navigation
+  // link, not an external asset — strip it before counting (matches the
+  // refined gate check; see docs/DECISIONS.md 2026-11-03).
+  const noHub = html.replace(/href=["']index\.html["']/g, "");
+  const extHits = noHub.match(/(src|href)=/g) ?? [];
   assert(extHits.length === 0,
-    `bricks.html must contain no external src=/href= refs, found ${extHits.length}`);
+    `bricks.html must contain no external src=/href= refs (the hub back link is exempt), found ${extHits.length}`);
 });
 
 // ================================================================

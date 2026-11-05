@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>One-Shot</title>
+<style>
+  /* ============ Retro arcade shell (matches the games' palette) ============ */
+  :root {
+    --bg: #05070f;
+    --panel: #0b0f14;
+    --ink: #9fb4c7;
+    --dim: #5a6b7d;
+    --accent-bricks: #5cf2b0;
+    --accent-asteroids: #5eead4;
+  }
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: monospace;
+  }
+  /* Static CSS starfield — two tiled layers of faint dots, no assets, no JS. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image:
+      radial-gradient(1px 1px at 25% 35%, rgba(159, 180, 199, 0.5), transparent 55%),
+      radial-gradient(1px 1px at 70% 15%, rgba(159, 180, 199, 0.35), transparent 55%),
+      radial-gradient(1.5px 1.5px at 45% 75%, rgba(159, 180, 199, 0.3), transparent 55%),
+      radial-gradient(1px 1px at 85% 60%, rgba(159, 180, 199, 0.45), transparent 55%);
+    background-size: 420px 420px, 560px 560px, 340px 340px, 480px 480px;
+    pointer-events: none;
+  }
+  .wrap {
+    position: relative;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2.5rem;
+    padding: 3rem 1.25rem;
+    box-sizing: border-box;
+  }
+
+  /* ============ Marquee ============ */
+  .marquee {
+    text-align: center;
+  }
+  .marquee h1 {
+    margin: 0;
+    font-size: clamp(2.4rem, 7vw, 4.2rem);
+    letter-spacing: 0.42em;
+    text-indent: 0.42em; /* optical centering: last letter's tracking is dead space */
+    color: #e8f2fb;
+    text-shadow: 0 0 18px rgba(92, 242, 176, 0.45), 0 0 2px rgba(232, 242, 251, 0.8);
+  }
+  .marquee .sub {
+    margin-top: 0.9rem;
+    font-size: 0.78rem;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--dim);
+  }
+
+  /* ============ Cabinet cards ============ */
+  .cabinets {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.4rem;
+    width: min(720px, 100%);
+  }
+  @media (min-width: 640px) {
+    .cabinets { grid-template-columns: 1fr 1fr; }
+  }
+  a.card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+    padding: 1.4rem 1.3rem 1.2rem;
+    background: var(--panel);
+    border: 1px solid #1c2430;
+    border-radius: 10px;
+    color: inherit;
+    text-decoration: none;
+    box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+    transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+  }
+  a.card:hover, a.card:focus-visible {
+    transform: translateY(-3px);
+    outline: none;
+  }
+  a.card.bricks:hover, a.card.bricks:focus-visible {
+    border-color: var(--accent-bricks);
+    box-shadow: 0 8px 30px -12px rgba(92, 242, 176, 0.55);
+  }
+  a.card.asteroids:hover, a.card.asteroids:focus-visible {
+    border-color: var(--accent-asteroids);
+    box-shadow: 0 8px 30px -12px rgba(94, 234, 212, 0.55);
+  }
+  .card .num {
+    font-size: 0.68rem;
+    letter-spacing: 0.3em;
+    color: var(--dim);
+  }
+  .card h2 {
+    margin: 0;
+    font-size: 1.35rem;
+    letter-spacing: 0.12em;
+  }
+  a.card.bricks h2 { color: var(--accent-bricks); }
+  a.card.asteroids h2 { color: var(--accent-asteroids); }
+  .card p {
+    margin: 0;
+    flex: 1;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    color: var(--ink);
+  }
+  .card .launch {
+    font-size: 0.72rem;
+    letter-spacing: 0.3em;
+    color: var(--dim);
+  }
+  a.card:hover .launch { color: inherit; }
+  a.card.bricks:hover .launch { color: var(--accent-bricks); }
+  a.card.asteroids:hover .launch { color: var(--accent-asteroids); }
+
+  /* ============ Footer ticker ============ */
+  .footer {
+    text-align: center;
+    font-size: 0.68rem;
+    letter-spacing: 0.22em;
+    color: var(--dim);
+  }
+  .coin {
+    color: #fbbf24;
+    animation: blink 1.2s steps(2, start) infinite;
+  }
+  @keyframes blink { to { visibility: hidden; } }
+  @media (prefers-reduced-motion: reduce) {
+    .coin { animation: none; }
+    a.card { transition: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="marquee">
+      <h1>ONE-SHOT</h1>
+      <div class="sub">dev-loop build hall &middot; one file per machine</div>
+    </header>
+
+    <nav class="cabinets" aria-label="Games">
+      <a class="card bricks" href="bricks.html">
+        <span class="num">01</span>
+        <h2>BRICK BREAKER</h2>
+        <p>Smash the wall &mdash; three play modes, eight falling powerups, and a hi-score that sticks between visits.</p>
+        <span class="launch">LAUNCH &#9658;</span>
+      </a>
+      <a class="card asteroids" href="asteroids.html">
+        <span class="num">02</span>
+        <h2>ASTEROIDS</h2>
+        <p>Clear the void &mdash; split the rocks, burn off the drones, and hold your line wave after wave.</p>
+        <span class="launch">LAUNCH &#9658;</span>
+      </a>
+    </nav>
+
+    <footer class="footer">
+      <span class="coin">&#9679; INSERT COIN &#9679;</span><br>
+      every title is one self-contained .html &mdash; no build, no dependencies
+    </footer>
+  </div>
+</body>
+</html>
