@@ -68,9 +68,12 @@ deliverables into `dist/oneshot.zip` (folder `oneshot/`, byte-deterministic)
 `Dockerfile` is a single `caddy:latest` stage (no build step — the files ARE
 the artifacts) serving the products from `/srv`. Push to `main` →
 `.github/workflows/deploy.yml`: suite loop → build/push
-`ghcr.io/wentbackward/oneshot:{latest,sha}` → SSH to the VPS →
-`docker run --name oneshot --network infra_app-net`. The VPS edge Caddy
-reverse-proxies `oneshot.paulgresham.com` → `oneshot:80` (block in
-`infra/Caddyfile.example`; the production Caddyfile lives on the VPS).
-Workflow secrets: `GHCR_TOKEN`, `VPS_HOST`, `VPS_SSH_KEY` — in GitHub Actions
-only, never in this repo.
+`ghcr.io/wentbackward/oneshot:{latest,sha}` via the automatic
+`GITHUB_TOKEN` → SSH to the VPS → anonymous `docker pull` (public package,
+no token on the VPS) → `docker run --name oneshot --network infra_app-net`.
+The VPS edge Caddy reverse-proxies `oneshot.paulgresham.com` → `oneshot:80`
+(block in `infra/Caddyfile.example`; the production Caddyfile lives on the
+VPS). Precondition: the repo — and with it the GHCR package — is **public**;
+a private package would break both the push and the anonymous pull.
+Workflow secrets: `VPS_HOST`, `VPS_SSH_KEY` — in GitHub Actions only, never
+in this repo.

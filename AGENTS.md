@@ -27,12 +27,13 @@ members, AND the Dockerfile's COPY line (a gate check pins the latter).
 `Dockerfile` is a single `caddy:latest` stage (no build step — the files ARE
 the artifacts) serving the three root-level files from `/srv`. Push to `main`
 → `.github/workflows/deploy.yml`: suite loop → build/push
-`ghcr.io/wentbackward/oneshot:{latest,sha}` → SSH to the VPS →
+`ghcr.io/wentbackward/oneshot:{latest,sha}` (automatic `GITHUB_TOKEN`,
+package public) → SSH to the VPS → anonymous pull →
 `docker run --name oneshot --network infra_app-net`. The VPS edge Caddy
 reverse-proxies `oneshot.paulgresham.com` → `oneshot:80` (block in
 `infra/Caddyfile.example`; the production Caddyfile lives on the VPS).
-Workflow secrets: `GHCR_TOKEN`, `VPS_HOST`, `VPS_SSH_KEY` — in GitHub Actions
-only, never in this repo.
+Workflow secrets: `VPS_HOST`, `VPS_SSH_KEY` — in GitHub Actions only, never
+in this repo. Precondition: repo + package public.
 
 ## Engineering rules
 

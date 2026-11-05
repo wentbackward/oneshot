@@ -2830,3 +2830,28 @@ arcade physics).
   headed for public as a dev-loop demo): `GHCR_TOKEN`, `VPS_HOST`,
   `VPS_SSH_KEY` — the identical trio world-cal already uses, so the
   operator provisions them once per repo with the same values.
+
+## 2026-11-06 — Deploy: drop GHCR_TOKEN — public package, automatic token
+
+- **The workflow no longer uses a `GHCR_TOKEN` secret at all** (operator
+  observation: the project is public, so the image is public). Push side:
+  the build job declares `permissions: { contents: read, packages: write }`
+  and logs in to GHCR with the automatic `GITHUB_TOKEN`, which may publish
+  to the actor's own GHCR — no long-lived PAT in the secret store. Pull
+  side: the VPS `docker pull`s the PUBLIC package anonymously (GHCR allows
+  unauthenticated pulls of public images; 100 pulls / 6 h per IP, we do
+  one per deploy) — the `docker login` on the VPS is deleted. Secrets
+  reduce to the transport pair `VPS_HOST` + `VPS_SSH_KEY`.
+- **Explicit precondition: the repo, and with it the package, must be
+  public.** Recorded as a workflow comment AND a doc line, because the
+  repo is private TODAY: a first push while private would pass the test
+  stage and fail at the GHCR push (private package rejects the
+  GITHUB_TOKEN publish; and even if it didn't, the VPS's anonymous pull
+  of a private image would fail). Alternative kept as escape hatch: if
+  we ever hit GHCR's anonymous pull rate limit, a one-time `docker login
+  ghcr.io` with a read-only token stored on the VPS — not in the repo.
+- **Divergence from world-cal is deliberate and one-way:** world-cal
+  keeps its `GHCR_TOKEN` (its package visibility predates this decision
+  and its workflow predates the automatic-token pattern); oneshot takes
+  the tighter form. Migrating world-cal is a candidate for a later
+  ticket, not a scope creep here.

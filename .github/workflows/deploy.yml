@@ -37,15 +37,22 @@ jobs:
     name: Build & Publish
     needs: test
     runs-on: ubuntu-latest
+    # The automatic GITHUB_TOKEN publishes to GHCR — no custom token
+    # secret. Requires the repo (and thus the package) to be public;
+    # a private package would reject the push and the VPS's anonymous
+    # pull.
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
 
-      - name: Login to GHCR
+      - name: Login to GHCR (automatic token)
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: wentbackward
-          password: ${{ secrets.GHCR_TOKEN }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
@@ -75,10 +82,10 @@ jobs:
             # Create network if needed (match infra docker-compose network)
             docker network create infra_app-net 2>/dev/null || true
 
-            # Authenticate to GHCR
-            echo '${{ secrets.GHCR_TOKEN }}' | docker login ghcr.io -u wentbackward --password-stdin
-
-            # Pull image
+            # Pull image — ANONYMOUS: the package is public, so no
+            # docker login on the VPS (escape hatch if we ever hit the
+            # GHCR anonymous rate limit: a one-time `docker login
+            # ghcr.io` with a read-only token, stored on the VPS).
             echo "Pulling image ${IMAGE_TAG}..."
             docker pull ${IMAGE_TAG}
 
