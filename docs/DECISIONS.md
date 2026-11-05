@@ -2789,3 +2789,44 @@ arcade physics).
   python3 std-lib the packager uses (still hermetic: no network, no
   wall-clock dependence — the determinism check is on build output, not
   on time).
+
+## 2026-11-05 — Operator request: Docker + Caddy deploy for oneshot.paulgresham.com
+
+- **The Dockerfile is a single `caddy:latest` stage with no build
+  step** — mirroring the world-cal pattern, minus the node build stage,
+  because the repo root IS the deployable: `COPY index.html bricks.html
+  asteroids.html /srv/` and the same in-image Caddyfile world-cal uses
+  (`root * /srv`, `file_server`, `encode gzip`, port 80). The in-image
+  Caddy serves plain HTTP; TLS terminates at the VPS edge Caddy exactly
+  as for every other paulgresham app. Alternative: a multi-stage file
+  (rejected — there is nothing to build; a second stage would be
+  theatre).
+- **The webroot is the domain root, NOT the `oneshot/` subfolder the
+  WordPress zip uses.** `oneshot.paulgresham.com/` must serve the hub,
+  so the three files go to `/srv` flat. The two packaging targets have
+  different consumers (a subfolder drop-in vs an owned hostname) and
+  deliberately diverge; both are still pure copies of the same repo
+  files — `.devloop.json` pins that the Dockerfile's COPY line names
+  all three, so a fourth game can never silently miss the image.
+- **Deployment mirrors world-cal's three-stage workflow verbatim**
+  (test → build/push `ghcr.io/wentbackward/oneshot:{latest,sha}` →
+  SSH to the VPS, pull, `docker run --name oneshot --network
+  infra_app-net`, health-wait, prune), so the VPS topology stays
+  uniform: one shared docker network, one edge Caddy, one container
+  per app. Differences are only the app name and the test stage,
+  which runs the repo's suite loop directly (no `npm ci` — this repo
+  has no `package.json`; the suites depend on node builtins plus the
+  runner's `python3`/`bash`, both stock on ubuntu-latest).
+- **The container health check curls host port 80, i.e. the VPS edge
+  Caddy — inherited deliberately from world-cal.** It passes only once
+  the `oneshot.paulgresham.com` route exists in the VPS Caddyfile
+  (kept on the VPS, not in this repo; `infra/Caddyfile.example`
+  documents the block). A missing route therefore surfaces as a
+  failed deploy with the container logs, which is the correct signal
+  for a first-time deploy. Alternative: a container-local HTTP probe
+  (rejected — the caddy image ships no curl/wget, and adding a tool
+  just for probing breaks the "tiny container" property).
+- **Secrets stay in GitHub Actions, never in the repo** (the repo is
+  headed for public as a dev-loop demo): `GHCR_TOKEN`, `VPS_HOST`,
+  `VPS_SSH_KEY` — the identical trio world-cal already uses, so the
+  operator provisions them once per repo with the same values.

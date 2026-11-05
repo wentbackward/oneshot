@@ -21,6 +21,9 @@
     "grep -q 'ASTEROID_R_LARGE' asteroids.html",
     "grep -q 'toggleFullscreen' bricks.html",
     "grep -q 'toggleFullscreen' asteroids.html",
+    "test -f Dockerfile && grep -q 'caddy:latest' Dockerfile",
+    "grep -q 'COPY index.html bricks.html asteroids.html' Dockerfile",
+    "grep -q 'ghcr.io/wentbackward/oneshot' .github/workflows/deploy.yml",
     "for f in tests/*.test.mjs; do timeout 60 node \"$f\" || exit 1; done"
   ],
   "heavy": { "slots": 2 },

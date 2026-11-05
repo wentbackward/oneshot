@@ -1,0 +1,15 @@
+.git
+.github
+.pi
+.devloop.json
+.devloop/
+dist
+docs
+infra
+scripts
+tests
+*.md
+pi-
+tmp/
+node_modules
+.DS_Store

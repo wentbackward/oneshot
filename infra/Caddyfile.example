@@ -1,0 +1,7 @@
+# Example Caddyfile for the oneshot reverse proxy route.
+# The production Caddyfile is maintained on the VPS, not in this repo.
+# Append this block alongside the other app blocks, then `caddy reload`.
+
+oneshot.paulgresham.com {
+    reverse_proxy oneshot:80
+}

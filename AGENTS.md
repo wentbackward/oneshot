@@ -1,11 +1,15 @@
 # Asteroid Horizon — repo guide
 
-Arcade game collection. Campaign 1: the asteroid shooter in
-`asteroids.html` (see `ASTEROIDS.PRD.md`). Campaign 2: the brick-breaker in
-`bricks.html` (see `BRICKBREAKER.PRD.md`). Each game is a standalone single
-file (vanilla HTML5 + CSS + Canvas 2D + Web Audio, no external assets or
-libraries). `index.html` is the hub page (pure CSS, no JS) linking all the
-games; each game carries an inert back link to it.
+Dark-factory demo repo: a collection of applications built by an autonomous
+dev loop (see `README.md` for the framing) — open source software, open-weight
+models, commodity hardware, non-technical product owner. Current products,
+each a standalone single file (vanilla HTML5 + CSS + Canvas 2D + Web Audio, no
+external assets or libraries):
+
+- Campaign 1: the asteroid shooter in `asteroids.html` (see `ASTEROIDS.PRD.md`)
+- Campaign 2: the brick-breaker in `bricks.html` (see `BRICKBREAKER.PRD.md`)
+- `index.html` is the hub page (pure CSS, no JS) linking all the products;
+  each product carries an inert back link to it.
 
 ## Distribution
 
@@ -15,8 +19,20 @@ into `dist/oneshot.zip` (folder `oneshot/`, python3 std-lib, byte-
 deterministic) for drop-in hosting — e.g. extract under a WordPress site and
 serve `/oneshot/index.html`. `dist/` is gitignored. The pack's contract is
 locked by `tests/oneshot-pack.test.mjs`; when a new game joins the collection,
-add it to the packager's `FILES` array, the hub, and the test's expected
-members.
+add it to the packager's `FILES` array, the hub, the test's expected
+members, AND the Dockerfile's COPY line (a gate check pins the latter).
+
+## Deployment (Docker + Caddy, same pattern as world-cal)
+
+`Dockerfile` is a single `caddy:latest` stage (no build step — the files ARE
+the artifacts) serving the three root-level files from `/srv`. Push to `main`
+→ `.github/workflows/deploy.yml`: suite loop → build/push
+`ghcr.io/wentbackward/oneshot:{latest,sha}` → SSH to the VPS →
+`docker run --name oneshot --network infra_app-net`. The VPS edge Caddy
+reverse-proxies `oneshot.paulgresham.com` → `oneshot:80` (block in
+`infra/Caddyfile.example`; the production Caddyfile lives on the VPS).
+Workflow secrets: `GHCR_TOKEN`, `VPS_HOST`, `VPS_SSH_KEY` — in GitHub Actions
+only, never in this repo.
 
 ## Engineering rules
 

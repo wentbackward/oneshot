@@ -1,0 +1,116 @@
+name: Deploy One-Shot
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  IMAGE_TAG: ghcr.io/wentbackward/oneshot
+
+jobs:
+  # ── Stage 1: Unit Tests (Gate) ──────────────────────────────────
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run the full suite loop
+        # No package.json on purpose: every suite is a standalone node
+        # script that boots the real game <script> in a vm sandbox
+        # (hermetic, no dependencies). Same loop as the local dev-loop gate.
+        run: |
+          for f in tests/*.test.mjs; do
+            echo "::group::$f"
+            node "$f" || exit 1
+            echo "::endgroup::"
+          done
+
+  # ── Stage 2: Build & Publish Docker Image ────────────────────────
+  build:
+    name: Build & Publish
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: wentbackward
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          push: true
+          tags: |
+            ${{ env.IMAGE_TAG }}:latest
+            ${{ env.IMAGE_TAG }}:${{ github.sha }}
+
+  # ── Stage 3: Deploy to VPS ───────────────────────────────────────
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: deploy
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            IMAGE_TAG="${{ env.IMAGE_TAG }}:${{ github.sha }}"
+
+            # Create network if needed (match infra docker-compose network)
+            docker network create infra_app-net 2>/dev/null || true
+
+            # Authenticate to GHCR
+            echo '${{ secrets.GHCR_TOKEN }}' | docker login ghcr.io -u wentbackward --password-stdin
+
+            # Pull image
+            echo "Pulling image ${IMAGE_TAG}..."
+            docker pull ${IMAGE_TAG}
+
+            # Stop/remove existing container
+            docker stop oneshot 2>/dev/null || true
+            docker rm oneshot 2>/dev/null || true
+
+            # Start new container on the same network as Caddy
+            echo "Starting oneshot container..."
+            docker run -d \
+              --name oneshot \
+              --network infra_app-net \
+              --restart unless-stopped \
+              -e GIT_SHA=${{ github.sha }} \
+              ${IMAGE_TAG}
+
+            # Wait for health (host Caddy in front; requires the
+            # oneshot.paulgresham.com route to be in the VPS Caddyfile —
+            # see infra/Caddyfile.example)
+            TIMEOUT=30
+            ELAPSED=0
+            until curl -sf http://localhost:80/ > /dev/null 2>&1; do
+              if [ "$ELAPSED" -ge "$TIMEOUT" ]; then
+                echo "Error: Container did not become healthy within ${TIMEOUT}s."
+                docker logs oneshot
+                exit 1
+              fi
+              sleep 2
+              ELAPSED=$((ELAPSED + 2))
+            done
+
+            # Clean up old images
+            docker image prune -f
+
+            echo "✅ oneshot deployed successfully (SHA: ${{ github.sha }})"
