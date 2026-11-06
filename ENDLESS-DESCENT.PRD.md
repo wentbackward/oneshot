@@ -559,7 +559,6 @@ never shipped) as the reference for the number audit.
 | Appendix A: Random Dungeons | **Runtime dungeon generation**: the table-driven walk that grows the map (starting area, passages, widths, doors, beyond-a-door, chambers, exits, stairs) plus stocking rules. |
 | Appendix B: Monster Lists | Roster for the completeness audit (every listed monster must exist in the bestiary data). |
 
-Working specifications distilled from these chapters live in
-`tmp/ed-dungeon-spec.md` (dungeon generation) and `tmp/ed-world-spec.md`
-(surface world) and inform the sections above; the PRD stays the single
-product authority.
+Working specifications distilled from these chapters (dungeon generation,
+surface world) are kept as internal design docs and inform the sections
+above; the PRD stays the single product authority.
