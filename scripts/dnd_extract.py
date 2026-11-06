@@ -454,6 +454,9 @@ def cmd_merge(args) -> None:
         existing.add(d.get("id"))
         added += 1
     merged.sort(key=lambda m: (m.get("name") or "").lower())
+    if not merged and not dest.exists():
+        log(f"[merge] {dest.relative_to(ROOT)}: nothing to write (no validated entries yet)")
+        return
     dest.write_text(json.dumps(merged, indent=1, ensure_ascii=False) + "\n")
     log(f"[merge] {dest.relative_to(ROOT)}: +{added} ({len(merged)} total, "
         f"{skipped} skipped due to validation problems)")
