@@ -358,25 +358,38 @@ def cmd_rewrite(args) -> None:
     todo = [(r, i) for r in rows for i, e in enumerate(r.get("entries", []))
             if e.get("kind") in BOOKS[book]["kinds"]]
     out = PRIVATE / "rewritten" / f"{book}-all.jsonl"
+    lock = threading.Lock()
     done_ids = {(d.get("id"), d.get("_source_page"), d.get("_source_idx"))
                 for d in load_jsonl(out)}
-    todo = [(r, i) for (r, i) in todo
-            if (None, r.get("_page"), i) not in done_ids
-            or True]  # de-dupe below after slug known
-    log(f"[rewrite:{book}] {len(todo)} candidate entries")
-    for r, i in todo:
-        e = r["entries"][i]
-        try:
-            data = rewrite_entry(book, e, i, r.get("_page"))
-        except Exception as ex:  # noqa: BLE001
-            log(f"[rewrite:{book}] page {r.get('_page')} entry {i} FAILED: {ex}")
-            continue
+    log(f"[rewrite:{book}] {len(todo)} candidate entries "
+        f"({len(done_ids)} already done), {args.workers} worker(s)")
+
+    def work(pair):
+        r, i = pair
+        data = rewrite_entry(book, r["entries"][i], i, r.get("_page"))
         key = (data.get("id"), r.get("_page"), i)
-        if key in done_ids:
-            continue
-        done_ids.add(key)
-        append_jsonl(out, data)
-        log(f"[rewrite:{book}] {data.get('id')} (page {r.get('_page')})")
+        with lock:
+            if key in done_ids:
+                return
+            done_ids.add(key)
+            append_jsonl(out, data)
+            log(f"[rewrite:{book}] {data.get('id')} (page {r.get('_page')})")
+
+    if args.workers <= 1:
+        for pair in todo:
+            try:
+                work(pair)
+            except Exception as ex:  # noqa: BLE001
+                log(f"[rewrite:{book}] page {pair[0].get('_page')} "
+                    f"entry {pair[1]} FAILED: {ex}")
+    else:
+        with ThreadPoolExecutor(max_workers=args.workers) as pool:
+            futures = [pool.submit(work, pair) for pair in todo]
+            for fut in as_completed(futures):
+                try:
+                    fut.result()
+                except Exception as ex:  # noqa: BLE001
+                    log(f"[rewrite:{book}] entry FAILED: {ex}")
 
 # ---------------------------------------------------------------------------
 # Stage: validate (schema + mechanical fidelity: number audit)
@@ -419,6 +432,16 @@ def cmd_validate(args) -> None:
         if src.get("name") and d.get("name") != src["name"]:
             problems.append(f"{d.get('id')}: NAME-MISMATCH "
                             f"{src['name']!r} -> {d.get('name')!r}")
+    expected = sum(1 for r in load_jsonl(PRIVATE / "verbatim" / f"{book}.jsonl")
+                   for e in r.get("entries", [])
+                   if e.get("kind") in BOOKS[book]["kinds"])
+    if checked == 0 and expected > 0:
+        log(f"[validate:{book}] FAIL: 0 rewritten entries on disk "
+            f"(~{expected} expected) - rewrite never ran or crashed")
+        sys.exit(1)
+    if 0 < checked < expected:
+        log(f"[validate:{book}] NOTE: {checked}/{expected} entries rewritten "
+            "(partial - re-running rewrite will fill the gap)")
     hard = [p for p in problems if "EXTRA(info)" not in p]
     log(f"[validate:{book}] {checked} entries, {len(hard)} failing, "
         f"{len(problems) - len(hard)} info-only")
@@ -528,6 +551,7 @@ def main() -> None:
 
     p = sub.add_parser("rewrite")
     p.add_argument("--book", required=True, choices=sorted(BOOKS))
+    p.add_argument("--workers", type=int, default=1)
     p.add_argument("--pages", help="restrict to verbatim pages")
     p.set_defaults(fn=cmd_rewrite)
 

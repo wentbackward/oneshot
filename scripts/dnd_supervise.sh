@@ -29,13 +29,14 @@ for book in "${BOOKS[@]}"; do
   echo "[supervise:$book] waiting for parse completion"
   wait_for_parse "$book" || true
   echo "[supervise:$book] rewriting"
-  python3 scripts/dnd_extract.py rewrite --book "$book" --workers 2 || true
+  python3 scripts/dnd_extract.py rewrite --book "$book" --workers 3 || true
   for round in 1 2 3; do
     if python3 scripts/dnd_extract.py validate --book "$book"; then
       echo "[supervise:$book] validate GREEN (round $round)"
       break
     fi
     echo "[supervise:$book] repair round $round"
+    python3 scripts/dnd_extract.py rewrite --book "$book" --workers 3 || true
     python3 scripts/dnd_extract.py repair --book "$book" || true
   done
 done
