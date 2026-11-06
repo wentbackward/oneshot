@@ -1,0 +1,5 @@
+[
+  {"start": 1,   "end": 13,  "section": "Front matter + bestiary introduction"},
+  {"start": 14,  "end": 310, "section": "MONSTER BESTIARY A-Z (one monster stat block per entry; file n = printed page n-1)"},
+  {"start": 311, "end": 354, "section": "Index and closing (navigation)"}
+]

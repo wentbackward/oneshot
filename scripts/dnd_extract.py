@@ -60,12 +60,12 @@ BOOKS = {
     },
     "dmg": {
         "pdf": "docs/Dungeon Master's Guide.pdf",
-        "label": "Dungeon Master's Guide",
+        "label": "Dungeon Master's Guide (2014)",
         "kinds": ["magic_item", "monster", "world_rule", "adventure_rule"],
     },
     "mm": {
         "pdf": "docs/Monster Manual.pdf",
-        "label": "Monster Manual",
+        "label": "Monster Manual (2014)",
         "kinds": ["monster", "magic_item", "world_rule"],
     },
 }

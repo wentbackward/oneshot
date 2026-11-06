@@ -1,0 +1,8 @@
+[
+  {"start": 16,  "end": 43,  "section": "Ch2 Races (one race entry per block)"},
+  {"start": 44,  "end": 111, "section": "Ch3 Classes (class pages: level features, archetypes)"},
+  {"start": 120, "end": 142, "section": "Ch4 Personality & Background (background entries)"},
+  {"start": 142, "end": 158, "section": "Ch5 Equipment (armor/shields, weapons, adventuring gear, tools, vehicles, trade goods, trinkets tables)"},
+  {"start": 164, "end": 171, "section": "Ch6 Customization Options (feat entries)"},
+  {"start": 206, "end": 289, "section": "Ch11 Spells (spell list + one spell entry per block, alphabetical; file n = printed page n-1)"}
+]
