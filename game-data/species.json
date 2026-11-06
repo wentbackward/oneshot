@@ -1,0 +1,126 @@
+[
+  {
+    "id": "dragonborn",
+    "name": "Dragonborn",
+    "ability_bonuses": {"primary": {"STR": 2}, "secondary": {"CHA": 1}},
+    "darkvision": true,
+    "signature_passive": {
+      "id": "breath_weapon",
+      "name": "Breath Weapon",
+      "data": {"use_limit": "once_per_fight", "shape": "cone", "damage": "2d6",
+               "element_chosen_at_creation": ["fire", "cold", "lightning", "poison"],
+               "save": "CON_or_DEX_by_element"}
+    },
+    "flavor_rewritten": "Born of draconic blood, this one speaks with a furnace in its chest and can spend that fire in a single devastating exhale."
+  },
+  {
+    "id": "dwarf",
+    "name": "Dwarf",
+    "ability_bonuses": {"primary": {"CON": 2}, "secondary": {"WIS": 1}},
+    "darkvision": true,
+    "signature_passive": {
+      "id": "stonecunning",
+      "name": "Stonecunning",
+      "data": {"reveals_hidden_doors_and_traps_on_minimap": true, "save_bonus_vs": ["poison", "bleed"], "bonus": 2}
+    },
+    "flavor_rewritten": "Raised beneath the mountains, this stone-sense reader spots hidden workings in carved rock and shrugs off rot that would fell others."
+  },
+  {
+    "id": "elf",
+    "name": "Elf",
+    "ability_bonuses": {"primary": {"DEX": 2}, "secondary": {"INT": 1}},
+    "darkvision": true,
+    "signature_passive": {
+      "id": "keen_senses",
+      "name": "Keen Senses & Fey Ancestry",
+      "data": {"trap_detection_bonus": 1, "save_bonus_vs": ["charm", "fear"], "bonus": 1,
+               "sleep_immunity": "stunned_duration_capped_at_1_turn"}
+    },
+    "flavor_rewritten": "Old magic threads through elven nerve and blood: sharper senses against tricks and traps, and a fickle immunity to being lulled or frozen by fear."
+  },
+  {
+    "id": "gnome",
+    "name": "Gnome",
+    "ability_bonuses": {"primary": {"INT": 2}, "secondary": {"DEX": 1}},
+    "darkvision": true,
+    "signature_passive": {
+      "id": "tinkerer",
+      "name": "Tinkerer",
+      "data": {"extra_consumable_slot": 1, "hub_potion_discount_pct": 20}
+    },
+    "flavor_rewritten": "Small hands, restless ideas. A gnome packs one more pouch of swig and gadget than anyone else can carry, and brews its own bargains."
+  },
+  {
+    "id": "goliath",
+    "name": "Goliath",
+    "ability_bonuses": {"primary": {"STR": 2}, "secondary": {"CON": 1}},
+    "darkvision": true,
+    "signature_passive": {
+      "id": "power_throw",
+      "name": "Power Throw & Mountain Endurance",
+      "data": {"thrown_uses_strength": true,
+               "survive_killing_blow_once_per_run": {"remaining_hp": 1}}
+    },
+    "flavor_rewritten": "Hewn from highland granite and stubbornness: thrown weapons leave the hand on strength, and once in a lifetime the mountain simply refuses to fall."
+  },
+  {
+    "id": "halfling",
+    "name": "Halfling",
+    "ability_bonuses": {"primary": {"DEX": 2}, "secondary": {"CHA": 1}},
+    "darkvision": false,
+    "signature_passive": {
+      "id": "lucky",
+      "name": "Lucky",
+      "data": {"rerolls_of_own_failed_checks_per_floor": 3, "reroll_rule": "roll_twice_take_better"}
+    },
+    "flavor_rewritten": "Fortune favors the small. Three times on every floor, a halfling's unlucky hand gets a second spin and keeps whichever fate lands kinder."
+  },
+  {
+    "id": "human",
+    "name": "Human",
+    "ability_bonuses": {"primary": {"ANY_TWO": 1}, "secondary": {}, "note": "+1 to two abilities of the player's choice"},
+    "darkvision": false,
+    "signature_passive": {
+      "id": "versatile",
+      "name": "Versatile",
+      "data": {"extra_feat_at_creation": 1}
+    },
+    "flavor_rewritten": "The jack-of-all-trades: no single gift, but a head start at mastering one more knack than anyone else picks up for free."
+  },
+  {
+    "id": "orc",
+    "name": "Orc",
+    "ability_bonuses": {"primary": {"STR": 2}, "secondary": {"CON": 1}},
+    "darkvision": true,
+    "signature_passive": {
+      "id": "menacing",
+      "name": "Menacing Presence",
+      "data": {"damage_bonus_vs_larger_tier": 1, "aggro_spawn_penalty": "fewer_enemies_notice_player_at_spawn"}
+    },
+    "flavor_rewritten": "A reputation walks in front of an orc: bigger prey gets hit harder, and lesser foes think twice before leaping at sight."
+  },
+  {
+    "id": "tiefling",
+    "name": "Tiefling",
+    "ability_bonuses": {"primary": {"CHA": 2}, "secondary": {"INT": 1}},
+    "darkvision": true,
+    "signature_passive": {
+      "id": "infernal_legacy",
+      "name": "Infernal Legacy",
+      "data": {"innate_cantrip_id": "infernal_fire", "cantrip": {"damage": "1d8 fire", "range_feet": 60, "slot_cost": 0, "scales_with_cantrip_upgrade": true}}
+    },
+    "flavor_rewritten": "Hellfire sits politely in the bloodline: a pocket of flame the tiefling can snap out at will, free of any spellbook's price."
+  },
+  {
+    "id": "aasimar",
+    "name": "Aasimar",
+    "ability_bonuses": {"primary": {"CHA": 2}, "secondary": {"CON": 1}, "variant": "heroic: +1 STR instead"},
+    "darkvision": false,
+    "signature_passive": {
+      "id": "radiance",
+      "name": "Radiance",
+      "data": {"use_limit": "once_per_floor", "effect": "purge_all_hostile_conditions", "heal": "1d4"}
+    },
+    "flavor_rewritten": "A shard of celestial dawn: once per floor the aasimar can let it flare, burning every curse off the body and mending a little of what it left behind."
+  }
+]

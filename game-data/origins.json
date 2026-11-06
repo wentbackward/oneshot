@@ -1,0 +1,59 @@
+[
+  {
+    "id": "acrobat",
+    "name": "Acrobat",
+    "bonuses": {"dodge_bonus": 1, "trap_step_over": 1},
+    "tool": {"id": "rope", "name": "Climber's Rope", "effect": "free_shortcut_climb", "use_limit": "once_per_floor"},
+    "kit": ["climbing_gear", "torch"],
+    "starting_gold": 50,
+    "flavor_rewritten": "A career spent on ropes and ledges pays out in steady footing: tighter dodges, calmer trap steps, and a rope that finds a way up once a floor."
+  },
+  {
+    "id": "criminal",
+    "name": "Criminal",
+    "bonuses": {"lockpick_bonus": 1, "shop_haggle_bonus": 1},
+    "tool": {"id": "thieves_tools", "name": "Thieves' Tools", "effect": "lockpicking_and_pickpocketing", "use_limit": "unlimited_with_checks"},
+    "kit": ["dagger", "lockpicks"],
+    "starting_gold": 50,
+    "flavor_rewritten": "Pickpockets and padlocks are an old language. The criminal reads both fluently and argues prices like a con artist."
+  },
+  {
+    "id": "guild_artisan",
+    "name": "Guild Artisan",
+    "bonuses": {"crafted_gear_durability": 1, "shop_sell_price_bonus": 1},
+    "tool": {"id": "craft_tools", "name": "Craft Tools", "effect": "workbench_voucher_in_hub", "use_limit": "one_free_potion_craft"},
+    "kit": ["crafters_outfit", "workbench_voucher"],
+    "starting_gold": 50,
+    "flavor_rewritten": "Guild marks open doors to better terms: gear holds together longer, sales bring more coin, and the hub workbench owes a favor."
+  },
+  {
+    "id": "noble",
+    "name": "Noble",
+    "bonuses": {"cha_effects_bonus": 1},
+    "tool": {"id": "signets", "name": "Family Signets", "effect": "influence_and_recognition", "use_limit": "social_advantage"},
+    "kit": ["fine_clothes"],
+    "starting_gold": 100,
+    "penalty": "shop_discounts_reduced_by_1",
+    "flavor_rewritten": "Old money, older expectations. The noble starts richer and talks past merchants, but the silver signet marks them as fair prey for price-gougers."
+  },
+  {
+    "id": "outlander",
+    "name": "Outlander",
+    "bonuses": {"survival_bonus": 1, "poison_resistance": 1},
+    "tool": {"id": "navigators_tools", "name": "Navigator's Tools", "effect": "route_and_landmark_knowledge", "use_limit": "passive"},
+    "kit": ["travelers_cloak", "rations"],
+    "starting_gold": 50,
+    "auto_heal_rule": {"amount_hp": 1, "trigger": "after_each_floors_first_rest", "source": "rations"},
+    "flavor_rewritten": "Raised where the road ends, the outlander tastes poison and calls it weather, and always packs enough salt meat to patch up after a floor's first camp."
+  },
+  {
+    "id": "sage",
+    "name": "Sage",
+    "bonuses": {"arcana_bonus": 1, "spell_power_bonus": 1},
+    "tool": {"id": "scholars_pack", "name": "Scholar's Pack", "effect": "research_notes_and_grimoire", "use_limit": "passive"},
+    "kit": ["spell_scroll_case"],
+    "starting_gold": 50,
+    "free_scroll_rule": {"quantity": 1, "scope": "per_run"},
+    "flavor_rewritten": "Twelve years of libraries condense into one extra spark behind every spell, plus a scroll case that promises one surprise per descent."
+  }
+]

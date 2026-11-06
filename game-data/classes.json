@@ -1,0 +1,209 @@
+[
+  {
+    "id": "barbarian",
+    "name": "Barbarian",
+    "role": "melee_tank",
+    "weapon_tier": "martial_melee",
+    "hit_die": "d8",
+    "class_core_abilities": ["STR", "CON"],
+    "starter_abilities": [
+      {"id": "melee_strikes", "name": "Primal Strikes", "kind": "basic_attack", "data": {"attacks_per_turn": 1, "note": "proficient with simple and martial melee weapons"}},
+      {"id": "reckless", "name": "Reckless", "kind": "toggle", "data": {"duration_turns": 2, "damage_bonus": 2, "ac_penalty": 2}}
+    ],
+    "signature": {"id": "rage", "name": "Rage", "cooldown_turns": 10, "data": {"duration_turns": 3, "damage_bonus": 2, "damage_resistance": "physical"}},
+    "milestones": {
+      "3": {"id": "second_wind", "name": "Second Wind", "data": {"heal": "1d10+level", "use_limit": "once_per_fight"}},
+      "6": {"id": "extra_strike", "name": "Extra Strike", "data": {"extra_attacks_per_turn": 1, "melee_only": true}}
+    }
+  },
+  {
+    "id": "bard",
+    "name": "Bard",
+    "role": "support_buffer",
+    "weapon_tier": "simple_any",
+    "hit_die": "d4",
+    "class_core_abilities": ["CHA", "WIS"],
+    "starter_abilities": [
+      {"id": "healing_word", "name": "Healing Word", "kind": "spell", "data": {"level": 1, "heal": "1d4+CHA", "range_feet": 60, "slot_cost": 1}},
+      {"id": "vicious_mockery", "name": "Vicious Mockery", "kind": "spell", "data": {"level": 1, "effect": "target_disadvantage_next_attack", "range_feet": 60, "slot_cost": 1}}
+    ],
+    "signature": {"id": "inspire", "name": "Inspire", "cooldown_turns": 8, "data": {"charges": 3, "effect": "next_hits_crit_ready"}},
+    "milestones": {
+      "3": {"id": "jack_of_trades", "name": "Jack of Trades", "data": {"flat_bonus": 1, "use_limit": "once_per_floor"}},
+      "6": {"id": "slumber", "name": "Slumber", "kind": "spell", "data": {"level": 2, "condition": "sleep", "duration_turns": 1, "slot_cost": 2}}
+    }
+  },
+  {
+    "id": "cleric",
+    "name": "Cleric",
+    "role": "healer_smiter",
+    "weapon_tier": "simple_any",
+    "hit_die": "d8",
+    "class_core_abilities": ["WIS", "CHA"],
+    "starter_abilities": [
+      {"id": "smite", "name": "Divine Smite", "kind": "spell", "data": {"level": 1, "damage": "2d8 radiant", "target": "single_melee_hit", "slot_cost": 1}},
+      {"id": "healing_prayer", "name": "Healing Prayer", "kind": "spell", "data": {"level": 1, "heal": "1d4+WIS", "targets": "all_allies_within_30ft", "slot_cost": 1}}
+    ],
+    "signature": {"id": "divine_favor", "name": "Divine Favor", "cooldown_turns": 10, "data": {"duration_turns": 2, "smite_damage_bonus": 2}},
+    "milestones": {
+      "3": {"id": "lay_on_hands", "name": "Lay on Hands", "data": {"heal_pool": 50, "use_limit": "once_per_floor"}},
+      "6": {"id": "sanctuary", "name": "Sanctuary", "data": {"immunity_turns": 2, "knockback_feet": 10}}
+    }
+  },
+  {
+    "id": "druid",
+    "name": "Druid",
+    "role": "shapeshifter",
+    "weapon_tier": "simple_any",
+    "hit_die": "d6",
+    "class_core_abilities": ["WIS", "CON"],
+    "starter_abilities": [
+      {"id": "elemental_dart", "name": "Elemental Dart", "kind": "spell", "data": {"level": 1, "damage": "1d8 elemental", "range_feet": 90, "slot_cost": 1}},
+      {"id": "druidic_heal", "name": "Druidic Healing", "kind": "spell", "data": {"level": 1, "heal": "1d4+WIS", "range_feet": 30, "slot_cost": 1}}
+    ],
+    "signature": {"id": "wild_shape", "name": "Wild Shape", "cooldown_turns": 12, "data": {"duration_turns": 2, "forms": [
+      {"id": "bear", "name": "Stonehide Bear", "ac_bonus": 2, "melee_damage": "2d8", "speed_feet": 20},
+      {"id": "wolf", "name": "Gale Wolf", "dodge_bonus": 2, "speed_feet": 40, "melee_damage": "1d8"}
+    ]}},
+    "milestones": {
+      "3": {"id": "lands_stride", "name": "Land's Stride", "data": {"ignores_difficult_terrain": true}},
+      "6": {"id": "conjure_beast", "name": "Conjure Beast", "kind": "spell", "data": {"level": 2, "summon_hp": 10, "summon_damage": "1d6", "duration_turns": 5, "slot_cost": 2}}
+    }
+  },
+  {
+    "id": "fighter",
+    "name": "Fighter",
+    "role": "melee_damage",
+    "weapon_tier": "martial_any",
+    "hit_die": "d8",
+    "class_core_abilities": ["STR", "DEX"],
+    "starter_abilities": [
+      {"id": "weapon_proficiency", "name": "Weapon Mastery Training", "kind": "passive", "data": {"weapon_families_unlocked": ["simple", "martial"], "mastery_tag_discount": "unlockable_via_feats"}},
+      {"id": "maneuvers", "name": "Combat Maneuvers", "kind": "basic_attack", "data": {"attacks_per_turn": 1, "note": "full weapon proficiency"}}
+    ],
+    "signature": {"id": "action_surge", "name": "Action Surge", "cooldown_turns": 12, "data": {"extra_primary_actions_this_turn": 1}},
+    "milestones": {
+      "3": {"id": "second_wind", "name": "Second Wind", "data": {"heal": "1d10+level", "use_limit": "once_per_fight"}},
+      "6": {"id": "cunning_action", "name": "Cunning Action", "data": {"combined_move_and_attack_as_single_turn": true}}
+    }
+  },
+  {
+    "id": "monk",
+    "name": "Monk",
+    "role": "finesse_striker",
+    "weapon_tier": "unarmed_simple",
+    "hit_die": "d8",
+    "class_core_abilities": ["WIS", "DEX"],
+    "starter_abilities": [
+      {"id": "unarmed_flurry", "name": "Unarmed Flurry", "kind": "basic_attack", "data": {"damage": "1d4+DEX", "note": "unarmed or monk weapon"}},
+      {"id": "ki_restore", "name": "Ki Restore", "kind": "spell", "data": {"level": 1, "heal": "1d4+WIS", "self_only": true, "slot_cost": 1}}
+    ],
+    "signature": {"id": "flurry_of_blows", "name": "Flurry", "cooldown_turns": 8, "data": {"strikes": 3, "damage_fraction": "half", "min_hit_on_rolls_below": 10}},
+    "milestones": {
+      "3": {"id": "evasion", "name": "Evasion", "data": {"halves_damage_from": ["ranged", "spell"]}},
+      "6": {"id": "stunning_strike", "name": "Stunning Strike", "data": {"on_hit_condition": "stunned", "duration_turns": 1, "save": "CON"}}
+    }
+  },
+  {
+    "id": "paladin",
+    "name": "Paladin",
+    "role": "smite_tank",
+    "weapon_tier": "martial_any",
+    "hit_die": "d8",
+    "class_core_abilities": ["STR", "CHA"],
+    "starter_abilities": [
+      {"id": "lay_on_hands_pally", "name": "Lay on Hands", "data": {"heal_pool": 40, "poison_cure": true}, "kind": "resource"},
+      {"id": "divine_smite_pally", "name": "Divine Smite", "kind": "spell", "data": {"level": 1, "damage": "2d8 radiant", "target": "single_melee_hit", "slot_cost": 1}}
+    ],
+    "signature": {"id": "aura_of_determination", "name": "Aura", "cooldown_turns": 12, "data": {"duration_turns": 2, "self_bonus": "steady", "nearby_enemies": "slow"}},
+    "milestones": {
+      "3": {"id": "divine_health", "name": "Divine Health", "data": {"immune_to": "poison"}},
+      "6": {"id": "smite_breaker", "name": "Smite Breaker", "data": {"guaranteed_hit": true, "bonus_damage": "1d8 radiant", "use_limit": "once_per_fight"}}
+    }
+  },
+  {
+    "id": "ranger",
+    "name": "Ranger",
+    "role": "ranged_pet",
+    "weapon_tier": "martial_ranged",
+    "hit_die": "d8",
+    "class_core_abilities": ["DEX", "WIS"],
+    "starter_abilities": [
+      {"id": "hunt_shot", "name": "Hunt Shot", "kind": "basic_attack", "data": {"note": "ranged weapon proficiency, hunting tactics"}},
+      {"id": "favored_enemy", "name": "Favored Enemy", "data": {"damage_bonus": 2, "target_type_chosen_at_creation": true}}
+    ],
+    "signature": {"id": "call_beast", "name": "Call Beast", "cooldown_turns": 15, "data": {"companion_hp": 10, "companion_damage": "1d6", "persists_across_fights_within_run": true}},
+    "milestones": {
+      "3": {"id": "natural_explorer", "name": "Natural Explorer", "data": {"shows_floor_outline_on_hud": true}},
+      "6": {"id": "hunters_mark", "name": "Hunter's Mark", "data": {"condition": "marked", "grants": "advantage_all_hits", "duration": "marked_target"}}
+    }
+  },
+  {
+    "id": "rogue",
+    "name": "Rogue",
+    "role": "crit_dodge",
+    "weapon_tier": "finesse_any",
+    "hit_die": "d8",
+    "class_core_abilities": ["DEX", "CHA"],
+    "starter_abilities": [
+      {"id": "backstab", "name": "Backstab", "kind": "passive", "data": {"bonus_damage": 2, "requires": "flanking_or_after_movement"}},
+      {"id": "poison_blade", "name": "Poison Blade", "kind": "passive", "data": {"dot": "poison 1d4", "duration_turns": 2, "use_limit": "twice_per_floor"}}
+    ],
+    "signature": {"id": "evasion_rogue", "name": "Evasion", "cooldown_turns": 8, "data": {"duration_turns": 2, "dodge_bonus": 2, "crit_bonus": 1}},
+    "milestones": {
+      "3": {"id": "sneak_attack", "name": "Sneak Attack", "data": {"bonus_damage": 2, "requires": "moved_this_turn"}},
+      "6": {"id": "uncanny_dodge", "name": "Uncanny Dodge", "data": {"parries_one_hit": true, "use_limit": "once_per_floor"}}
+    }
+  },
+  {
+    "id": "sorcerer",
+    "name": "Sorcerer",
+    "role": "burst_caster",
+    "weapon_tier": "simple_light",
+    "hit_die": "d4",
+    "class_core_abilities": ["CHA", "CON"],
+    "starter_abilities": [
+      {"id": "fire_bolt", "name": "Fire Bolt", "kind": "cantrip", "data": {"damage": "1d10 fire", "scales_with_cantrip_upgrade": true, "range_feet": 120}},
+      {"id": "chill", "name": "Chill", "kind": "cantrip", "data": {"damage": "1d8 cold", "scales_with_cantrip_upgrade": true, "range_feet": 60}}
+    ],
+    "signature": {"id": "sorcerous_surge", "name": "Surge", "cooldown_turns": 10, "data": {"next_spell_this_floor": "free_and_upcast_1"}},
+    "milestones": {
+      "3": {"id": "metamagic", "name": "Metamagic", "data": {"extended_duration": true, "use_limit": "one_spell_per_floor"}},
+      "6": {"id": "elemental_affinity", "name": "Elemental Affinity", "data": {"damage_bonus": 2, "save_dc_bonus": 1, "chosen_element_at_creation": true}}
+    }
+  },
+  {
+    "id": "warlock",
+    "name": "Warlock",
+    "role": "pact_caster",
+    "weapon_tier": "simple_any",
+    "hit_die": "d4",
+    "class_core_abilities": ["CHA", "INT"],
+    "starter_abilities": [
+      {"id": "hex", "name": "Hex", "kind": "spell", "data": {"level": 1, "dot": "1d6 psychic", "duration": "target", "slot_cost": 1, "max_targets": 1}},
+      {"id": "eldritch_blast", "name": "Eldritch Blast", "kind": "cantrip", "data": {"damage": "1d10 force", "scales_with_cantrip_upgrade": true, "range_feet": 120}}
+    ],
+    "signature": {"id": "pact_bond", "name": "Pact", "cooldown_turns": 10, "data": {"duration_turns": 2, "next_attacks": 3, "spell_damage_bonus": "1d6"}},
+    "milestones": {
+      "3": {"id": "otherworldly_locomotion", "name": "Otherworldly", "data": {"teleport_tiles": 3, "use_limit": "once_per_floor"}},
+      "6": {"id": "devils_bargain", "name": "Devil's Bargain", "data": {"cost_hp": 5, "effect": "refund_one_used_signature_charge", "use_limit": "once_per_floor"}}
+    }
+  },
+  {
+    "id": "wizard",
+    "name": "Wizard",
+    "role": "utility_caster",
+    "weapon_tier": "simple_light",
+    "hit_die": "d4",
+    "class_core_abilities": ["INT", "CON"],
+    "starter_abilities": [
+      {"id": "light_wizard", "name": "Light", "kind": "spell", "data": {"level": 1, "effect": "reveal_area", "radius_ft": 30, "duration": "until_rest", "slot_cost": 1}},
+      {"id": "ray_frost", "name": "Ray of Frost", "kind": "spell", "data": {"level": 1, "damage": "1d8 cold", "slow_feet": 10, "duration_turns": 1, "range_feet": 60, "slot_cost": 1}}
+    ],
+    "signature": {"id": "arcane_focus_cast", "name": "Focus", "cooldown_turns": 10, "data": {"next_spell_costs_no_slot": true}},
+    "milestones": {
+      "3": {"id": "arcane_recovery", "name": "Arcane Recovery", "data": {"refund_slots": 1, "use_limit": "once_per_floor"}},
+      "6": {"id": "arcane_mastery", "name": "Arcane Mastery", "data": {"per_floor_school_bonus": 1, "chosen_school_at_level_up": true}}
+    }
+  }
+]
