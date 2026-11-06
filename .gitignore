@@ -5,4 +5,7 @@ node_modules/
 .DS_Store
 .pi/extensions/*/node_modules/
 dist/
-docs/PlayersHandbook2024.pdf
+private/
+docs/*.pdf
+
+__pycache__/

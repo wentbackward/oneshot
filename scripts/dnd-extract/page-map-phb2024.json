@@ -1,0 +1,10 @@
+[
+  {"start": 5,   "end": 30,  "section": "Ch1 Playing the Game (rules)"},
+  {"start": 31,  "end": 46,  "section": "Ch2 Creating a Character (rules)"},
+  {"start": 47,  "end": 174, "section": "Ch3 Classes (class pages: level features, subclass tables)"},
+  {"start": 175, "end": 196, "section": "Ch4 Character Origins (races & backgrounds)"},
+  {"start": 197, "end": 210, "section": "Ch5 Feats (feat entries)"},
+  {"start": 211, "end": 232, "section": "Ch6 Equipment (weapons, armor, gear tables)"},
+  {"start": 233, "end": 342, "section": "Ch7 Spells (one spell entry per block, alphabetical)"},
+  {"start": 343, "end": 387, "section": "Appendices, indices (skip: navigation only)"}
+]
