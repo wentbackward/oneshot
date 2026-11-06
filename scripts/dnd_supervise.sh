@@ -33,12 +33,17 @@ rewrite_args() {
   case "$1" in
     phb2024) echo "" ;;
     dmg)     echo "--kinds magic_item,monster" ;;
-    mm)      echo "" ;;
+    mm)      echo "--kinds monster,magic_item" ;;  # bestiary; prose intros are not data;
     phb2014) echo "" ;;
   esac
 }
 
 for book in "${BOOKS[@]}"; do
+  if [[ "$book" == "phb2014" ]]; then
+    echo "[supervise:$book] SKIPPED by owner (2024 PHB is sufficient; "
+         "verbatim parse retained in archive)"
+    continue
+  fi
   echo "[supervise:$book] waiting for parse completion"
   wait_for_parse "$book" || true
   echo "[supervise:$book] rewriting $(rewrite_args "$book")"
