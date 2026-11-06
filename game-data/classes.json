@@ -197,7 +197,7 @@
     "hit_die": "d4",
     "class_core_abilities": ["INT", "CON"],
     "starter_abilities": [
-      {"id": "light_wizard", "name": "Light", "kind": "spell", "data": {"level": 1, "effect": "reveal_area_radius_ft": 30, "duration": "until_rest", "slot_cost": 1}},
+      {"id": "light_wizard", "name": "Light", "kind": "spell", "data": {"level": 1, "effect": "reveal_area", "radius_ft": 30, "duration": "until_rest", "slot_cost": 1}},
       {"id": "ray_frost", "name": "Ray of Frost", "kind": "spell", "data": {"level": 1, "damage": "1d8 cold", "slow_feet": 10, "duration_turns": 1, "range_feet": 60, "slot_cost": 1}}
     ],
     "signature": {"id": "arcane_focus_cast", "name": "Focus", "cooldown_turns": 10, "data": {"next_spell_costs_no_slot": true}},
