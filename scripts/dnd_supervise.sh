@@ -25,13 +25,16 @@ wait_for_parse() {
   done
 }
 
-# Per-book rewrite scopes (see dnd_extract.py rewrite --help).
+# Per-book rewrite scopes. Product owner wants ALL game entities rewritten
+# (monsters, spells, items, weapons, equipment, classes, feats, races,
+# backgrounds) - the only exclusions are the DMG's prose rule entries
+# (adventure_rule / world_rule: DM-facing procedures, not game entities).
 rewrite_args() {
   case "$1" in
-    phb2024) echo "" ;;                       # canon: everything
-    dmg)     echo "--kinds magic_item" ;;     # items only; rules live in spec docs
-    mm)      echo "--cr-band 0.25,12" ;;      # playable CR band (solo)
-    phb2014) echo "--skip-ids-in phb2024" ;;  # delta vs canon only
+    phb2024) echo "" ;;
+    dmg)     echo "--kinds magic_item,monster" ;;
+    mm)      echo "" ;;
+    phb2014) echo "" ;;
   esac
 }
 

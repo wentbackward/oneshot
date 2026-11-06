@@ -502,3 +502,40 @@ it via a hub action (free, 1 item) — its full statline is revealed. Rarity
    character is fully playable; a clean export→import cycle passes with no
    report; re-importing an already-punished unmodified save adds no
    further penalty.
+
+## 19. Source Materials & Chapter Map
+
+All game content is derived from four D&D 5e source books. **Rule numbers
+(abilities, dice, CRs, ranges, prices) are copied faithfully; all descriptive
+prose is reworded** — no source text is reproduced verbatim in shipped data.
+Verbatim transcripts of the sources are retained privately (never published,
+never shipped) as the reference for the number audit.
+
+### Roles of the books
+
+| Book | Role in the game |
+|------|------------------|
+| Player's Handbook 2024 | **Canon.** All character-facing data: classes, species, origins, feats, weapons, armor, gear, spells. Where 2014 and 2024 disagree, 2024 wins. |
+| Player's Handbook 2014 | Supplemental roster: entries absent from the 2024 book are additive content (marked as legacy). |
+| Monster Manual 2014 | The bestiary: every monster with full statistics; the game's spawn pool. |
+| Dungeon Master's Guide 2014 | **Not data — design source.** Its guidance is distilled into the game's generation and running systems (below). |
+
+### DMG chapter → game system
+
+| DMG chapter (2014) | What it drives in the game |
+|--------------------|----------------------------|
+| Ch. 1–2: Building the World, Creating a Multiverse | **Surface world generation** (pre-generated once per deployment): terrain, climate, rivers, settlements with their size ladder and personalities, religions, factions. Planes become exotic dungeon biomes, not destinations. |
+| Ch. 3: Creating Adventures | **The contract board**: goal / patron / villain / climax draws that give each descent its objective, sponsor, antagonist, and possible endings. |
+| Ch. 4: Creating Nonplayer Characters | Denizens and faction leaders: patrons, merchants, negotiable dungeon inhabitants, contract-givers. |
+| Ch. 5: Adventure Environments | **Dungeon identity**: location, creator, purpose, history, inhabitants and factions; room purposes; doors (stuck/locked/barred/secret); mapping and wear rules. |
+| Ch. 6: Between Adventures | **The surface interlude** between descents: resting, buying and selling, taking contracts, traveling. |
+| Ch. 7: Treasure (item catalog) | **The magic-item catalog** (the only book carrying one) and depth-scaled treasure generation; coin economy. |
+| Ch. 8: Running the Game | **The turn-based engine's tabletop mechanics**: initiative, exploration actions, combat pacing, exploration-vs-rest tradeoffs, and the permadeath framing of level-loss. |
+| Ch. 9: DM's Workshop | Optional/variant rules and the method for authoring new monsters/spells/items (the team's content-authoring playbook). |
+| Appendix A: Random Dungeons | **Runtime dungeon generation**: the table-driven walk that grows the map (starting area, passages, widths, doors, beyond-a-door, chambers, exits, stairs) plus stocking rules. |
+| Appendix B: Monster Lists | Roster for the completeness audit (every listed monster must exist in the bestiary data). |
+
+Working specifications distilled from these chapters live in
+`tmp/ed-dungeon-spec.md` (dungeon generation) and `tmp/ed-world-spec.md`
+(surface world) and inform the sections above; the PRD stays the single
+product authority.
