@@ -355,8 +355,40 @@ def cmd_rewrite(args) -> None:
     rows = load_jsonl(vpath)
     if pages:
         rows = [r for r in rows if r.get("_page") in pages]
+    kinds = ([k.strip() for k in args.kinds.split(",")]
+             if getattr(args, "kinds", None) else BOOKS[book]["kinds"])
+    cr_band = None
+    if getattr(args, "cr_band", None):
+        lo, hi = (float(x) for x in args.cr_band.split(","))
+        cr_band = (lo, hi)
+    skip_names = None
+    if getattr(args, "skip_ids_in", None):
+        norm = lambda s: re.sub(r"[^a-z0-9]+", " ", (s or "").lower()).strip()
+        skip_names = {
+            (e.get("kind"), norm(e.get("name")))
+            for r in load_jsonl(PRIVATE / "verbatim" /
+                                f"{args.skip_ids_in}.jsonl")
+            for e in r.get("entries", [])}
+
+    def wanted(e):
+        if e.get("kind") not in kinds:
+            return False
+        if skip_names is not None and \
+                (e.get("kind"), re.sub(r"[^a-z0-9]+", " ",
+                                       (e.get("name") or "").lower()).strip()) \
+                in skip_names:
+            return False
+        if cr_band is not None and e.get("kind") == "monster":
+            cr = extract_max_cr(e)
+            return cr is not None and cr_band[0] <= cr <= cr_band[1]
+        return True
+
     todo = [(r, i) for r in rows for i, e in enumerate(r.get("entries", []))
-            if e.get("kind") in BOOKS[book]["kinds"]]
+            if wanted(e)]
+    total_rows = sum(len(r.get("entries", [])) for r in rows)
+    log(f"[rewrite:{book}] {len(todo)} candidate entries of {total_rows} "
+        f"parsed (kinds={kinds}, cr_band={cr_band}, "
+        f"skip_ids_in={getattr(args, 'skip_ids_in', None)})")
     out = PRIVATE / "rewritten" / f"{book}-all.jsonl"
     lock = threading.Lock()
     done_ids = {(d.get("id"), d.get("_source_page"), d.get("_source_idx"))
@@ -396,6 +428,37 @@ def cmd_rewrite(args) -> None:
 # ---------------------------------------------------------------------------
 
 NUM_RE = re.compile(r"\b\d+\s*d\s*\d+\b|\b\d{1,3}(?:\.\d+)?\b")
+CR_RE = re.compile(
+    r"(?:challenge\s+rating|cr)\s*[:\-]?\s*(\d+(?:\s*[/\-]\s*\d+)?)",
+    re.IGNORECASE)
+CR_KEY_RE = re.compile(r"^(?:cr(?:[_ ]?\d+)?|challenge(?:[_ ]?rating)?)$",
+                       re.IGNORECASE)
+
+def _cr_from_value(v: str):
+    m = CR_RE.search(v or "")
+    if not m:
+        # bare value under a CR-keyed field, e.g. "1/4 (50 XP)"
+        m2 = re.match(r"\s*(\d+(?:\s*[/\-]\s*\d+)?)", v or "")
+        if not m2:
+            return None
+        tok = m2.group(1).replace(" ", "")
+    else:
+        tok = m.group(1).replace(" ", "")
+    if "/" in tok:                      # fraction: 1/4, 1/8
+        n, d = (float(x) for x in tok.split("/"))
+        return n / d
+    if "-" in tok:                       # range: 1-3
+        return max(float(x) for x in tok.split("-"))
+    return float(tok)
+
+def extract_max_cr(entry: dict):
+    f = entry.get("fields") or {}
+    vals = [str(f[k]) for k in f if CR_KEY_RE.match(str(k))]
+    for v in vals:
+        c = _cr_from_value(v)
+        if c is not None:
+            return c
+    return _cr_from_value(entry.get("entry_verbatim", ""))
 
 def normalize_numbers(text: str) -> str:
     t = text.lower().replace(",", "")
@@ -553,6 +616,12 @@ def main() -> None:
     p.add_argument("--book", required=True, choices=sorted(BOOKS))
     p.add_argument("--workers", type=int, default=1)
     p.add_argument("--pages", help="restrict to verbatim pages")
+    p.add_argument("--kinds", help="comma list overriding the book's kinds")
+    p.add_argument("--cr-band", help="min,max challenge-rating band (monsters; "
+                  "entries without a parseable CR are dropped)")
+    p.add_argument("--skip-ids-in", choices=sorted(BOOKS),
+                   help="skip entries whose (kind, normalized name) already "
+                        "exists in another book's verbatim data")
     p.set_defaults(fn=cmd_rewrite)
 
     p = sub.add_parser("validate")

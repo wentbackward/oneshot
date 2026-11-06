@@ -25,18 +25,28 @@ wait_for_parse() {
   done
 }
 
+# Per-book rewrite scopes (see dnd_extract.py rewrite --help).
+rewrite_args() {
+  case "$1" in
+    phb2024) echo "" ;;                       # canon: everything
+    dmg)     echo "--kinds magic_item" ;;     # items only; rules live in spec docs
+    mm)      echo "--cr-band 0.25,12" ;;      # playable CR band (solo)
+    phb2014) echo "--skip-ids-in phb2024" ;;  # delta vs canon only
+  esac
+}
+
 for book in "${BOOKS[@]}"; do
   echo "[supervise:$book] waiting for parse completion"
   wait_for_parse "$book" || true
-  echo "[supervise:$book] rewriting"
-  python3 scripts/dnd_extract.py rewrite --book "$book" --workers 3 || true
+  echo "[supervise:$book] rewriting $(rewrite_args "$book")"
+  python3 scripts/dnd_extract.py rewrite --book "$book" --workers 3 $(rewrite_args "$book") || true
   for round in 1 2 3; do
     if python3 scripts/dnd_extract.py validate --book "$book"; then
       echo "[supervise:$book] validate GREEN (round $round)"
       break
     fi
     echo "[supervise:$book] repair round $round"
-    python3 scripts/dnd_extract.py rewrite --book "$book" --workers 3 || true
+    python3 scripts/dnd_extract.py rewrite --book "$book" --workers 3 $(rewrite_args "$book") || true
     python3 scripts/dnd_extract.py repair --book "$book" || true
   done
 done
