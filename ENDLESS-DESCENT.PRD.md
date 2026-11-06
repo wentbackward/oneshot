@@ -64,7 +64,20 @@ HUB ──descend──▶ DUNGEON FLOOR 1 ──exit stair──▶ FLOOR 2 ─
   character keeps level, species, class, and hub upgrades.
 
 ## 4. Character Creation (once, per character)
-Creation follows a four-stage flow, each stage locking before the next:
+Creation follows a five-stage flow, each stage locking before the next
+(identity first):
+
+### 4.0 Identity (stage 1)
+Role-playing customization, free-form and cosmetic:
+- **Name** (≤ 16 chars, required, uniqueness not enforced).
+- **Gender / identity** (optional): free-text or pick from a short list
+  (she/her, he/him, they/them, custom, prefer not to say). Used only in
+  narration and the character sheet — never gates or scales anything.
+- **Description** (optional, ≤ 140 chars): 1–2 sentences of self-authored
+  backstory/flavor. Shown on the hub sheet and death/escape recaps, and
+  passed to the AI narrative layer (§13) so generated prose can reference it.
+- All three are editable in the hub at any time ("Edit sheet") and travel
+  with exports (§14).
 
 ### 4.1 Ability Scores (dice)
 Six abilities, each rolled as **4 six-sided dice, drop the lowest, sum the
@@ -208,7 +221,7 @@ at +2, some hide poorly (−1 dodge); Heavy: fixed high AC (14–18), requires
 STR ≥ 13 to keep dodge, −1 dodge always, but +1 save vs. all DoTs.
 Plus a **shield (+2 AC)** occupying a slot. Exactly one armor + one shield.
 7.3 **Inventory:** 5 slots (+1 for Gnome tinkerer). Weight (STR) adds a
-soft cap on consumables, not on gear. Sell = half price (§13.3).
+soft cap on consumables, not on gear. Sell = half price (§11.3).
 
 ## 8. Magic
 8.1 **Slots:** casters carry **3 slots per run**; slots refund on any rest
@@ -303,43 +316,168 @@ it via a hub action (free, 1 item) — its full statline is revealed. Rarity
   bank everything, +1 permanent "Descension" bonus (−1 gold cost per 10 %
   of prices), fresh character at L1 keeping a *single* heirloom magic item.
 
-## 13. UI / Presentation (decided)
-13.1 **Graphics:** emoji-first (🧝 ⚔️ 🐉 💰 ✨ …) on a dark tile grid with
+## 13. Narrative Layer (Optional AI Color)
+13.1 **Purpose:** an OPTIONAL cosmetic layer. When enabled, an LLM endpoint
+  supplied by the player writes word-based embellishment for the dungeon:
+  floor-transition flavor, monster intros, elite banners, treasure
+  descriptions, and one-line reactions to notable beats (level-up,
+  near-death, companion loss). Prose only — it makes the run immersive,
+  never changes it.
+13.2 **Endpoint compatibility:** any OpenAI Chat Completions–compatible API
+  — OpenAI itself, Ollama (served at `/v1/chat/completions`), LM Studio,
+  or any local/self-hosted server speaking the same protocol. Configured in
+  hub Settings: endpoint URL, model name, optional API key (stored with the
+  save file, §14). **Defaults to OFF**; the game must be complete and
+  indistinguishable in gameplay with it off, including from `file://`
+  with no network.
+13.3 **Prompt payload:** (a) a condensed rules-and-world brief derived from
+  this PRD (biomes, factions, loot table vocabulary), (b) the player's full
+  character identity and sheet (§4.0–§4.4), (c) the seed-generated dungeon
+  context (floor number, biome, room inventory, named entities present with
+  tier/type, and the specific event hook: floor entry, encounter, treasure,
+  elite, or beat). Nothing about the player beyond what they typed.
+13.4 **Hard contract (presentation isolation):**
+- Model output is untrusted decoration: game logic must never parse it,
+  act on it, or let it influence anything. Damage, drops, RNG outcomes,
+  saves, and win/loss compute identically whether AI is on, off, or lying.
+- Responses are constrained to a JSON shape (`{"title": str ≤ 8 words,
+  "lines": [str] each ≤ 20 words, total ≤ 60 words}`); anything malformed,
+  oversized, or non-JSON is discarded and the fallback is used.
+- 8-second timeout. On timeout / error / refusal / rate-limit the game
+  falls back to a **static prose bank** (hand-written lines per biome,
+  enemy, treasure tier, and event — see §16) with no visible degradation.
+13.5 **Presentation:** floor banners, encounter intros (one line; elites get
+  title + line), treasure toasts, and recap lines render with a typewriter
+  effect. Responses are cached per (seed, floor, entity-id/event) so
+  revisits and replays of a run do not re-request.
+13.6 **Privacy & transparency:** Settings exposes "show last prompt /
+  response"; the key goes only to the user-configured endpoint; the game
+  ships no backend, telemetry, or account system of its own.
+13.7 **Determinism:** with the AI layer disabled, a run on a given seed
+  produces identical in-game text every time (prose bank is seed-keyed) —
+  this must be unit-testable without a network.
+
+## 14. Save / Load (Portable Save Files)
+14.1 **Export:** from the Hub and from the in-run pause overlay, "Export
+  save" downloads a single JSON file (`endless-descent-save-v{N}.json`)
+  containing: identity (§4.0), abilities, species/origin/class, feats, boons,
+  character level/XP, banked gold, hub upgrades, Descension rank, settings
+  (AI config included — the export dialog warns "this file contains your
+  API key"), and, mid-run: floor, run seed, tile position, HP, slot state,
+  inventory, and elapsed turns — plus the integrity footer (§14.5): the
+  rolling hash chain and the accepted paid re-roll ledger.
+14.2 **Import:** upload of the same file format. Sequence: schema +
+  `SAVE_VERSION` validation → summary preview (name, level, gold, run
+  state?) → explicit confirm → atomic apply (all-or-nothing). Corrupt,
+  foreign, or wrong-version files are rejected with a clear error; the
+  current save is never partially overwritten.
+14.3 **Relation to autosave:** the automatic local save (restored on
+  re-open — acceptance item 2 of §18) remains the primary store; export/import is the backup
+  and cross-device path. Both directions share one serializer — no second
+  encoding.
+14.4 **Versioning:** files carry `SAVE_VERSION` (integer, starts at 1) and
+  a `GAME_VERSION` string. Future versions may migrate forward via named
+  migrators only; unknown higher versions are refused, not guessed.
+14.5 **Integrity validation & anti-cheat (import-time, enforced in code):**
+  Save files are untrusted input; the human editor is a first-class threat
+  model. Every import runs the full validator before anything is applied,
+  against a **sanity ledger** derivable from the save itself:
+  - **Per-level stat caps:** every ability score must satisfy
+    `3 ≤ score ≤ STAT_MAX(level)`, where `STAT_MAX(level) = min(18,
+    14 + level)` (L1: 15 · L2: 16 · L3: 17 · L4+: 18). "Set everything to
+    18" therefore fails outright below level 4, and is still caught by
+    the next rule above it.
+  - **Aggregate budget:** total point-spend `Σ(score − 3) ≤
+    27 + 2·(level−1) + 9·(accepted paid re-rolls on record)`, no score
+    above 15 unless the delta is backed by a recorded re-roll — exactly
+    the creation economics of §4.1, so a legal high-roll character (one
+    18, rest middling) passes while a flat 18×6 never can.
+  - **Cross-field consistency:** HP ≤ the max-HP formula for (level, CON);
+    gold and XP are integers within [0, next threshold]; feats ⊆ the
+    12-feat pool; milestone powers present only at their granting levels
+    (3/6); boons only at 5/8/10; Descension rank ≤ 1; inventory items ⊆
+    the content catalog with rarity bounded by the floor found on; equipped
+    magic items ≤ 3.
+  - **Hash chain:** each save write appends `SHA-256(prev hash ‖ state)`;
+    the last 50 links ride in the file. A hand-edited field breaks the
+    chain. Recomputing it faithfully requires replaying the game, which
+    defeats the point — the chain is a tripwire and legible proof, not
+    DRM.
+  **Verdict & punishment (deterministic, all-or-nothing):**
+  - Clean → load proceeds, no notification.
+  - Any violation → a **Tamper Report** dialog lists every broken rule per
+    field ("STR 18 exceeds STAT_MAX(L2) = 16", "hash chain broken at link
+    37/50"), and the punishment is applied *before* the save loads:
+    1. Every over-cap score is clamped down to `STAT_MAX(level)`.
+    2. The character's **two class-core abilities** (the pair its class
+       keys off — e.g. Barbarian: STR & CON) take a further −4, floor 5.
+       Maximum pain, aimed exactly where the build lives.
+    3. **All class bonuses are disabled**: the signature ability, both
+       starter abilities, and any earned milestone powers are stamped
+       `SILENCED` (greyed on the sheet, tooltip explains why) and stay
+       silenced for the life of the character — recoverable only via
+       Retire & Reincarnate (§12). Hub upgrades, feats, and species
+       passives are untouched.
+  - Runtime anomalies (HP above formula, impossible inventory, negative
+    gold) route through the same handler mid-run: report, clamp, silence.
+  - Once punished, the sheet carries a permanent red
+    `VOIDED — tampered save detected` stamp, and exports of that
+    character carry the stamp forward so it cannot be laundered by
+    re-import.
+  - Verdicts are idempotent: re-importing an already-punished, unmodified
+    save produces no further penalty.
+
+## 15. UI / Presentation (decided)
+15.1 **Graphics:** emoji-first (🧝 ⚔️ 🐉 💰 ✨ …) on a dark tile grid with
   subtle CSS glows; canvas only for dice-roller and screen shake. Retro
   pixel font via system monospace.
-13.2 **HUD:** left: HP bar, XP sliver, active conditions; center-bottom:
-  last-5 events log (colored); right: inventory 5-slot, slots pips, floor
+15.2 **HUD:** top-left: character name + identity tag; left: HP bar, XP
+  sliver, active conditions; center-bottom: last-5 events log (colored,
+  typewriter for AI lines); right: inventory 5-slot, slots pips, floor
   label + biome icon; top-right: gold.
-13.3 **Dice presentation:** 4d6 roll *animates* on creation and on paid
+15.3 **Dice presentation:** 4d6 roll *animates* on creation and on paid
   re-roll (one second, skippable); in-combat rolls show as a brief sprite
   pop (20d + total) at the actor, no log spam.
-13.4 **Audio (Web Audio synth only):** hit thock, crit chime, gold
+15.4 **Audio (Web Audio synth only):** hit thock, crit chime, gold
   jingle, portal hum, death sting, 4-floor biome stingers. Master mute.
-13.5 **Screens:** title (New/Continue/Reset) → character builder (4 stages,
-  summary sheet) → hub (sheet + shop + upgrades + descend button) → run
-  (HUD + floor banner) → death/escape recap (stats, XP, gold breakdown) → hub.
-13.6 **Feedback budget:** every action must produce visible feedback
+15.5 **Screens:** title (New/Continue/Reset) → character builder (5 stages,
+  summary sheet) → hub (sheet + Edit sheet + shop + upgrades + descend +
+  Export/Import save + Settings) → run (HUD + floor banner + pause
+  overlay with Export) → death/escape recap (stats, XP, gold breakdown,
+  signature AI line when enabled) → hub.
+15.6 **Feedback budget:** every action must produce visible feedback
   (shake, float, flash, sound) within 100 ms; no silent state changes.
-13.7 **Accessibility:** colorblind-safe success/fail markers (✓/✗ + color),
+15.7 **Accessibility:** colorblind-safe success/fail markers (✓/✗ + color),
   all text ≥ 14 px, no time-limited inputs except optional 2 s flee-confirm.
+15.8 **Settings (hub):** AI narrative endpoint (URL, model, key — off by
+  default, "cast test" button, last prompt/response viewer), master sound,
+  dice-animation toggle, and wipe-all-data (type-CONFIRM).
 
-## 14. Content Budgets (v1 completeness)
+## 16. Content Budgets (v1 completeness)
 - 10 species, 6 origins, 12 classes — all implemented to the §4 tables.
 - ≥ 24 spells (3 per school × 8) + 12 cantrips (1–2 per class).
 - ≥ 16 enemies (4 tiers × 4 biomes), 2 elites, 10 weapon prototypes
   (2 per group) + property/mastery tags, 6 armors (1 per weight class × 2),
   4 shield variants, 6 potions/scrolls, 6 magic items (rarity 1–3).
 - Feats: 12; Boons: 3; Hub upgrades: the five in §11.2.
+- Static prose bank (AI fallback, §13.4): ≥ 8 lines per biome (×4),
+  ≥ 1 enemy line per enemy prototype, ≥ 8 treasure lines, ≥ 8 event lines
+  (level-up, near-death, elite kill, escape, death).
 
-## 15. Non-Goals (explicit)
+## 17. Non-Goals (explicit)
 - No multiplayer, no leaderboards, no online persistence beyond the local
   save.
+- No backend operated by the game: the AI narrative layer uses only the
+  user's own endpoint and is optional (§13).
+- No DRM: anti-tamper is client-side validation, tripwires, and in-game
+  punishment (§14.5); it does not attempt to encrypt, obfuscate, or make
+  cheating impossible from a single HTML file.
 - No party/companions beyond the Ranger's summoned beast (single entity).
 - No crafting UI beyond the Gnome/Forge discounts on shop potions.
 - No localization beyond English.
 - No day/night, weather, or light simulation (Darkvision is flavor).
 
-## 16. Acceptance Criteria (definition of done)
+## 18. Acceptance Criteria (definition of done)
 1. A brand-new visitor can go from title screen → death/escape → second run
    without any external help, in under 5 minutes.
 2. Re-opening the browser restores banked gold, level, and unlocks exactly.
@@ -347,6 +485,20 @@ it via a hub action (free, 1 item) — its full statline is revealed. Rarity
    all 16 entities + effects on screen.
 4. Every rule quoted in §4–§11 is visible in-game somewhere (tooltips on
    hover / a "Rules" screen summarizing the house rules).
-5. All content budgets in §14 exist and are reachable in a full run
+5. All content budgets in §16 exist and are reachable in a full run
    (floors 1–10, no dead content).
 6. Works from `file://` and offline; console-free in Chrome and Firefox.
+7. Save round-trip: export → wipe local save → import reproduces an
+   equivalent playable state; a corrupt/foreign file leaves the existing
+   save intact with a visible error.
+8. AI isolation: with the endpoint off (or unreachable), a seeded run
+   produces byte-identical in-game text and identical outcomes across
+   replays; a mocked LLM returning garbage (non-JSON, oversize, insults)
+   changes no number anywhere.
+9. Anti-tamper: importing a crafted save (all-elevated scores), a
+   single-field hand edit (broken chain), or an out-of-pool feat shows the
+   Tamper Report, applies exactly the §14.5 punishment (clamp, −4 to the
+   two class-core scores, SILENCED class powers), and the resulting
+   character is fully playable; a clean export→import cycle passes with no
+   report; re-importing an already-punished unmodified save adds no
+   further penalty.
