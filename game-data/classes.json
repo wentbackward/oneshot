@@ -183,7 +183,7 @@
       {"id": "hex", "name": "Hex", "kind": "spell", "data": {"level": 1, "dot": "1d6 psychic", "duration": "target", "slot_cost": 1, "max_targets": 1}},
       {"id": "eldritch_blast", "name": "Eldritch Blast", "kind": "cantrip", "data": {"damage": "1d10 force", "scales_with_cantrip_upgrade": true, "range_feet": 120}}
     ],
-    "signature": {"id": "pact_bond", "name": "Pact", "cooldown_turns": 10, "data": {"duration_turns": 2, "next_attacks": 3, "spell_damage_bonus": 1d6}},
+    "signature": {"id": "pact_bond", "name": "Pact", "cooldown_turns": 10, "data": {"duration_turns": 2, "next_attacks": 3, "spell_damage_bonus": "1d6"}},
     "milestones": {
       "3": {"id": "otherworldly_locomotion", "name": "Otherworldly", "data": {"teleport_tiles": 3, "use_limit": "once_per_floor"}},
       "6": {"id": "devils_bargain", "name": "Devil's Bargain", "data": {"cost_hp": 5, "effect": "refund_one_used_signature_charge", "use_limit": "once_per_floor"}}
