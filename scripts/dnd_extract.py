@@ -45,7 +45,7 @@ LLM_API_KEY = os.environ.get("DND_LLM_API_KEY", "boogie")
 WORKER_MODEL = os.environ.get("DND_LLM_WORKER", "worker")
 DPI = 150
 MAX_RETRIES = 5
-TIMEOUT_S = 300
+TIMEOUT_S = 600
 
 BOOKS = {
     "phb2024": {
