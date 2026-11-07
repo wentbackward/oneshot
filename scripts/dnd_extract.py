@@ -391,10 +391,17 @@ def cmd_rewrite(args) -> None:
         f"skip_ids_in={getattr(args, 'skip_ids_in', None)})")
     out = PRIVATE / "rewritten" / f"{book}-all.jsonl"
     lock = threading.Lock()
+    prev = load_jsonl(out)
     done_ids = {(d.get("id"), d.get("_source_page"), d.get("_source_idx"))
-                for d in load_jsonl(out)}
+                for d in prev}
+    # Pre-filter by (page, idx): a crash-restart must not re-call the LLM
+    # for entries already rewritten (dedupe-by-id alone only catches this
+    # AFTER the call, wasting a full book of LLM traffic on resume).
+    done_pi = {(d.get("_source_page"), d.get("_source_idx")) for d in prev}
+    todo = [(r, i) for (r, i) in todo
+            if (r.get("_page"), i) not in done_pi]
     log(f"[rewrite:{book}] {len(todo)} candidate entries "
-        f"({len(done_ids)} already done), {args.workers} worker(s)")
+        f"(skipped {len(done_pi)} already done), {args.workers} worker(s)")
 
     def work(pair):
         r, i = pair
