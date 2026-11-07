@@ -27,13 +27,6 @@ SCOPE = {
 SKIP_BOOKS = {"phb2014"}
 
 
-def count_lines(path: Path) -> int:
-    if not path.exists():
-        return 0
-    with open(path, encoding="utf-8", errors="replace") as fh:
-        return sum(1 for ln in fh if ln.strip())
-
-
 def main() -> None:
     ok = True
     out = ["# Extraction Report",
@@ -50,23 +43,40 @@ def main() -> None:
             continue
         kinds = SCOPE[book] if SCOPE[book] is not None else BOOKS[book]["kinds"]
         c = collections.Counter()
+        cand = set()
         for ln in open(vp, encoding="utf-8"):
-            for e in json.loads(ln).get("entries", []):
-                k = e.get("kind")
-                if kinds is None or k in kinds:
-                    c[k] += 1
-        total = sum(c.values())
+            r = json.loads(ln)
+            for i, e in enumerate(r.get("entries", [])):
+                if e.get("kind") in kinds:
+                    c[e["kind"]] += 1
+                    cand.add((r.get("_page"), i))
+        total = len(cand)
         if book in SKIP_BOOKS:
             out.append(f"- SKIPPED by owner (2024 PHB is sufficient); "
-                       f"{total} parsed entries archived only.")
+                       f"{sum(c.values())} parsed entries archived only.")
             out.append("")
             continue
-        rew = count_lines(PRIVATE / "rewritten" / f"{book}-all.jsonl")
-        cov = 100.0 * rew / total if total else 100.0
-        if total and rew < total:
+        rew_path = PRIVATE / "rewritten" / f"{book}-all.jsonl"
+        covered_set = set()
+        lines = 0
+        if rew_path.exists():
+            for ln in open(rew_path, encoding="utf-8"):
+                if not ln.strip():
+                    continue
+                lines += 1
+                try:
+                    dd = json.loads(ln)
+                except Exception:  # noqa: BLE001
+                    continue
+                covered_set.add((dd.get("_source_page"), dd.get("_source_idx")))
+        covered = len(covered_set & cand)
+        cov = 100.0 * covered / total if total else 100.0
+        if total and covered < total:
             ok = False
         out.append(f"- in-scope candidates: **{total}**  {dict(c.most_common())}")
-        out.append(f"- rewritten on disk: **{rew}**  (coverage {cov:.1f}%)")
+        out.append(f"- rewritten entries on disk: **{lines}** "
+                   f"(unique candidates covered: **{covered}**, "
+                   f"coverage {cov:.1f}%)")
         vf = PRIVATE / "validation" / f"{book}-problems.txt"
         if vf.exists():
             hard = [l for l in vf.read_text(encoding="utf-8").splitlines()
