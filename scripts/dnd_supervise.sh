@@ -65,4 +65,5 @@ for book in "${BOOKS[@]}"; do
     python3 scripts/dnd_extract.py merge --book "$book" --kind "$kind" || true
   done
 done
-echo "[supervise] ALL DONE"
+python3 scripts/dnd_audit.py || true
+echo "[supervise] ALL DONE — see private/dnd/EXTRACTION-REPORT.md"
