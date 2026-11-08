@@ -544,18 +544,32 @@ def cmd_validate(args) -> None:
 
 def cmd_merge(args) -> None:
     book = args.book
+    pf = PRIVATE / "validation" / f"{book}-problems.txt"
+    if not pf.exists():
+        sys.exit(f"[merge] {book}-problems.txt missing — run validate first "
+                 f"(refusing to merge unvalidated data)")
     flagged = {p.partition(":")[0].strip()
-               for p in (PRIVATE / "validation" / f"{book}-problems.txt").read_text()
+               for p in pf.read_text()
                .splitlines()
                if p.strip() and "EXTRA(info)" not in p}
     rows = load_jsonl(PRIVATE / "rewritten" / f"{book}-all.jsonl")
     GAME_DATA.mkdir(exist_ok=True)
     dest = GAME_DATA / f"{args.kind}.json"
-    merged = load_jsonl(dest.with_suffix(".jsonl")) if dest.with_suffix('.jsonl').exists() else []
+    # Accumulate from the destination ITSELF: the catalog is a pretty-printed
+    # JSON array shared by every book, so merging must read what previous
+    # books wrote (reading a stray .jsonl here started every pass from empty
+    # and clobbered the data of earlier books).
+    merged = json.loads(dest.read_text()) if dest.exists() else []
+    if not isinstance(merged, list):
+        sys.exit(f"[merge] {dest.name} is not a JSON array — refusing to overwrite")
     existing = {m.get("id") for m in merged}
     added, skipped = 0, 0
     for d in rows:
         if d.get("kind") != args.kind or d.get("id") in existing:
+            continue
+        if not d.get("id"):
+            # No identity: parser mislabel junk (e.g. a prose fragment tagged
+            # as data). Never admissible into a catalog.
             continue
         if d.get("id") in flagged:
             skipped += 1

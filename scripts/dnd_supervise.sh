@@ -61,6 +61,7 @@ done
 
 echo "[supervise] merging validated data into game-data/"
 for book in "${BOOKS[@]}"; do
+  [[ "$book" == "phb2014" ]] && continue  # owner-excluded: no rewrite/validate
   for kind in spell weapon armor gear magic_item monster feat background race; do
     python3 scripts/dnd_extract.py merge --book "$book" --kind "$kind" || true
   done

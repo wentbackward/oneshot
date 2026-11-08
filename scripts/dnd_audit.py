@@ -95,6 +95,64 @@ def main() -> None:
             n = f"INVALID JSON ({ex})"
             ok = False
         out.append(f"- `{f.name}`: {n} entries")
+    out.append("")
+
+    # Merged-catalog completeness: what the catalogs CONTAIN must equal what
+    # merge is entitled to write (union over books, minus flagged ids). This
+    # is the check that would have caught a clobbering merge even while
+    # rewrite coverage reads 100%.
+    out.append("## merged-catalog completeness")
+    kinds_all = ("spell", "weapon", "armor", "gear", "magic_item",
+                "monster", "feat", "background", "race")
+    per_book_flagged = {}
+    for book in ("phb2024", "dmg", "mm"):
+        vf = PRIVATE / "validation" / f"{book}-problems.txt"
+        if vf.exists():
+            per_book_flagged[book] = {
+                l.partition(":")[0].strip()
+                for l in vf.read_text(encoding="utf-8").splitlines()
+                if l.strip() and "EXTRA(info)" not in l}
+        else:
+            per_book_flagged[book] = set()
+    expected = {k: set() for k in kinds_all}
+    for book in ("phb2024", "dmg", "mm"):
+        rp = PRIVATE / "rewritten" / f"{book}-all.jsonl"
+        if not rp.exists():
+            continue
+        for ln in open(rp, encoding="utf-8"):
+            if not ln.strip():
+                continue
+            try:
+                d = json.loads(ln)
+            except Exception:  # noqa: BLE001
+                continue
+            k, i = d.get("kind"), d.get("id")
+            if k in expected and i and i not in per_book_flagged[book]:
+                expected[k].add(i)
+    for k in kinds_all:
+        fp = GAME_DATA / f"{k}.json"
+        if fp.exists():
+            try:
+                actual = {e.get("id") for e in
+                          json.loads(fp.read_text(encoding="utf-8"))}
+            except Exception:  # noqa: BLE001
+                out.append(f"- `{k}.json`: INVALID — MISMATCH")
+                ok = False
+                continue
+        else:
+            actual = set()
+        missing, extra = expected[k] - actual, actual - expected[k]
+        line = f"- `{k}.json`: {len(actual)}/{len(expected[k])} expected"
+        if missing:
+            line += f" — MISSING {len(missing)} (e.g. " \
+                    f"{', '.join(sorted(missing)[:4])})"
+        if extra:
+            line += f" — UNEXPECTED {len(extra)}"
+        if missing or extra:
+            ok = False
+            line += "  [MISMATCH]"
+        out.append(line)
+    out.append("")
 
     report = "\n".join(out) + f"\n\n**Result: {'COMPLETE' if ok else 'INCOMPLETE'}**\n"
     (PRIVATE / "EXTRACTION-REPORT.md").write_text(report, encoding="utf-8")
