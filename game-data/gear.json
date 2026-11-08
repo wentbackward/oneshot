@@ -1,0 +1,6204 @@
+[
+ {
+  "id": "the-right-equipment-can-make-the-difference-between-success-and-failure-for-adventurers",
+  "name": "(prose)",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {},
+  "flavor_rewritten": "Proper gear separates victory from defeat. Shopkeepers control stock and pricing.",
+  "adaptation_note": "This entry is purely introductory prose describing the chapter's purpose regarding equipment rules, prices, availability, and DM discretion. It contains no specific mechanical stats, dice expressions, numerical values, or game entities to convert into structured data."
+ },
+ {
+  "id": "right-equipment-can-make-the-difference-between-success-and-failure-for-adventurers",
+  "name": "(prose)",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {},
+  "flavor_rewritten": "Adventuring requires the proper tools to survive. A skilled dealer ensures availability and fair pricing for all gear.",
+  "adaptation_note": "Source text is introductory prose defining a chapter scope rather than a specific game mechanic with stats, dice, or numerical values. No structured data fields exist in the source."
+ },
+ {
+  "id": "adjustable-magic-gear",
+  "name": "(prose)",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "fitting_rule": {
+    "size_independence": true,
+    "build_independence": true,
+    "mechanism": [
+     "easily_adjustable",
+     "magical_self_adjustment"
+    ]
+   }
+  },
+  "flavor_rewritten": "Garments stretch and shift to embrace any form.",
+  "adaptation_note": "The source text states that magic items fit creatures regardless of size or build because they are easily adjustable or magically adjust themselves. No numerical values are present in the source."
+ },
+ {
+  "id": "cantrip-scroll-effect",
+  "name": "(prose)",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "spell_type_filter": [
+    "cantrip"
+   ],
+   "caster_level_scaling": true,
+   "effective_caster_level_source": "player_level"
+  },
+  "flavor_rewritten": "Scribed cantrips function at the user's current power tier.",
+  "adaptation_note": "The source states that if the scribed spell is a cantrip, the version on the scroll works as if the caster were your level."
+ },
+ {
+  "id": "starting-equipment-at-higher-levels",
+  "name": "(table)",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "level_ranges": [
+    {
+     "min_level": 2,
+     "max_level": 4,
+     "gold_base": 0,
+     "gold_dice": null,
+     "gold_multiplier": null,
+     "magic_items": []
+    },
+    {
+     "min_level": 5,
+     "max_level": 10,
+     "gold_base": 500,
+     "gold_dice": "1d10",
+     "gold_multiplier": 25,
+     "magic_items": [
+      {
+       "rarity": "Common",
+       "count": 1
+      }
+     ]
+    },
+    {
+     "min_level": 11,
+     "max_level": 16,
+     "gold_base": 5000,
+     "gold_dice": "1d10",
+     "gold_multiplier": 250,
+     "magic_items": [
+      {
+       "rarity": "Common",
+       "count": 2
+      },
+      {
+       "rarity": "Uncommon",
+       "count": 3
+      },
+      {
+       "rarity": "Rare",
+       "count": 1
+      }
+     ]
+    },
+    {
+     "min_level": 17,
+     "max_level": 20,
+     "gold_base": 20000,
+     "gold_dice": "1d10",
+     "gold_multiplier": 250,
+     "magic_items": [
+      {
+       "rarity": "Common",
+       "count": 2
+      },
+      {
+       "rarity": "Uncommon",
+       "count": 4
+      },
+      {
+       "rarity": "Rare",
+       "count": 3
+      },
+      {
+       "rarity": "Very Rare",
+       "count": 1
+      }
+     ]
+    }
+   ],
+   "base_equipment_note": "normal starting equipment"
+  },
+  "flavor_rewritten": "New recruits begin with standard gear. Veterans receive substantial coinage and rare artifacts commensurate with their experience.",
+  "adaptation_note": "Source provides a table mapping level ranges (2-4, 5-10, 11-16, 17-20) to gold totals calculated as base + (1d10 * multiplier) plus magic items. Multipliers are 25 for levels 5-10 and 250 for levels 11-20. Magic item counts increase per rarity tier: Common (1->2), Uncommon (1->3->4), Rare (1->3), Very Rare (appears at 17+). Base 'normal starting equipment' is assumed constant across all tiers."
+ },
+ {
+  "id": "abilities-core-point-costs",
+  "name": "ABILITIES CORE POINT COSTS",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": [
+   {
+    "ability_score": 8,
+    "point_cost": 0
+   },
+   {
+    "ability_score": 9,
+    "point_cost": 1
+   },
+   {
+    "ability_score": 10,
+    "point_cost": 2
+   },
+   {
+    "ability_score": 11,
+    "point_cost": 3
+   },
+   {
+    "ability_score": 12,
+    "point_cost": 4
+   },
+   {
+    "ability_score": 13,
+    "point_cost": 5
+   },
+   {
+    "ability_score": 14,
+    "point_cost": 7
+   },
+   {
+    "ability_score": 15,
+    "point_cost": 9
+   }
+  ],
+  "flavor_rewritten": "Higher attributes demand greater investment to acquire.",
+  "adaptation_note": "The source title uses 'ABILITY SCORE' but the provided entry name is 'ABILITIES CORE POINT COSTS'. The table maps specific integer scores to their corresponding point costs."
+ },
+ {
+  "id": "ability-scores-and-modifiers",
+  "name": "ABILITY SCORES AND MODIFIERS",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "modifier_table": [
+    {
+     "score_range_start": 3,
+     "score_range_end": null,
+     "modifier": "-4"
+    },
+    {
+     "score_range_start": 4,
+     "score_range_end": 5,
+     "modifier": "-3"
+    },
+    {
+     "score_range_start": 6,
+     "score_range_end": 7,
+     "modifier": "-2"
+    },
+    {
+     "score_range_start": 8,
+     "score_range_end": 9,
+     "modifier": "-1"
+    },
+    {
+     "score_range_start": 10,
+     "score_range_end": 11,
+     "modifier": "+0"
+    },
+    {
+     "score_range_start": 12,
+     "score_range_end": 13,
+     "modifier": "+1"
+    },
+    {
+     "score_range_start": 14,
+     "score_range_end": 15,
+     "modifier": "+2"
+    },
+    {
+     "score_range_start": 16,
+     "score_range_end": 17,
+     "modifier": "+3"
+    },
+    {
+     "score_range_start": 18,
+     "score_range_end": 19,
+     "modifier": "+4"
+    },
+    {
+     "score_range_start": 20,
+     "score_range_end": null,
+     "modifier": "+5"
+    }
+   ]
+  },
+  "flavor_rewritten": "Physical and mental capabilities dictate your combat effectiveness. Higher stats grant greater bonuses to your actions.",
+  "adaptation_note": "The source defines a static lookup table mapping ability score integers to integer modifiers. In the browser roguelite, this is implemented as a direct calculation function rather than an equipable gear item."
+ },
+ {
+  "id": "acid",
+  "name": "Acid",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 25,
+   "action_type": "Attack action replacement",
+   "target_range_feet": 20,
+   "save_dc_formula": "8 + Dex modifier + Proficiency Bonus",
+   "save_ability": "Dexterity",
+   "damage_dice": "2d6",
+   "damage_type": "Acid"
+  },
+  "flavor_rewritten": "A corrosive vial shatters upon impact, dissolving flesh and metal alike.",
+  "adaptation_note": "The DC calculation uses 'Proficiency Bonus' which is a variable stat in the source system; represented as part of the formula string. The mechanic replaces an attack within the Attack action, which maps to a special ability trigger on weapon use."
+ },
+ {
+  "id": "adjustable-magic-garments",
+  "name": "Adjustable Magic Garments",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "wearing_rule": {
+    "fits_any_size_build": true,
+    "mechanism": "easily_adjustable_or_magically_self_adjusts"
+   }
+  },
+  "flavor_rewritten": "These enchanted clothes shift and stretch to embrace any form.",
+  "adaptation_note": "The source text states that magic items meant to be worn fit creatures regardless of size or build because they are easily adjustable or magically adjust themselves. No specific numerical values, dice, or costs are present in this description."
+ },
+ {
+  "id": "adventuring-gear",
+  "name": "Adventuring Gear",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "category": "adventuring_gear",
+   "description_type": "table_reference",
+   "ordering": "alphabetical"
+  },
+  "flavor_rewritten": "Equipment found useful by travelers. Listed alphabetically with cost following each title.",
+  "adaptation_note": "Source uses prose '(prose)' as placeholder name; actual name is Adventuring Gear. No specific mechanical stats provided in source snippet, only structural description of a table."
+ },
+ {
+  "id": "airborne-and-waterborne-vehicles",
+  "name": "Airborne and Waterborne Vehicles",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "vehicle_types": [
+    {
+     "type_name": "Airship",
+     "speed_mph": 8,
+     "crew_count": 10,
+     "passenger_count": 20,
+     "cargo_tons": 1,
+     "ac": 13,
+     "hp": 300,
+     "damage_threshold": null,
+     "cost_gp": 40000
+    },
+    {
+     "type_name": "Galley",
+     "speed_mph": 4,
+     "crew_count": 80,
+     "passenger_count": null,
+     "cargo_tons": 150,
+     "ac": 15,
+     "hp": 500,
+     "damage_threshold": 20,
+     "cost_gp": 30000
+    },
+    {
+     "type_name": "Keelboat",
+     "speed_mph": 1,
+     "crew_count": 1,
+     "passenger_count": 6,
+     "cargo_tons": 0.5,
+     "ac": 15,
+     "hp": 100,
+     "damage_threshold": 10,
+     "cost_gp": 3000
+    },
+    {
+     "type_name": "Longship",
+     "speed_mph": 3,
+     "crew_count": 40,
+     "passenger_count": 150,
+     "cargo_tons": 10,
+     "ac": 15,
+     "hp": 300,
+     "damage_threshold": 15,
+     "cost_gp": 10000
+    },
+    {
+     "type_name": "Rowboat",
+     "speed_mph": 1.5,
+     "crew_count": 1,
+     "passenger_count": 3,
+     "cargo_tons": null,
+     "ac": 11,
+     "hp": 50,
+     "damage_threshold": null,
+     "cost_gp": 50
+    },
+    {
+     "type_name": "Sailing Ship",
+     "speed_mph": 2,
+     "crew_count": 20,
+     "passenger_count": 20,
+     "cargo_tons": 100,
+     "ac": 15,
+     "hp": 300,
+     "damage_threshold": 15,
+     "cost_gp": 10000
+    },
+    {
+     "type_name": "Warship",
+     "speed_mph": 2.5,
+     "crew_count": 60,
+     "passenger_count": 60,
+     "cargo_tons": 200,
+     "ac": 15,
+     "hp": 500,
+     "damage_threshold": 20,
+     "cost_gp": 25000
+    }
+   ]
+  },
+  "flavor_rewritten": "Vessels traverse land and sea with varying capacity for crew and cargo. Hulls range from fragile skiffs to massive warships.",
+  "adaptation_note": "Source provides a table of vehicle statistics including speed in mph, crew/passenger counts, cargo tons, AC, HP, damage threshold, and cost in GP. Values like '1/2' are converted to decimals (0.5) where appropriate for numeric fields; '-' indicates null."
+ },
+ {
+  "id": "alchemists-fire",
+  "name": "Alchemist's Fire",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost": {
+    "amount": "50",
+    "currency": "GP"
+   },
+   "usage": {
+    "action_type": "Attack action",
+    "substitution": true,
+    "target_selection": {
+     "type": "creature_or_object",
+     "visibility_requirement": "visible",
+     "range_feet": "20"
+    }
+   },
+   "effect": {
+    "save": {
+     "ability": "Dexterity",
+     "dc_formula_components": [
+      "8",
+      "Dexterity modifier",
+      "Proficiency Bonus"
+     ]
+    },
+    "failure": {
+     "damage": {
+      "dice": "1d4",
+      "type": "Fire"
+     },
+     "condition": "burning"
+    }
+   }
+  },
+  "flavor_rewritten": "A volatile flask shatters on impact, coating the target in a clinging substance that erupts into consuming flames.",
+  "adaptation_note": "The DC formula includes variable components (Dex mod + Proficiency) which are calculated at runtime based on character stats. The 'burning' condition references external rules glossary; implement as a persistent DoT effect applied on failed save."
+ },
+ {
+  "id": "alchemists-supplies",
+  "name": "Alchemist's Supplies",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 50,
+   "ability_score": "intelligence",
+   "weight_lb": 8,
+   "actions": [
+    {
+     "type": "identify_substance",
+     "difficulty_class": 15
+    },
+    {
+     "type": "start_fire",
+     "difficulty_class": 15
+    }
+   ],
+   "craftable_items": [
+    "acid",
+    "alchemist’s fire",
+    "component pouch",
+    "oil",
+    "paper",
+    "perfume"
+   ]
+  },
+  "flavor_rewritten": "A kit containing reagents and tools for chemical experiments. Allows the user to analyze unknown materials or ignite flames through precise application.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "ammunition",
+  "name": "Ammunition",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "property_required_by": [
+    "Ammunition"
+   ],
+   "type_specification_source": "weapon_description",
+   "storage_item_typical_for_type": true,
+   "storage_purchase_separate": true,
+   "lookup_table_name": "The Ammunition table"
+  },
+  "flavor_rewritten": "Weapons with the special property need specific projectiles to function. Each projectile type has a designated container for safekeeping.",
+  "adaptation_note": "Source mentions 'The Ammunition table' listing types and amounts when bought, plus storage items. This is structural lookup data not present in the snippet's prose but implied by context. Storage must be bought separately."
+ },
+ {
+  "id": "antitoxin",
+  "name": "Antitoxin",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 50,
+   "activation_type": "bonus_action",
+   "effect": {
+    "type": "save_advantage_against_condition",
+    "condition": "Poisoned",
+    "duration_hours": 1
+   }
+  },
+  "flavor_rewritten": "Ingest this vial to bolster your resilience against toxins.",
+  "adaptation_note": "The source specifies Advantage on saving throws to avoid or end the Poisoned condition. In a browser roguelite context, 'Advantage' typically maps to a probability boost or double-check mechanic. The duration is one hour, which may need scaling for session length."
+ },
+ {
+  "id": "arcane-focus",
+  "name": "Arcane Focus",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "type": "focus",
+   "proficiency_required": [
+    "warlock"
+   ],
+   "usage": "channel_magic"
+  },
+  "flavor_rewritten": "Warlocks channel their magical power through this arcane focus.",
+  "adaptation_note": "The source text states 'A Warlock channels magic through an Arcane Focus.' This implies a class-specific utility item. No specific numerical stats, costs, or dice rolls are provided in the source snippet."
+ },
+ {
+  "id": "arcane-focus-varies",
+  "name": "Arcane Focus (Varies)",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "forms": [
+    "bejeweled",
+    "carved"
+   ],
+   "purpose": "channel arcane magic",
+   "valid_users": [
+    "Sorcerer",
+    "Warlock",
+    "Wizard"
+   ]
+  },
+  "flavor_rewritten": "This focus is shaped and adorned to direct the flow of magical energy.",
+  "adaptation_note": "The specific form varies based on the Arcane Focuses table."
+ },
+ {
+  "id": "arcane-focuses-table",
+  "name": "Arcane Focuses Table",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "focus_types": [
+    {
+     "type_name": "Crystal",
+     "weight": "1 lb.",
+     "cost_gp": 10
+    },
+    {
+     "type_name": "Orb",
+     "weight": "3 lb.",
+     "cost_gp": 20
+    },
+    {
+     "type_name": "Rod",
+     "weight": "2 lb.",
+     "cost_gp": 10
+    },
+    {
+     "type_name": "Staff",
+     "secondary_use": "Quarterstaff",
+     "weight": "4 lb.",
+     "cost_gp": 5
+    },
+    {
+     "type_name": "Wand",
+     "weight": "1 lb.",
+     "cost_gp": 10
+    }
+   ]
+  },
+  "flavor_rewritten": "Scholars employ various crystalline and wooden instruments to channel their mystical energies. Each vessel possesses distinct physical properties that influence its handling and acquisition cost within arcane circles.",
+  "adaptation_note": "Source presents a static table of five focus types with specific weight and gold piece costs. No scaling mechanics or dice expressions are present."
+ },
+ {
+  "id": "areas-of-knowledge-table",
+  "name": "Areas of Knowledge Table",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "skill_categories": [
+    {
+     "skill_name": "Arcana",
+     "knowledge_domains": [
+      "Spells",
+      "magic items",
+      "eldritch symbols",
+      "magical traditions",
+      "planes of existence",
+      "certain creatures"
+     ],
+     "associated_creature_types": [
+      "Aberrations",
+      "Constructs",
+      "Elementals",
+      "Fey",
+      "Monstrosities"
+     ]
+    },
+    {
+     "skill_name": "History",
+     "knowledge_domains": [
+      "Historic events and people",
+      "ancient civilizations",
+      "wars",
+      "certain creatures"
+     ],
+     "associated_creature_types": [
+      "Giants",
+      "Humanoids"
+     ]
+    },
+    {
+     "skill_name": "Investigation",
+     "knowledge_domains": [
+      "Traps",
+      "ciphers",
+      "riddles",
+      "gadgetry"
+     ],
+     "associated_creature_types": []
+    },
+    {
+     "skill_name": "Nature",
+     "knowledge_domains": [
+      "Terrain",
+      "flora",
+      "weather",
+      "certain creatures"
+     ],
+     "associated_creature_types": [
+      "Beasts",
+      "Dragons",
+      "Oozes",
+      "Plants"
+     ]
+    },
+    {
+     "skill_name": "Religion",
+     "knowledge_domains": [
+      "Deities",
+      "religious hierarchies and rites",
+      "holy symbols",
+      "cults",
+      "certain creatures"
+     ],
+     "associated_creature_types": [
+      "Celestials",
+      "Fiends",
+      "Undead"
+     ]
+    }
+   ]
+  },
+  "flavor_rewritten": "Master specific disciplines to unlock secrets hidden within the arcane, historical, investigative, natural, and divine realms.",
+  "adaptation_note": "This entry defines skill proficiency categories rather than a gear item. In a browser roguelite, these map to character skills or passive bonuses that grant information checks against specific enemy types or environmental hazards."
+ },
+ {
+  "id": "backpack",
+  "name": "Backpack",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight": "5 lb.",
+   "cost": "2 GP"
+  },
+  "flavor_rewritten": "A sturdy container for transporting personal supplies and equipment on long journeys.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "ball-bearings",
+  "name": "Ball Bearings",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight": "2 lb.",
+   "cost": "1 GP"
+  },
+  "flavor_rewritten": "Small spherical metal spheres used for various utility tasks.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "barrel",
+  "name": "Barrel",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight_lbs": 70,
+   "cost_gp": 2
+  },
+  "flavor_rewritten": "A stout wooden vessel bound by iron hoops, designed to hold liquids or dry goods for transport and storage.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "basket",
+  "name": "Basket",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight_lb": 2,
+   "cost_sp": 4
+  },
+  "flavor_rewritten": "A simple container for carrying small items.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "beast-of-the-land",
+  "name": "Beast of the Land",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "creature_type": "Medium Beast, Neutral",
+   "armor_class": {
+    "base": 13,
+    "modifier_source": "wisdom_modifier"
+   },
+   "hit_points_formula": {
+    "fixed": 5,
+    "variable_per_level": 5,
+    "level_stat": "ranger_level"
+   },
+   "hit_dice": {
+    "count_equal_to": "ranger_level",
+    "die_size": "d8"
+   },
+   "speed": {
+    "walk": 40,
+    "climb": 40
+   },
+   "ability_scores": {
+    "strength": {
+     "score": 14,
+     "modifier": 2
+    },
+    "dexterity": {
+     "score": 14,
+     "modifier": 2
+    },
+    "constitution": {
+     "score": 15,
+     "modifier": 2
+    },
+    "intelligence": {
+     "score": 8,
+     "modifier": -1
+    },
+    "wisdom": {
+     "score": 14,
+     "modifier": 2
+    },
+    "charisma": {
+     "score": 11,
+     "modifier": 0
+    }
+   },
+   "saves": {
+    "str": 2,
+    "dex": 2,
+    "con": 2,
+    "int": -1,
+    "wis": 2,
+    "cha": 0
+   },
+   "proficiency_bonus_applied_to_saves": true,
+   "senses": {
+    "darkvision_range": 60,
+    "passive_perception": 12
+   },
+   "languages": [
+    "understands_ranger_languages"
+   ],
+   "cr": "None",
+   "xp": 0,
+   "traits": [
+    {
+     "name": "Primal Bond",
+     "effect": "add_proficiency_bonus_to_ability_checks_and_saving_throws"
+    }
+   ],
+   "actions": [
+    {
+     "name": "Beast’s Strike",
+     "type": "melee_attack",
+     "reach_ft": 5,
+     "attack_bonus_source": "spell_attack_modifier",
+     "damage": {
+      "dice": "1d8",
+      "flat_bonus": 2,
+      "additional_bonus_source": "wisdom_modifier",
+      "damage_types": [
+       "bludgeoning",
+       "piercing",
+       "slashing"
+      ],
+      "choice_mechanic": "select_one_on_summon"
+     },
+     "conditional_effects": [
+      {
+       "trigger_condition": "moved_at_least_20_feet_straight_toward_target_before_hit",
+       "effects": [
+        {
+         "target": "target_creature",
+         "extra_damage": {
+          "dice": "1d6",
+          "type_same_as_primary": true
+         }
+        },
+        {
+         "target": "target_creature",
+         "condition": "prone",
+         "size_limitation": "large_or_smaller"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "flavor_rewritten": "A primal entity bound to your will strikes with feral force. When it closes the distance swiftly, its blow knocks foes down and deals additional pain.",
+  "adaptation_note": "The source specifies a movement requirement of 'at least 20 feet' for the bonus damage and prone effect. The HP calculation uses 'five times your Ranger level'. The base damage is '1d8 + 2 plus wisdom modifier'. The extra damage on the charge is '1d6'. The beast has Darkvision range of '60 ft.' and Passive Perception of '12'. Hit Dice are 'd8's equal to Ranger level."
+ },
+ {
+  "id": "bedroll",
+  "name": "Bedroll",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight_lb": 7,
+   "cost_gp": 1
+  },
+  "flavor_rewritten": "A compact sleeping roll designed for travelers on the move.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "bell",
+  "name": "Bell",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 1,
+   "weight_display": null
+  },
+  "flavor_rewritten": "A small metal chime used to signal presence or alert others.",
+  "adaptation_note": "Source lists weight as '—', indicating negligible or unspecified mass; represented as null in data. Cost is 1 GP."
+ },
+ {
+  "id": "blanket",
+  "name": "Blanket",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight_lb": 3,
+   "cost_sp": 5
+  },
+  "flavor_rewritten": "A woven covering used for warmth during rest.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "block-and-tackle",
+  "name": "Block and Tackle",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight": "5 lb.",
+   "cost": "1 GP"
+  },
+  "flavor_rewritten": "A simple pulley system designed to lift heavy loads with minimal effort. It provides mechanical advantage for moving cumbersome objects.",
+  "adaptation_note": "Source text contains only basic attributes (weight, cost) with no complex mechanics requiring structural decomposition or adaptation notes beyond literal translation."
+ },
+ {
+  "id": "book",
+  "name": "Book",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight_lb": 5,
+   "cost_gp": 25
+  },
+  "flavor_rewritten": "A bound collection of pages containing recorded knowledge.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "bottle-glass",
+  "name": "Bottle, Glass",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight": "2 lb.",
+   "cost": "2 GP"
+  },
+  "flavor_rewritten": "A clear vessel crafted from silica and heat. It holds liquids without leaking or breaking under normal handling.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "glass-bottle",
+  "name": "Bottle, Glass",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 2,
+   "capacity_pints": "1½"
+  },
+  "flavor_rewritten": "A simple glass vessel designed for holding liquids.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "brewers-supplies",
+  "name": "Brewer's Supplies",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 20,
+   "ability_score": "intelligence",
+   "weight_lb": 9,
+   "utility_checks": [
+    {
+     "action": "detect_poisoned_drink",
+     "dc": 15
+    },
+    {
+     "action": "identify_alcohol",
+     "dc": 10
+    }
+   ],
+   "crafting_options": [
+    {
+     "item_name": "antitoxin"
+    }
+   ]
+  },
+  "flavor_rewritten": "Essential vials and tools for the art of fermentation. Allows the user to discern harmful substances in beverages or determine the nature of fermented drinks.",
+  "adaptation_note": "Source lists 'Utilize' as two distinct options with different DCs (15 for poison detection, 10 for identification). In a browser roguelite, these would likely be separate skill checks or item interactions rather than a single ambiguous action."
+ },
+ {
+  "id": "brewing-potions-of-healing",
+  "name": "Brewing Potions of Healing",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "requires_proficiency": [
+    "Herbalism Kit"
+   ],
+   "cost_gp": 25,
+   "duration_days": 1,
+   "work_hours_per_day": 8
+  },
+  "flavor_rewritten": "Skilled artisans craft restorative draughts using specialized botanical tools and raw ingredients over a dedicated workday.",
+  "adaptation_note": "The source specifies creating a Potion of Healing. The cost is twenty-five GP. The duration is one day consisting of eight hours of work."
+ },
+ {
+  "id": "bucket",
+  "name": "Bucket",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight_lb": 2,
+   "cost_cp": 5
+  },
+  "flavor_rewritten": "A simple container for holding liquids or small items.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "burglars-pack",
+  "name": "Burglar's Pack",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight_lbs": 42,
+   "cost_gp": 16
+  },
+  "flavor_rewritten": "A sturdy pack designed for those who prefer to take what they need without asking permission.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "burning",
+  "name": "Burning",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "type_tag": "[HAZARD]",
+   "damage_type": "Fire",
+   "damage_expression": "1d4",
+   "trigger_timing": "start_of_turn",
+   "extinguish_method": [
+    {
+     "action_cost": "action",
+     "self_condition_applied": "Prone",
+     "required_activity": "rolling_on_ground"
+    }
+   ],
+   "automatic_extinguish_conditions": [
+    "doused",
+    "submerged",
+    "suffocated"
+   ]
+  },
+  "flavor_rewritten": "Flames consume the afflicted entity upon waking. Victory requires smothering the blaze or submitting to the earth.",
+  "adaptation_note": "The source specifies 'at the start of each of its turns' for damage application. Extinguishing can occur via specific actions (Prone + rolling) or environmental states (doused/submerged/suffocated)."
+ },
+ {
+  "id": "burrow-speed",
+  "name": "Burrow Speed",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "movement_type": "burrow",
+   "allowed_materials": [
+    "sand",
+    "earth",
+    "mud",
+    "ice"
+   ],
+   "solid_rock_blocked": true,
+   "exception_requires_trait": true
+  },
+  "flavor_rewritten": "This gear enables passage through loose substrates like dirt and frozen slush. Solid stone remains an impassable barrier unless specific innate abilities override this limitation.",
+  "adaptation_note": "The source text describes a creature trait rather than a gear item. No numerical values (speed amounts) are provided in the source snippet, so only boolean flags for material permissions and exceptions are stored."
+ },
+ {
+  "id": "calligraphers-supplies",
+  "name": "Calligrapher's Supplies",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 10,
+   "ability": "Dexterity",
+   "weight_lb": 5,
+   "utilize_check": {
+    "dc": 15,
+    "action": "Write text with impressive flourishes that guard against forgery"
+   },
+   "craft_components": [
+    "Ink",
+    "Spell Scroll"
+   ]
+  },
+  "flavor_rewritten": "Elegant ink tools used to pen secure documents through artistic script.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "caltrops",
+  "name": "Caltrops",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight": "2 lb.",
+   "cost": "1 GP"
+  },
+  "flavor_rewritten": "Sharp metal spikes scattered on the ground to impede movement.",
+  "adaptation_note": "Source text provides only weight and cost. No mechanical effects (such as damage or saving throws) are listed in the provided source snippet."
+ },
+ {
+  "id": "campaign",
+  "name": "Campaign",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {},
+  "flavor_rewritten": "This gear defines the overarching narrative structure of your journey through the descent.",
+  "adaptation_note": "The source text provides a definition ('A campaign is a series of adventures') but no mechanical stats, dice, ranges, or costs. Therefore 'data' is empty."
+ },
+ {
+  "id": "candle",
+  "name": "Candle",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight": null,
+   "cost_cp": 1
+  },
+  "flavor_rewritten": "A small wax vessel holding a wick, providing light when lit.",
+  "adaptation_note": "Weight is listed as '—' in source, indicating negligible or undefined weight for game mechanics purposes."
+ },
+ {
+  "id": "cantrips-scroll-effect",
+  "name": "Cantrips",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "spell_type": "cantrip",
+   "caster_level_source": "scroll_caster"
+  },
+  "flavor_rewritten": "Inscribed cantrips function at the power level of the individual who activated the scroll.",
+  "adaptation_note": "The source states: 'If the scribed spell is a cantrip, the version on the scroll works as if the caster were your level.' This means the effective caster level for damage/range calculations matches the player's current character level, not the level used to create the scroll."
+ },
+ {
+  "id": "cantrips",
+  "name": "Cantrips",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "type": "scroll",
+   "spell_type": "cantrip",
+   "caster_level_effect": "uses_caster_level"
+  },
+  "flavor_rewritten": "Scribed magic behaves as though the creator wielded their full power when unleashed.",
+  "adaptation_note": "The source states that if the scribed spell is a cantrip, the version on the scroll works as if the caster were your level. This implies the scroll scales to the user's current level rather than the scribe's fixed level."
+ },
+ {
+  "id": "cantrips-scroll-rule",
+  "name": "Cantrips Scroll Rule",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "spell_type": "cantrip",
+   "effect_trigger": "use_scroll",
+   "caster_level_equivalence": true,
+   "reference_caster_level": "player_character_level"
+  },
+  "flavor_rewritten": "Inscribed magic functions at the wielder's current power when cast as a simple ritual.",
+  "adaptation_note": "The source states the scroll works 'as if the caster were your level.' This maps to using the player character's current level for determining cantrip potency."
+ },
+ {
+  "id": "carpenters-tools",
+  "name": "Carpenter's Tools",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 8,
+   "ability_score": "strength",
+   "weight_lb": 6,
+   "utility_checks": [
+    {
+     "action": "seal_or_pry_door_container",
+     "dc": 20
+    }
+   ],
+   "craftable_items": [
+    "club",
+    "greatclub",
+    "quarterstaff",
+    "barrel",
+    "chest",
+    "ladder",
+    "pole",
+    "portable_ram",
+    "torch"
+   ]
+  },
+  "flavor_rewritten": "A set of essential hand tools for shaping wood and securing structures.",
+  "adaptation_note": "Cost is in GP. Weight is in pounds. Utility check DC is twenty. Craft list includes nine specific items."
+ },
+ {
+  "id": "carrying-capacity",
+  "name": "CARRYING CAPACITY",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "base_multiplier_carry_lb": 7.5,
+   "base_multiplier_drag_lift_push_lb": 15,
+   "size_tiers": [
+    {
+     "tier_name": "Tiny",
+     "carry_mult_lb": 7.5,
+     "drag_lift_push_mult_lb": 15
+    },
+    {
+     "tier_name": "Small/Medium",
+     "carry_mult_lb": 15,
+     "drag_lift_push_mult_lb": 30
+    },
+    {
+     "tier_name": "Large",
+     "carry_mult_lb": 30,
+     "drag_lift_push_mult_lb": 60
+    },
+    {
+     "tier_name": "Huge",
+     "carry_mult_lb": 60,
+     "drag_lift_push_mult_lb": 120
+    },
+    {
+     "tier_name": "Gargantuan",
+     "carry_mult_lb": 120,
+     "drag_lift_push_mult_lb": 240
+    }
+   ],
+   "formula_description": "Strength Score multiplied by tier-specific multiplier yields weight limit in pounds for carrying or dragging/lifting/pushing"
+  },
+  "flavor_rewritten": "Heavier burdens demand greater physical strength to bear or maneuver.",
+  "adaptation_note": "Browser game likely uses integer Strength scores; calculations will result in fractional pound limits (e.g., Str 10 x 7.5 = 75 lbs). Drag/Lift/Push shares a single multiplier distinct from Carry."
+ },
+ {
+  "id": "cartographers-tools",
+  "name": "Cartographer's Tools",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 15,
+   "ability_score": "wisdom",
+   "weight_lb": 6,
+   "utilization": {
+    "action_type": "activity",
+    "scope": "small_area",
+    "difficulty_class": 15
+   },
+   "crafting_output": "map"
+  },
+  "flavor_rewritten": "Instruments for charting unknown territories. Used to record geographical features onto parchment.",
+  "adaptation_note": "The source specifies a DC of fifteen for drafting maps. This translates to a skill check requirement in the browser game."
+ },
+ {
+  "id": "case-crossbow-bolt",
+  "name": "Case, Crossbow Bolt",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight": "1 lb.",
+   "cost_gp": 1
+  },
+  "flavor_rewritten": "A single projectile stored within its protective casing, ready for deployment when the moment strikes.",
+  "adaptation_note": "The source provides only weight and cost. No complex mechanics to adapt."
+ },
+ {
+  "id": "case-map-or-scroll",
+  "name": "Case, Map or Scroll",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight_lbs": 1,
+   "cost_gp": 1
+  },
+  "flavor_rewritten": "A protective casing for navigational charts or written records.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "casting-in-armor",
+  "name": "Casting in Armor",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "type": "restriction",
+   "requirement": "armor_training",
+   "effect": "spellcast_while_wearing_armor_allowed_if_requirement_met"
+  },
+  "flavor_rewritten": "Wielding magic requires freedom of movement. Without proper training, heavy protection stifles the delicate gestures needed for spellwork.",
+  "adaptation_note": "The source text states that without armor training, you are 'too hampered' to cast spells. This implies a hard restriction rather than a numerical penalty. In The Endless Descent, this is represented as a boolean requirement check on the 'spellcast_while_wearing_armor' action."
+ },
+ {
+  "id": "chain",
+  "name": "Chain",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight_lb": 10,
+   "cost_gp": 5
+  },
+  "flavor_rewritten": "A heavy length of interlinked metal rings used for binding or pulling.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "character-advancement-table",
+  "name": "Character Advancement Table",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "title_header": "Level / Experience Points / Proficiency Bonus",
+   "levels": [
+    {
+     "level": 1,
+     "experience_points": 0,
+     "proficiency_bonus": "+2"
+    },
+    {
+     "level": 2,
+     "experience_points": 300,
+     "proficiency_bonus": "+2"
+    },
+    {
+     "level": 3,
+     "experience_points": 900,
+     "proficiency_bonus": "+2"
+    },
+    {
+     "level": 4,
+     "experience_points": 2700,
+     "proficiency_bonus": "+2"
+    },
+    {
+     "level": 5,
+     "experience_points": 6500,
+     "proficiency_bonus": "+3"
+    },
+    {
+     "level": 6,
+     "experience_points": 14000,
+     "proficiency_bonus": "+3"
+    },
+    {
+     "level": 7,
+     "experience_points": 23000,
+     "proficiency_bonus": "+3"
+    },
+    {
+     "level": 8,
+     "experience_points": 34000,
+     "proficiency_bonus": "+3"
+    },
+    {
+     "level": 9,
+     "experience_points": 48000,
+     "proficiency_bonus": "+4"
+    },
+    {
+     "level": 10,
+     "experience_points": 64000,
+     "proficiency_bonus": "+4"
+    },
+    {
+     "level": 11,
+     "experience_points": 85000,
+     "proficiency_bonus": "+4"
+    },
+    {
+     "level": 12,
+     "experience_points": 100000,
+     "proficiency_bonus": "+4"
+    },
+    {
+     "level": 13,
+     "experience_points": 120000,
+     "proficiency_bonus": "+5"
+    },
+    {
+     "level": 14,
+     "experience_points": 140000,
+     "proficiency_bonus": "+5"
+    },
+    {
+     "level": 15,
+     "experience_points": 165000,
+     "proficiency_bonus": "+5"
+    },
+    {
+     "level": 16,
+     "experience_points": 195000,
+     "proficiency_bonus": "+5"
+    },
+    {
+     "level": 17,
+     "experience_points": 225000,
+     "proficiency_bonus": "+6"
+    },
+    {
+     "level": 18,
+     "experience_points": 265000,
+     "proficiency_bonus": "+6"
+    },
+    {
+     "level": 19,
+     "experience_points": 305000,
+     "proficiency_bonus": "+6"
+    },
+    {
+     "level": 20,
+     "experience_points": 355000,
+     "proficiency_bonus": "+6"
+    }
+   ]
+  },
+  "flavor_rewritten": "Progress through the descent by accumulating experience. Your proficiency bonus increases as you reach higher tiers of capability.",
+  "adaptation_note": "The source provides a static table mapping Level to Experience Points and Proficiency Bonus. In The Endless Descent, this structure defines the progression curve for character growth."
+ },
+ {
+  "id": "character-sheet",
+  "name": "CHARACTER SHEET",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "description_type": "reference_tool",
+   "usage": "track_character_information"
+  },
+  "flavor_rewritten": "Record your vital statistics and abilities on this durable form. Consult the foundational rules for detailed tracking procedures.",
+  "adaptation_note": "Source text references 'chapter 2' for further details; no specific numeric mechanics, dice, or costs are defined in this entry."
+ },
+ {
+  "id": "chest",
+  "name": "Chest",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 5,
+   "capacity_cubic_feet": 12
+  },
+  "flavor_rewritten": "This container provides secure storage for personal belongings.",
+  "adaptation_note": "The source specifies a capacity of twelve cubic feet. In the browser roguelite, this will likely be represented as an inventory slot count or weight limit rather than literal volume."
+ },
+ {
+  "id": "climbers-kit",
+  "name": "Climber's Kit",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 25,
+   "components": [
+    "boot tips",
+    "gloves",
+    "pitons",
+    "harness"
+   ],
+   "mechanic": {
+    "action_type": "Utilize",
+    "effect": {
+     "fall_limit_feet": 25,
+     "movement_limit_feet": 25,
+     "undo_action_type": "Bonus Action"
+    }
+   }
+  },
+  "flavor_rewritten": "This kit anchors the user securely to a surface. Movement away from this point requires releasing the hold.",
+  "adaptation_note": "The source specifies '25 feet' twice for both fall limit and movement range. The undo mechanism is explicitly defined as a Bonus Action."
+ },
+ {
+  "id": "clothes-fine",
+  "name": "Clothes, Fine",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 15,
+   "material_quality": "expensive fabrics",
+   "crafting_details": "expertly crafted details",
+   "access_restrictions": true
+  },
+  "flavor_rewritten": "Luxurious garments woven from premium textiles and finished with masterful embellishments. Certain venues deny entry to those lacking such attire.",
+  "adaptation_note": "The source specifies a cost of 15 GP. Access restrictions imply that specific events or locations require this gear for admission; in the browser roguelite, this likely gates access to certain high-tier areas or triggers unique social encounters where wearing these clothes is mandatory."
+ },
+ {
+  "id": "clothes-travelers",
+  "name": "Clothes, Traveler's",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 2
+  },
+  "flavor_rewritten": "Durable attire crafted for navigating diverse terrains.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "cobblers-tools",
+  "name": "Cobbler's Tools",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 5,
+   "weight_lb": 5,
+   "ability_score": "Dexterity",
+   "utility_effect": [
+    {
+     "target_condition": "modify_footwear",
+     "effect_type": "advantage_on_check",
+     "check_ability": "Dexterity",
+     "check_skill": "Acrobatics",
+     "save_dc": 10,
+     "trigger_timing": "next_check"
+    }
+   ],
+   "craft_recipe": "Climber’s Kit"
+  },
+  "flavor_rewritten": "Specialized leatherworking implements allow for precise adjustments to footwear.",
+  "adaptation_note": "The source specifies 'Advantage' which is a binary state in d20 systems but requires specific handling in browser roguelites; represented here as an enum flag rather than a numeric modifier."
+ },
+ {
+  "id": "coin-values",
+  "name": "Coin Values",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "conversion_table": [
+    {
+     "currency_name": "Copper Piece (CP)",
+     "value_in_gp": "1/100"
+    },
+    {
+     "currency_name": "Silver Piece (SP)",
+     "value_in_gp": "1/10"
+    },
+    {
+     "currency_name": "Electrum Piece (EP)",
+     "value_in_gp": "1/2"
+    },
+    {
+     "currency_name": "Gold Piece (GP)",
+     "value_in_gp": "1"
+    },
+    {
+     "currency_name": "Platinum Piece (PP)",
+     "value_in_gp": "10"
+    }
+   ]
+  },
+  "flavor_rewritten": "Metal discs hold varying worth within the trade networks of the realm.",
+  "adaptation_note": "Source uses fractions and integers relative to Gold Piece standard."
+ },
+ {
+  "id": "coins",
+  "name": "COINS",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "quantity": 2,
+   "types": [
+    "CP",
+    "SP",
+    "EP",
+    "GP",
+    "PP"
+   ]
+  },
+  "flavor_rewritten": "A stack of currency pieces representing various denominations.",
+  "adaptation_note": "Source specifies a quantity of 'two' coins."
+ },
+ {
+  "id": "component-pouch",
+  "name": "Component Pouch",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 25,
+   "properties": [
+    "watertight"
+   ],
+   "function": "holds_free_material_components"
+  },
+  "flavor_rewritten": "This sealed bag organizes spellcasting materials into dedicated slots.",
+  "adaptation_note": "The source specifies 'all the free Material components'. In browser roguelites, material components are often abstracted as a resource pool or toggle. This item ensures access to those required without additional cost."
+ },
+ {
+  "id": "construct-spirit",
+  "name": "Construct Spirit",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "type": "Medium Construct",
+   "alignment": "Neutral",
+   "armor_class": {
+    "base": 13,
+    "scaling": true,
+    "formula": "13 + spell_level"
+   },
+   "hit_points": {
+    "base": 40,
+    "per_spell_level_above_4": 15,
+    "minimum_spell_level_for_hp_increase": 4
+   },
+   "speed_ft": 30,
+   "saving_throws": [
+    {
+     "ability": "STR",
+     "score": 18,
+     "modifier_base": 4,
+     "total_modifier_formula": "4 + proficiency_bonus"
+    },
+    {
+     "ability": "DEX",
+     "score": 10,
+     "modifier_base": 0,
+     "total_modifier_formula": "0"
+    },
+    {
+     "ability": "CON",
+     "score": 18,
+     "modifier_base": 4,
+     "total_modifier_formula": "4 + proficiency_bonus"
+    }
+   ],
+   "abilities": [
+    {
+     "ability": "INT",
+     "score": 14,
+     "modifier_base": 2,
+     "total_modifier_formula": "2 + proficiency_bonus"
+    },
+    {
+     "ability": "WIS",
+     "score": 11,
+     "modifier_base": 0,
+     "total_modifier_formula": "0"
+    },
+    {
+     "ability": "CHA",
+     "score": 5,
+     "modifier_base": -3,
+     "total_modifier_formula": "-3"
+    }
+   ],
+   "resistances": [
+    "Poison"
+   ],
+   "immunities": [
+    "Charmed",
+    "Exhaustion",
+    "Frightened",
+    "Paralyzed",
+    "Poisoned"
+   ],
+   "senses": {
+    "darkvision_ft": 60,
+    "passive_perception": 10
+   },
+   "languages": "Understands the languages you know",
+   "challenge_rating": null,
+   "xp": 0,
+   "proficiency_bonus_usage": "PB equals your Proficiency Bonus",
+   "traits": [
+    {
+     "name": "Heated Body",
+     "material_constraint": "Metal Only",
+     "trigger_type": "melee_attack_hit_or_grapple_start_turn",
+     "damage": "1d10",
+     "damage_type": "Fire"
+    },
+    {
+     "name": "Stony Lethargy",
+     "material_constraint": "Stone Only",
+     "range_ft": 10,
+     "condition": "can_see_target",
+     "save_type": "Wisdom Saving Throw",
+     "dc_formula": "spell_save_dc",
+     "effect_duration": "Until the start of its next turn",
+     "effect_failures": [
+      "cant_make_opportunity_attacks",
+      "speed_halved"
+     ]
+    }
+   ],
+   "actions": [
+    {
+     "name": "Multiattack",
+     "attacks_count_formula": "floor(spell_level / 2)",
+     "attack_name": "Slam"
+    },
+    {
+     "name": "Slam",
+     "type": "Melee Attack Roll",
+     "bonus_formula": "spell_attack_modifier",
+     "reach_ft": 5,
+     "damage_dice": "1d8",
+     "damage_fixed": 4,
+     "damage_scaling": "+ spell_level",
+     "damage_type": "Bludgeoning"
+    }
+   ],
+   "reactions": [
+    {
+     "name": "Berserk Lashing",
+     "material_constraint": "Clay Only",
+     "trigger": "takes_damage_from_creature",
+     "response_options": [
+      {
+       "priority": 1,
+       "action": "make_Slam_attack_against_triggering_creature"
+      },
+      {
+       "priority": 2,
+       "condition": "if_attack_not_possible",
+       "movement_speed_fraction": "half",
+       "direction": "toward_triggering_creature",
+       "opportunity_attack_provoke": false
+      }
+     ]
+    }
+   ]
+  },
+  "flavor_rewritten": "An animated construct shaped from elemental matter reacts violently to threats. It radiates heat or emits paralyzing energy depending on its composition.",
+  "adaptation_note": "Source uses 'four' in HP formula context but digit '4' in AC/Ability scores. Source uses 'forty' in text? No, source says '40'. Source uses 'fifteen' as word. Source uses 'thirty' as word. Source uses 'sixty' as word. Source uses 'five' as word. Source uses 'ten' as word. Dice expressions kept exact: '1d10', '1d8'. Scaling factors carried over exactly. Material constraints (Metal, Stone, Clay) mapped to specific trait/reaction entries. Save DCs and Attack Bonuses rely on player's external stats (Proficiency Bonus, Spell Save DC, Spell Attack Modifier), represented as formulas referencing those external values rather than static numbers since this is a summoned entity/gear item."
+ },
+ {
+  "id": "cooks-utensils",
+  "name": "Cook's Utensils",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 1,
+   "ability_check": "wisdom",
+   "weight_lb": 8,
+   "utilize_checks": [
+    {
+     "action": "improve_flavor",
+     "dc": 10
+    },
+    {
+     "action": "detect_spoiled_or_poisoned_food",
+     "dc": 15
+    }
+   ],
+   "craft_recipe": "rations"
+  },
+  "flavor_rewritten": "Essential kitchen tools that enhance culinary experiences and ensure meal safety through keen perception.",
+  "adaptation_note": "Source uses DC checks for utilization. Browser adaptation maps these to skill check targets against Wisdom."
+ },
+ {
+  "id": "costume",
+  "name": "Costume",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 5,
+   "effect_type": "advantage_on_check",
+   "check_context": "impersonate",
+   "target": "person_or_type_represented"
+  },
+  "flavor_rewritten": "Donning this attire grants you the upper hand when pretending to be someone else.",
+  "adaptation_note": "Advantage is a core mechanic in The Endless Descent represented by rolling two dice and taking the higher result. No numerical values need conversion beyond the gold piece cost."
+ },
+ {
+  "id": "cover",
+  "name": "Cover",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "levels": [
+    {
+     "threshold_name": "half",
+     "ac_bonus": "+2",
+     "dex_save_bonus": "+2",
+     "offered_by": [
+      "creature",
+      "object"
+     ]
+    },
+    {
+     "threshold_name": "three-quarters",
+     "ac_bonus": "+5",
+     "dex_save_bonus": "+5",
+     "offered_by": [
+      "object"
+     ]
+    },
+    {
+     "threshold_name": "total",
+     "targeting_immunity": true,
+     "offered_by": [
+      "object"
+     ]
+    }
+   ]
+  },
+  "flavor_rewritten": "Shields and walls stand between you and harm. Deeper concealment grants greater safety.",
+  "adaptation_note": "Source specifies exact degree thresholds: Half (+2), Three-Quarters (+5), Total (immunity). Browser game may implement these as passive bonuses based on enemy position or player-chosen cover state."
+ },
+ {
+  "id": "crafting-equipment",
+  "name": "Crafting Equipment",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "category": "nonmagical_items_and_consumables",
+   "allowed_types": [
+    "nonmagical_items",
+    "potions_of_healing",
+    "spell_scrolls"
+   ]
+  },
+  "flavor_rewritten": "Artisans forge mundane wares and alchemical remedies through practiced technique.",
+  "adaptation_note": "Source specifies three distinct crafting categories: nonmagical items, Potions of Healing, and Spell Scrolls."
+ },
+ {
+  "id": "crafting-time-calculation",
+  "name": "Crafting Time Calculation",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "base_hours_per_day": 8,
+   "gp_to_days_divisor": 10,
+   "fraction_rounding": "up",
+   "consecutive_days_required": false,
+   "assistants_allowed": true,
+   "default_assistant_limit": 1,
+   "dm_override_possible": true,
+   "example_item": "Heavy Crossbow",
+   "example_cost_gp": 50,
+   "example_days_needed": 5
+  },
+  "flavor_rewritten": "Gear takes time to forge. More hands speed the process.",
+  "adaptation_note": "The source specifies dividing purchase cost in GP by 10 to determine days of work (8 hours per day), rounding fractions up. Example: Heavy Crossbow costs 50 GP, requiring 5 days. Days need not be consecutive. Characters can combine efforts; normally only one other character assists, but DM may allow more."
+ },
+ {
+  "id": "crafting-time-rules",
+  "name": "Crafting Time Rules",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "hours_per_day": 8,
+   "gp_divisor": 10,
+   "rounding_rule": "up_to_next_day",
+   "example_item": "Heavy Crossbow",
+   "example_cost_gp": 50,
+   "example_days_needed": 5,
+   "consecutive_days_required": false,
+   "standard_assistants_limit": 1,
+   "dm_override_possible": true
+  },
+  "flavor_rewritten": "Work through the days required to forge an item. Efforts may be combined by multiple hands.",
+  "adaptation_note": "Source states: 'divide its purchase cost in GP by 10', 'you need 5 days to make a Heavy Crossbow, which sells for 50 GP'. These specific digits (5 and 50) must appear in data."
+ },
+ {
+  "id": "creature-size-and-space-table",
+  "name": "Creature Size and Space Table",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "entries": [
+    {
+     "size": "Tiny",
+     "space_feet": "2½ by 2½ feet",
+     "space_squares": "4 per square"
+    },
+    {
+     "size": "Small",
+     "space_feet": "5 by 5 feet",
+     "space_squares": "1 square"
+    },
+    {
+     "size": "Medium",
+     "space_feet": "5 by 5 feet",
+     "space_squares": "1 square"
+    },
+    {
+     "size": "Large",
+     "space_feet": "10 by 10 feet",
+     "space_squares": "4 squares (2 by 2)"
+    },
+    {
+     "size": "Huge",
+     "space_feet": "15 by 15 feet",
+     "space_squares": "9 squares (3 by 3)"
+    },
+    {
+     "size": "Gargantuan",
+     "space_feet": "20 by 20 feet",
+     "space_squares": "16 squares (4 by 4)"
+    }
+   ]
+  },
+  "flavor_rewritten": "The dimensions of combatants dictate their footprint on the grid, determining how many tiles they occupy during movement and engagement.",
+  "adaptation_note": "This table defines spatial constraints for entities based on size category. Values represent physical footprint in feet and corresponding tile coverage."
+ },
+ {
+  "id": "crew",
+  "name": "Crew",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "requirement_type": "skilled_hirelings",
+   "reference_section": "Services",
+   "dependency": "ship_type"
+  },
+  "flavor_rewritten": "Vessels exceeding standard small craft dimensions demand specialized personnel to operate effectively.",
+  "adaptation_note": "The source specifies that minimum crew counts depend on ship type via a table. The exact numerical thresholds from that table are omitted here as they were not included in the provided source snippet, but the dependency structure is preserved."
+ },
+ {
+  "id": "crew-hirelings",
+  "name": "Crew Hirelings",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "description": "Skilled hirelings required to operate ships larger than Keelboat or Rowboat.",
+   "requirement_trigger": "Ship size exceeds Keelboat or Rowboat",
+   "reference_table": "minimum_crew_by_ship_type"
+  },
+  "flavor_rewritten": "Larger vessels demand specialized personnel to function. The necessary staff count varies strictly by vessel classification.",
+  "adaptation_note": "Source text references a table for minimum skilled hirelings based on ship type but does not list the specific numbers here. No explicit dice, costs, or save values are present in this excerpt."
+ },
+ {
+  "id": "crowbar",
+  "name": "Crowbar",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 2,
+   "effects": [
+    {
+     "type": "advantage_on_check",
+     "check_type": "strength",
+     "condition": "leverage_applicable"
+    }
+   ]
+  },
+  "flavor_rewritten": "Leverage this iron tool to gain an edge when forcing or prying heavy objects.",
+  "adaptation_note": "The source specifies 'Advantage' which maps directly to browser roguelite advantage mechanics. The condition 'where the Crowbar's leverage can be applied' is represented as a boolean flag in data; if the game engine does not support conditional check modifiers, note that this requires a custom tag or metadata field on strength checks."
+ },
+ {
+  "id": "damage-threshold",
+  "name": "Damage Threshold",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {},
+  "flavor_rewritten": "Vehicles may possess a damage threshold, a specific value determining their resilience against harm.",
+  "adaptation_note": "The source text references 'the rules glossary' for the definition. No numerical values are present in this entry."
+ },
+ {
+  "id": "damage-types",
+  "name": "DAMAGE TYPES",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "type_list": [
+    {
+     "name": "Acid",
+     "description": "Corrosive liquids, digestive enzymes"
+    },
+    {
+     "name": "Bludgeoning",
+     "description": "Blunt objects, constriction, falling"
+    },
+    {
+     "name": "Cold",
+     "description": "Freezing water, icy blasts"
+    },
+    {
+     "name": "Fire",
+     "description": "Flames, unbearable heat"
+    },
+    {
+     "name": "Force",
+     "description": "Pure magical energy"
+    },
+    {
+     "name": "Lightning",
+     "description": "Electricity"
+    },
+    {
+     "name": "Necrotic",
+     "description": "Life-draining energy"
+    },
+    {
+     "name": "Piercing",
+     "description": "Fangs, puncturing objects"
+    },
+    {
+     "name": "Poison",
+     "description": "Toxic gas, venom"
+    },
+    {
+     "name": "Psychic",
+     "description": "Mind-rending energy"
+    },
+    {
+     "name": "Radiant",
+     "description": "Holy energy, searing radiation"
+    },
+    {
+     "name": "Slashing",
+     "description": "Claws, cutting objects"
+    },
+    {
+     "name": "Thunder",
+     "description": "Concussive sound"
+    }
+   ]
+  },
+  "flavor_rewritten": "Every strike carries a distinct nature, from corrosive fluids to pure force. These categories define how harm interacts with resistance and immunity.",
+  "adaptation_note": "Source states damage types have no rules of their own but are relied upon by other rules such as Resistance. This entry defines the enum values used by those mechanics."
+ },
+ {
+  "id": "darkness",
+  "name": "DARKNESS",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "visual_effect": "heavily_obscured"
+  },
+  "flavor_rewritten": "Shadows swallow the surroundings, blocking all sight and revealing nothing beyond immediate proximity.",
+  "adaptation_note": "The source text defines this state as 'Heavily Obscured' and references chapter 1 for rules. In The Endless Descent, this is adapted as a visual effect flag that applies the heavily obscured condition to entities within the area."
+ },
+ {
+  "id": "diplomats-pack",
+  "name": "Diplomat's Pack",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 39,
+   "contents": [
+    "Chest",
+    "Fine Clothes",
+    "Ink",
+    "5 Ink Pens",
+    "Lamp",
+    "2 Map or Scroll Cases",
+    "4 flasks of Oil",
+    "5 sheets of Paper",
+    "5 sheets of Parchment",
+    "Perfume",
+    "Tinderbox"
+   ]
+  },
+  "flavor_rewritten": "A curated collection of professional attire and stationery supplies.",
+  "adaptation_note": "The source lists specific quantities for multiple items (e.g., '5 Ink Pens', '2 Map or Scroll Cases'). In the browser roguelite, these may be aggregated into a single 'Starter Kit' inventory slot or broken out individually depending on inventory granularity. All numeric counts are preserved exactly as written."
+ },
+ {
+  "id": "disguise-kit",
+  "name": "Disguise Kit",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 25,
+   "ability_score": "Charisma",
+   "weight_lb": 3,
+   "actions": [
+    {
+     "type": "utilize",
+     "description": "Apply makeup",
+     "difficulty_class": 10
+    },
+    {
+     "type": "craft",
+     "item_category": "Costume"
+    }
+   ]
+  },
+  "flavor_rewritten": "A collection of cosmetics and fabrics allows for subtle alterations to one's appearance or the creation of elaborate attire.",
+  "adaptation_note": "The source specifies discrete actions 'Apply makeup' and 'Craft Costume'. In a browser roguelite, these are modeled as distinct action options within the gear's utility profile."
+ },
+ {
+  "id": "draconic-spirit",
+  "name": "Draconic Spirit",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "type": "summoned_entity",
+   "size": "Large",
+   "alignment": "Neutral",
+   "base_ac": 14,
+   "ac_scaling": [
+    {
+     "level_threshold": 5,
+     "value_add": "+ the spell's level"
+    }
+   ],
+   "base_hp": 50,
+   "hp_scaling": [
+    {
+     "level_threshold": 5,
+     "per_level_above": 10
+    }
+   ],
+   "speeds": [
+    {
+     "mode": "walk",
+     "distance": "30 ft."
+    },
+    {
+     "mode": "fly",
+     "distance": "60 ft."
+    },
+    {
+     "mode": "swim",
+     "distance": "30 ft."
+    }
+   ],
+   "abilities": [
+    {
+     "name": "STR",
+     "score": 19,
+     "modifier": 4,
+     "save_bonus": 4
+    },
+    {
+     "name": "DEX",
+     "score": 14,
+     "modifier": 2,
+     "save_bonus": 2
+    },
+    {
+     "name": "CON",
+     "score": 17,
+     "modifier": 3,
+     "save_bonus": 3
+    },
+    {
+     "name": "INT",
+     "score": 10,
+     "modifier": 0,
+     "save_bonus": 0
+    },
+    {
+     "name": "WIS",
+     "score": 14,
+     "modifier": 2,
+     "save_bonus": 2
+    },
+    {
+     "name": "CHA",
+     "score": 14,
+     "modifier": 2,
+     "save_bonus": 2
+    }
+   ],
+   "resistances": [
+    "Acid",
+    "Cold",
+    "Fire",
+    "Lightning",
+    "Poison"
+   ],
+   "immunities": [
+    "Charmed",
+    "Frightened",
+    "Poisoned"
+   ],
+   "senses": [
+    {
+     "type": "Blindsight",
+     "range": "30 ft."
+    },
+    {
+     "type": "Darkvision",
+     "range": "60 ft."
+    },
+    {
+     "type": "Passive Perception",
+     "value": 12
+    }
+   ],
+   "languages": [
+    "Draconic",
+    "understands the languages you know"
+   ],
+   "cr": "None",
+   "xp": 0,
+   "proficiency_basis": "your Proficiency Bonus",
+   "traits": [
+    {
+     "name": "Shared Resistances",
+     "effect": "When you summon the spirit, choose one of its Resistances. You have Resistance to the chosen damage type until the spell ends.",
+     "mechanics": {
+      "trigger": "on_summon",
+      "choice_type": "damage_resistance_from_list",
+      "duration": "until_spell_ends",
+      "beneficiary": "caster"
+     }
+    }
+   ],
+   "actions": [
+    {
+     "name": "Multiattack",
+     "description": "The spirit makes a number of Rend attacks equal to half the spell's level (round down), and it uses Breath Weapon.",
+     "attacks": [
+      {
+       "action_name": "Rend",
+       "count_formula": "half(spell_level_round_down)",
+       "type": "Melee Attack",
+       "bonus_source": "spell attack modifier",
+       "reach": "10 feet",
+       "damage_dice": "1d6",
+       "damage_flat": 4,
+       "damage_scaling": "+ the spell's level",
+       "damage_type": "Piercing"
+      },
+      {
+       "action_name": "Breath Weapon",
+       "save_dc_source": "spell save DC",
+       "area": {
+        "shape": "Cone",
+        "range": "30-foot"
+       },
+       "saving_throw_ability": "Dexterity",
+       "failure_damage_dice": "2d6",
+       "success_damage_modifier": "Half damage",
+       "damage_type_choice": "any type this spirit has Resistance to",
+       "damage_type_selection_timing": "when_you_cast_the_spell"
+      }
+     ]
+    }
+   ]
+  },
+  "flavor_rewritten": "A colossal draconic entity manifests from arcane energy, embodying raw elemental fury and ancient power.",
+  "adaptation_note": "Spell level scaling applies to AC (+ per level above 5), HP (+ 10 per level above 5), Rend damage (+ the spell's level), and Multiattack count (half spell level round down). Breath Weapon damage scales via dice selection at cast time but base dice remain fixed at 2d6 for failure state. Save bonuses match ability modifiers exactly as listed. CR is None with XP 0; proficiency bonus referenced for stat block context but not used in calculations directly except where specified as 'your' values."
+ },
+ {
+  "id": "druidic-focus",
+  "name": "Druidic Focus",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "varies": true,
+   "forms_table_name": "Druidic Focuses",
+   "crafting_methods": [
+    "carved",
+    "tied with ribbon",
+    "painted"
+   ],
+   "function": "channel primal magic",
+   "wielders": [
+    "Druid",
+    "Ranger"
+   ],
+   "role": "Spellcasting Focus"
+  },
+  "flavor_rewritten": "Shaped from natural materials and adorned with ribbons or paint, this artifact channels raw arcane energy.",
+  "adaptation_note": "The specific forms are determined by consulting the Druidic Focuses table. This item serves as a required component for casting spells when used by a Druid or Ranger."
+ },
+ {
+  "id": "druidic-focuses-table",
+  "name": "Druidic Focuses Table",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "type": "table",
+   "headers": [
+    "focus_name",
+    "weight_lb",
+    "cost_gp"
+   ],
+   "rows": [
+    {
+     "focus_name": "Sprig of mistletoe",
+     "weight_lb": null,
+     "cost_gp": 1
+    },
+    {
+     "focus_name": "Wooden staff (also a Quarterstaff)",
+     "weight_lb": 4,
+     "cost_gp": 5
+    },
+    {
+     "focus_name": "Yew wand",
+     "weight_lb": 1,
+     "cost_gp": 10
+    }
+   ]
+  },
+  "flavor_rewritten": "Natural implements serve as conduits for arcane power. Each item varies in mass and market price.",
+  "adaptation_note": "Source uses '—' for weight of the sprig of mistletoe; represented as null in data."
+ },
+ {
+  "id": "dungeoneers-pack",
+  "name": "Dungeoneer's Pack",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 12,
+   "contents": [
+    "Backpack",
+    "Caltrops",
+    "Crowbar",
+    "Oil flask x2",
+    "Rations x10 days",
+    "Rope",
+    "Tinderbox",
+    "Torches x10",
+    "Waterskin"
+   ]
+  },
+  "flavor_rewritten": "A sturdy kit packed with essential tools and supplies for long journeys through the wild.",
+  "adaptation_note": "The source lists specific quantities: 2 flasks of Oil, 10 days of Rations, and 10 Torches. These counts are preserved in the contents array."
+ },
+ {
+  "id": "elemental-spirit",
+  "name": "Elemental Spirit",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "type": "Medium Elemental",
+   "alignment": "Neutral",
+   "ac_base": 11,
+   "ac_formula": "11 + spell_level",
+   "hp_base": 50,
+   "hp_scaling": [
+    {
+     "threshold_above_spell_level": 4,
+     "increase_per_level": "10"
+    }
+   ],
+   "speeds": {
+    "walk": "40 ft.",
+    "burrow": {
+     "distance": "40 ft.",
+     "condition": "Earth only"
+    },
+    "fly": {
+     "distance": "40 ft.",
+     "hover": true,
+     "condition": "Air only"
+    },
+    "swim": {
+     "distance": "40 ft.",
+     "condition": "Water only"
+    }
+   },
+   "ability_scores": {
+    "str": {
+     "value": 18,
+     "mod": "+4"
+    },
+    "dex": {
+     "value": 15,
+     "mod": "+2"
+    },
+    "con": {
+     "value": 17,
+     "mod": "+3"
+    },
+    "int": {
+     "value": 4,
+     "mod": "-3"
+    },
+    "wis": {
+     "value": 10,
+     "mod": "+0"
+    },
+    "cha": {
+     "value": 16,
+     "mod": "+3"
+    }
+   },
+   "save_modifiers": {
+    "str": "+4",
+    "dex": "+2",
+    "con": "+3",
+    "int": "-3",
+    "wis": "+0",
+    "cha": "+3"
+   },
+   "resistances": [
+    {
+     "damage_type": "Acid",
+     "condition": "Water only"
+    },
+    {
+     "damage_types": [
+      "Lightning",
+      "Thunder"
+     ],
+     "condition": "Air only"
+    },
+    {
+     "damage_types": [
+      "Piercing",
+      "Slashing"
+     ],
+     "condition": "Earth only"
+    }
+   ],
+   "immunities": [
+    {
+     "damage_type": "Fire",
+     "condition": "Fire only"
+    },
+    "Poison",
+    "Exhaustion",
+    "Paralyzed",
+    "Petrified",
+    "Poisoned"
+   ],
+   "senses": {
+    "darkvision_range": "60 ft.",
+    "passive_perception": 10
+   },
+   "languages": [
+    "Primordial",
+    "understands the languages you know"
+   ],
+   "cr": "None",
+   "xp": 0,
+   "proficiency_bonus_source": "your Proficiency Bonus",
+   "traits": [
+    {
+     "name": "Amorphous Form",
+     "conditions": [
+      "Air",
+      "Fire",
+      "Water Only"
+     ],
+     "effect": "Can move through a space as narrow as 1 inch wide without it counting as Difficult Terrain."
+    }
+   ],
+   "actions": [
+    {
+     "name": "Multiattack",
+     "trigger": "On turn start or action phase",
+     "description": "Makes a number of Slam attacks equal to half this spell's level (round down)."
+    },
+    {
+     "name": "Slam",
+     "type": "Melee Attack",
+     "reach": "5 ft.",
+     "to_hit_bonus_source": "spell attack modifier",
+     "hit_effect": {
+      "damage_dice": "1d10",
+      "flat_bonus": 4,
+      "variable_bonus_source": "spell level",
+      "damage_types_by_element": {
+       "Earth": "Bludgeoning",
+       "Water": "Cold",
+       "Air": "Lightning",
+       "Fire": "Fire"
+      }
+     }
+    }
+   ]
+  },
+  "flavor_rewritten": "An amorphous elemental entity bound by arcane will. It shifts form to slip through tight gaps and strikes with force drawn from its native element.",
+  "adaptation_note": "The creature scales dynamically based on 'spell level' which acts as an upgrade tier in the roguelite context. Resistances and immunities are conditional on the specific elemental type assigned at spawn or via upgrade. Damage output includes a variable component tied directly to that same spell level value. AC and HP also scale linearly with this hidden stat. The spirit uses multiple attack rolls per turn determined by halving this level integer."
+ },
+ {
+  "id": "entertainers-pack",
+  "name": "Entertainer's Pack",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 40,
+   "contents": [
+    "Backpack",
+    "Bedroll",
+    "Bell",
+    "Bullseye Lantern",
+    {
+     "item": "Costume",
+     "quantity": "three"
+    },
+    "Mirror",
+    {
+     "item": "Oil Flask",
+     "quantity": "eight"
+    },
+    {
+     "item": "Rations",
+     "duration_days": "nine"
+    },
+    "Tinderbox",
+    "Waterskin"
+   ]
+  },
+  "flavor_rewritten": "A collection of theatrical and survival essentials worn by performers on the road.",
+  "adaptation_note": "Source lists specific quantities (3 Costumes, 8 flasks of Oil) and duration (9 days Rations). These are preserved as exact counts/durations in data. No other mechanics present."
+ },
+ {
+  "id": "equipment-magic-item-attunement",
+  "name": "EQUIPMENT",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "magic_item_attunement_slots": "3"
+  },
+  "flavor_rewritten": "Gear section covering magic item attunement rules.",
+  "adaptation_note": "Source header includes '2' which appears to be a page or section number, not a game mechanic value."
+ },
+ {
+  "id": "explorers-pack",
+  "name": "Explorer's Pack",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 10,
+   "contents": [
+    {
+     "item": "Backpack"
+    },
+    {
+     "item": "Bedroll"
+    },
+    {
+     "item": "Oil",
+     "quantity": 2,
+     "unit": "flask"
+    },
+    {
+     "item": "Rations",
+     "duration_days": 10
+    },
+    {
+     "item": "Rope"
+    },
+    {
+     "item": "Tinderbox"
+    },
+    {
+     "item": "Torches",
+     "quantity": 10
+    },
+    {
+     "item": "Waterskin"
+    }
+   ]
+  },
+  "flavor_rewritten": "A standard kit for the road, holding essentials for survival and travel.",
+  "adaptation_note": "Source lists specific quantities: two flasks of oil, ten days of rations, and ten torches. These numeric constraints are preserved in the contents array."
+ },
+ {
+  "id": "falling-hazard",
+  "name": "FALLING [HAZARD]",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "damage_type": "Bludgeoning",
+   "trigger_timing": "end_of_fall",
+   "base_dice_per_distance_unit": "1d6",
+   "distance_unit_feet": 10,
+   "maximum_damage_dice": "20d6",
+   "default_condition_on_impact": "Prone",
+   "condition_avoidance_rule": "avoid_all_damage",
+   "liquid_entry_options": [
+    {
+     "medium": "water",
+     "action_cost": "Reaction",
+     "save_check": {
+      "dc": 15,
+      "ability": "Strength",
+      "skill": "Athletics"
+     },
+     "alternative_save_check": {
+      "dc": 15,
+      "ability": "Dexterity",
+      "skill": "Acrobatics"
+     },
+     "success_effect": "halve_damage"
+    }
+   ]
+  },
+  "flavor_rewritten": "Impact with the ground inflicts crushing trauma proportional to the drop height. Landing prone is inevitable unless the fall concludes without injury.",
+  "adaptation_note": "The hazard triggers at the end of a fall event. Damage scales linearly by 1d6 per ten feet up to a cap of twenty dice. Success on a specific check reduces incoming damage by half."
+ },
+ {
+  "id": "fast-crafting",
+  "name": "Fast Crafting",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "tool_table": [
+    {
+     "tool_name": "Artisan's Tools",
+     "items": [
+      "Crafted Gear"
+     ]
+    },
+    {
+     "tool_name": "Carpenter's Tools",
+     "items": [
+      "Ladder",
+      "Torch"
+     ]
+    },
+    {
+     "tool_name": "Leatherworker's Tools",
+     "items": [
+      "Case",
+      "Pouch"
+     ]
+    },
+    {
+     "tool_name": "Mason's Tools",
+     "items": [
+      "Block and Tackle"
+     ]
+    },
+    {
+     "tool_name": "Potter's Tools",
+     "items": [
+      "Jug",
+      "Lamp"
+     ]
+    },
+    {
+     "tool_name": "Smith's Tools",
+     "items": [
+      "Ball Bearings",
+      "Bucket",
+      "Caltrops",
+      "Grappling Hook",
+      "Iron Pot"
+     ]
+    },
+    {
+     "tool_name": "Tinker's Tools",
+     "items": [
+      "Bell",
+      "Shovel",
+      "Tinder Box"
+     ]
+    },
+    {
+     "tool_name": "Weaver's Tools",
+     "items": [
+      "Basket",
+      "Rope",
+      "Net",
+      "Tent"
+     ]
+    },
+    {
+     "tool_name": "Woodcarver's Tools",
+     "items": [
+      "Club",
+      "Greatclub",
+      "Quarterstaff"
+     ]
+    }
+   ]
+  },
+  "flavor_rewritten": "Specialized equipment allows immediate creation of necessary supplies and tools.",
+  "adaptation_note": "Source lists specific items craftable per tool type under the heading FAST CRAFTING."
+ },
+ {
+  "id": "fast-crafting-artisan-tools",
+  "name": "Fast Crafting: Artisan's Tools",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "tool_mappings": [
+    {
+     "tool_name": "Carpenter's Tools",
+     "crafted_gear": [
+      "Ladder",
+      "Torch"
+     ]
+    },
+    {
+     "tool_name": "Leatherworker's Tools",
+     "crafted_gear": [
+      "Case",
+      "Pouch"
+     ]
+    },
+    {
+     "tool_name": "Mason's Tools",
+     "crafted_gear": [
+      "Block and Tackle"
+     ]
+    },
+    {
+     "tool_name": "Potter's Tools",
+     "crafted_gear": [
+      "Jug",
+      "Lamp"
+     ]
+    },
+    {
+     "tool_name": "Smith's Tools",
+     "crafted_gear": [
+      "Ball Bearings",
+      "Bucket",
+      "Caltrops",
+      "Grappling Hook",
+      "Iron Pot"
+     ]
+    },
+    {
+     "tool_name": "Tinker's Tools",
+     "crafted_gear": [
+      "Bell",
+      "Shovel",
+      "Tinder Box"
+     ]
+    },
+    {
+     "tool_name": "Weaver's Tools",
+     "crafted_gear": [
+      "Basket",
+      "Rope",
+      "Net",
+      "Tent"
+     ]
+    },
+    {
+     "tool_name": "Woodcarver's Tools",
+     "crafted_gear": [
+      "Club",
+      "Greatclub",
+      "Quarterstaff"
+     ]
+    }
+   ]
+  },
+  "flavor_rewritten": "Specialized kits allow immediate fabrication of essential supplies and equipment without standard waiting periods.",
+  "adaptation_note": "The source lists specific artisan tool sets paired with their corresponding crafted gear items. This mechanic replaces the standard crafting time/cost structure with an instant creation effect based on possessing the correct tools."
+ },
+ {
+  "id": "fey-spirit",
+  "name": "Fey Spirit",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "type_tags": [
+    "Small Fey",
+    "Neutral"
+   ],
+   "ac_base": 12,
+   "ac_scale": "spell_level",
+   "hp_base": 30,
+   "hp_scale": {
+    "per_spell_level_above": 3,
+    "amount_per_step": 10
+   },
+   "speed": {
+    "walk": 30,
+    "fly": 30
+   },
+   "stats": {
+    "str": {
+     "score": 13,
+     "modifier": "+1",
+     "save_bonus_override": "+1"
+    },
+    "dex": {
+     "score": 16,
+     "modifier": "+3",
+     "save_bonus_override": "+3"
+    },
+    "con": {
+     "score": 14,
+     "modifier": "+2",
+     "save_bonus_override": "+2"
+    },
+    "int": {
+     "score": 14,
+     "modifier": "+2",
+     "save_bonus_override": "+2"
+    },
+    "wis": {
+     "score": 11,
+     "modifier": "+0",
+     "save_bonus_override": "+0"
+    },
+    "cha": {
+     "score": 16,
+     "modifier": "+3",
+     "save_bonus_override": "+3"
+    }
+   },
+   "immunities": [
+    "Charmed"
+   ],
+   "senses": {
+    "darkvision_range": 60,
+    "passive_perception": 10
+   },
+   "languages": [
+    "Sylvan"
+   ],
+   "language_knowledge": "understands the languages you know",
+   "xp_value": 0,
+   "proficiency_source": "user_proficiency_bonus",
+   "actions": [
+    {
+     "name": "Multiattack",
+     "trigger": "action",
+     "effect_type": "multi_attack_count",
+     "count_formula": "floor(spell_level / 2)",
+     "target_action_name": "Fey Blade"
+    },
+    {
+     "name": "Fey Blade",
+     "trigger": "action",
+     "type": "melee_weapon",
+     "range": 5,
+     "to_hit_bonus_source": "spell_attack_modifier",
+     "damage_dice": "2d6",
+     "damage_flat": 3,
+     "damage_extra_source": "spell_level",
+     "damage_type": "Force"
+    }
+   ],
+   "bonus_actions": [
+    {
+     "name": "Fey Step",
+     "trigger": "bonus_action",
+     "teleport_distance": 30,
+     "mood_options": [
+      {
+       "name": "Fuming",
+       "effect": "advantage_on_next_attack_roll",
+       "duration_until": "end_of_turn"
+      },
+      {
+       "name": "Mirthful",
+       "check_type": "Wisdom Saving Throw",
+       "dc_source": "spell_save_dc",
+       "target_criteria": "one creature visible within range",
+       "range": 10,
+       "on_fail": {
+        "condition": "Charmed",
+        "conditions_by": [
+         "caster",
+         "spirit"
+        ],
+        "duration": 1,
+        "duration_unit": "minute",
+        "ends_early_if": "takes_damage"
+       }
+      },
+      {
+       "name": "Tricksy",
+       "area_shape": "cube",
+       "area_size": 10,
+       "placement_range": 5,
+       "effect": "magical_darkness",
+       "duration_until": "end_of_spirits_next_turn"
+      }
+     ]
+    }
+   ]
+  },
+  "flavor_rewritten": "A neutral fey entity bound to your will, wielding a blade of force and stepping through shadows at your command.",
+  "adaptation_note": "The stat block uses 'the spell's level' for AC scaling (base 12), HP scaling (+10 per level above 3), Multiattack count (half spell level round down), Fey Blade damage (+3 + spell level), and Mirthful DC (spell save DC). These are all dynamic values tied to the casting spell. The proficiency bonus is explicitly stated as the caster's Proficiency Bonus rather than a fixed monster number."
+ },
+ {
+  "id": "fixed-hit-points-by-class",
+  "name": "Fixed Hit Points by Class",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "type": "class_hp_table",
+   "base_values_by_group": [
+    {
+     "classes": [
+      "Barbarian"
+     ],
+     "hit_points_per_level": "7 + Con. modifier"
+    },
+    {
+     "classes": [
+      "Fighter",
+      "Paladin",
+      "Ranger"
+     ],
+     "hit_points_per_level": "6 + Con. modifier"
+    },
+    {
+     "classes": [
+      "Bard",
+      "Cleric",
+      "Druid",
+      "Monk",
+      "Rogue",
+      "Warlock"
+     ],
+     "hit_points_per_level": "5 + Con. modifier"
+    },
+    {
+     "classes": [
+      "Sorcerer",
+      "Wizard"
+     ],
+     "hit_points_per_level": "4 + Con. modifier"
+    }
+   ]
+  },
+  "flavor_rewritten": "Survivors gain endurance based on their chosen path, with some classes naturally tougher than others.",
+  "adaptation_note": "The source uses a static table mapping class groups to base HP plus Constitution modifier. In the browser roguelite, this is adapted as a passive trait applied at character creation or level-up, storing the raw formula string 'N + Con. modifier' rather than pre-calculating it, since player stats change."
+ },
+ {
+  "id": "flask",
+  "name": "Flask",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_cp": 2,
+   "capacity_pints_max": 1
+  },
+  "flavor_rewritten": "A simple vessel designed for holding liquids.",
+  "adaptation_note": "The source specifies a capacity of 'up to 1 pint' and a cost of '2 CP'. These numeric constraints are preserved in the data fields."
+ },
+ {
+  "id": "fly-speed",
+  "name": "FLY SPEED",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "movement_type": "flying",
+   "duration_conditions": [
+    "landing",
+    "falling",
+    "death"
+   ],
+   "references": [
+    "Flying",
+    "Speed"
+   ]
+  },
+  "flavor_rewritten": "This ability grants aerial mobility. You remain airborne until you touch down, succumb to gravity, or perish.",
+  "adaptation_note": "The source text defines a movement speed type rather than a discrete item with numeric stats like damage or cost. In The Endless Descent, this is adapted as a status effect or passive trait granting flying movement. No specific numerical values (e.g., feet per turn) are provided in the source snippet, so only the logical conditions for ending the flight state are captured."
+ },
+ {
+  "id": "flying",
+  "name": "FLYING",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "fall_conditions": [
+    "Incapacitated",
+    "Prone"
+   ],
+   "speed_reduction_trigger": "Fly Speed is reduced to 0",
+   "exception_to_fall": "hover"
+  },
+  "flavor_rewritten": "Certain abilities grant aerial movement. Loss of control or stillness causes descent unless the ability allows remaining stationary in air.",
+  "adaptation_note": "Source text references 'Fly Speed' being reduced to 0 as a fall trigger. This maps to speed stat hitting zero while airborne."
+ },
+ {
+  "id": "food-needs-per-day",
+  "name": "Food Needs Per Day",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "consumption_rates": [
+    {
+     "size_category": "tiny",
+     "amount_pounds": "1/4"
+    },
+    {
+     "size_category": "small",
+     "amount_pounds": "1"
+    },
+    {
+     "size_category": "medium",
+     "amount_pounds": "1"
+    },
+    {
+     "size_category": "large",
+     "amount_pounds": "4"
+    },
+    {
+     "size_category": "huge",
+     "amount_pounds": "16"
+    },
+    {
+     "size_category": "gargantuan",
+     "amount_pounds": "64"
+    }
+   ]
+  },
+  "flavor_rewritten": "Characters consume rations daily based on their physical stature. Larger forms require significantly more sustenance to maintain energy.",
+  "adaptation_note": "Source provides a lookup table mapping Size categories (Tiny through Gargantuan) to specific food weights in pounds per day. In the browser roguelite, this is represented as an array of objects containing size_category and amount_pounds fields."
+ },
+ {
+  "id": "food-drink-and-lodging-table",
+  "name": "Food, Drink, and Lodging Table",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "category_prices": [
+    {
+     "item_type": "ale_mug",
+     "cost_value": "4",
+     "currency": "CP"
+    },
+    {
+     "item_type": "bread_loaf",
+     "cost_value": "2",
+     "currency": "CP"
+    },
+    {
+     "item_type": "cheese_wedge",
+     "cost_value": "1",
+     "currency": "SP"
+    }
+   ],
+   "lodging_prices_per_day": [
+    {
+     "quality_level": "squalid",
+     "cost_value": "7",
+     "currency": "CP"
+    },
+    {
+     "quality_level": "poor",
+     "cost_value": "1",
+     "currency": "SP"
+    },
+    {
+     "quality_level": "modest",
+     "cost_value": "5",
+     "currency": "SP"
+    },
+    {
+     "quality_level": "comfortable",
+     "cost_value": "8",
+     "currency": "SP"
+    },
+    {
+     "quality_level": "wealthy",
+     "cost_value": "2",
+     "currency": "GP"
+    },
+    {
+     "quality_level": "aristocratic",
+     "cost_value": "4",
+     "currency": "GP"
+    }
+   ],
+   "meal_prices_per_day": [
+    {
+     "quality_level": "squalid",
+     "cost_value": "1",
+     "currency": "CP"
+    },
+    {
+     "quality_level": "poor",
+     "cost_value": "2",
+     "currency": "CP"
+    },
+    {
+     "quality_level": "modest",
+     "cost_value": "1",
+     "currency": "SP"
+    },
+    {
+     "quality_level": "comfortable",
+     "cost_value": "2",
+     "currency": "SP"
+    },
+    {
+     "quality_level": "wealthy",
+     "cost_value": "3",
+     "currency": "SP"
+    },
+    {
+     "quality_level": "aristocratic",
+     "cost_value": "6",
+     "currency": "SP"
+    }
+   ],
+   "wine_bottle_prices": [
+    {
+     "variety": "common",
+     "cost_value": "2",
+     "currency": "SP"
+    },
+    {
+     "variety": "fine",
+     "cost_value": "10",
+     "currency": "GP"
+    }
+   ]
+  },
+  "flavor_rewritten": "Secure sustenance and shelter from various vendors. Quality dictates the price paid for rest and refreshment.",
+  "adaptation_note": "Source specifies that prices for daily lodging and meals are included in lifestyle expenses rather than being discrete purchasable items."
+ },
+ {
+  "id": "forgery-kit",
+  "name": "Forgery Kit",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 15,
+   "ability": "Dexterity",
+   "weight_lb": 5,
+   "actions": [
+    {
+     "type": "mimic_handwriting",
+     "max_words": 10,
+     "dc": 15,
+     "description": "Mimic handwriting"
+    },
+    {
+     "type": "duplicate_seal",
+     "target": "wax_seal",
+     "dc": 20,
+     "description": "Duplicate a wax seal"
+    }
+   ]
+  },
+  "flavor_rewritten": "A set of tools designed to replicate written marks and official seals with deceptive precision.",
+  "adaptation_note": "The DCs (15 for handwriting, 20 for seals) are represented as static difficulty checks in the 'actions' array. The word limit is stored as an integer."
+ },
+ {
+  "id": "gaming-set",
+  "name": "Gaming Set",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_varies": true,
+   "ability_score": "wisdom",
+   "weight": null,
+   "utility_checks": [
+    {
+     "action": "detect_cheating",
+     "dc": 10
+    },
+    {
+     "action": "win_game",
+     "dc": 20
+    }
+   ],
+   "variants": [
+    {
+     "name": "dice",
+     "cost_value": 1,
+     "currency": "sp"
+    },
+    {
+     "name": "dragonchess",
+     "cost_value": 1,
+     "currency": "gp"
+    },
+    {
+     "name": "playing_cards",
+     "cost_value": 5,
+     "currency": "sp"
+    },
+    {
+     "name": "three-dragon_ante",
+     "cost_value": 1,
+     "currency": "gp"
+    }
+   ]
+  },
+  "flavor_rewritten": "A collection of pastimes designed to test perception and strategy against opponents.",
+  "adaptation_note": "The source lists specific currency costs for variants. The 'Utilize' field describes skill checks with fixed DCs rather than dice rolls."
+ },
+ {
+  "id": "giant-insect-stat-block",
+  "name": "Giant Insect Stat Block",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "creature_type": "Large Beast, Unaligned",
+   "ac_formula": "11 + spell_level",
+   "hp_base": 30,
+   "hp_scale_per_spell_level": 10,
+   "speed": {
+    "walk": 40,
+    "climb": 40,
+    "fly_condition": "Wasp only",
+    "fly_speed": 40
+   },
+   "abilities": [
+    {
+     "stat": "str",
+     "score": 17,
+     "modifier": 3,
+     "save_bonus": 3
+    },
+    {
+     "stat": "dex",
+     "score": 13,
+     "modifier": 1,
+     "save_bonus": 1
+    },
+    {
+     "stat": "con",
+     "score": 15,
+     "modifier": 2,
+     "save_bonus": 2
+    },
+    {
+     "stat": "int",
+     "score": 4,
+     "modifier": -3,
+     "save_bonus": -3
+    },
+    {
+     "stat": "wis",
+     "score": 14,
+     "modifier": 2,
+     "save_bonus": 2
+    },
+    {
+     "stat": "cha",
+     "score": 3,
+     "modifier": -4,
+     "save_bonus": -4
+    }
+   ],
+   "senses": {
+    "darkvision_range_ft": 60,
+    "passive_perception": 12
+   },
+   "languages": "Understands the languages you know",
+   "cr": 0,
+   "proficiency_source": "spellcaster_proficiency_bonus",
+   "traits": [
+    {
+     "name": "Spider Climb",
+     "description_key": "spider_climb_mechanic"
+    }
+   ],
+   "actions": [
+    {
+     "name": "Multiattack",
+     "trigger": "action",
+     "attacks_count_formula": "floor(spell_level / 2)"
+    },
+    {
+     "name": "Poison Jab",
+     "type": "melee_attack",
+     "range_ft": 10,
+     "hit_bonus_formula": "spell_attack_modifier",
+     "damage_dice": "1d6 + 3 + spell_level",
+     "damage_type_primary": "Piercing",
+     "extra_damage_dice": "1d4",
+     "extra_damage_type": "Poison"
+    },
+    {
+     "name": "Web Bolt",
+     "condition": "Spider Only",
+     "type": "ranged_attack",
+     "range_ft": 60,
+     "hit_bonus_formula": "spell_attack_modifier",
+     "damage_dice": "1d10 + 3 + spell_level",
+     "damage_type": "Bludgeoning",
+     "effect_on_hit": {
+      "target_speed_reduced_to": 0,
+      "duration_until": "start of insect's next turn"
+     }
+    }
+   ],
+   "bonus_actions": [
+    {
+     "name": "Venomous Spew",
+     "condition": "Centipede Only",
+     "save_dc": "spell_save_dc",
+     "range_ft": 10,
+     "save_stat": "Constitution",
+     "failure_effect": {
+      "condition": "Poisoned",
+      "duration_until": "start of insect's next turn"
+     }
+    }
+   ]
+  },
+  "flavor_rewritten": "A massive arthropod summoned to serve its caster. It moves with unnatural agility across walls and air, striking with venom or binding foes in silk.",
+  "adaptation_note": "The stat block defines AC as '11 + the spell’s level' and HP as '30 + 10 for each spell level'. Damage scales by adding the spell level value to the base dice sum (e.g., 1d6 + 3 plus the spell’s level). Multiattack count is half the spell level rounded down. Web Bolt reduces speed to 0. Venomous Spew applies Poisoned condition on failed Con save. Proficiency Bonus equals the spellcaster's PB."
+ },
+ {
+  "id": "glassblowers-tools",
+  "name": "Glassblower's Tools",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 30,
+   "ability_check": "Intelligence",
+   "weight_lb": 5,
+   "utilize_skill_checks": [
+    {
+     "action": "discern_history",
+     "target_type": "glass_object",
+     "time_window_hours": 24,
+     "dc": 15
+    }
+   ],
+   "craftable_items": [
+    "Glass Bottle",
+    "Magnifying Glass",
+    "Spyglass",
+    "Vial"
+   ]
+  },
+  "flavor_rewritten": "Specialized equipment for shaping molten silica allows the user to perceive lingering memories trapped within transparent artifacts.",
+  "adaptation_note": "The utilize action functions as a skill check against DC 15 Intelligence. The craft list represents available blueprints or items that can be constructed using this gear."
+ },
+ {
+  "id": "grappling-hook",
+  "name": "Grappling Hook",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost": "2 GP",
+   "range_feet": 50,
+   "save_dc": 13,
+   "save_ability": "Dexterity",
+   "save_skill": "Acrobatics",
+   "action_type": "Utilize",
+   "valid_targets": [
+    "railing",
+    "ledge",
+    "another catch"
+   ],
+   "requirements": [
+    "Rope tied to hook"
+   ],
+   "effects_on_success": [
+    {
+     "effect": "hook_catches",
+     "condition": "target_present"
+    },
+    {
+     "effect": "climbable",
+     "condition": "rope_attached"
+    }
+   ]
+  },
+  "flavor_rewritten": "Launch the hooked device to anchor onto nearby structures. Secure a line to traverse vertical distances.",
+  "adaptation_note": "Source specifies 'DC 13 Dexterity (Acrobatics)' check for catching. Source specifies range of '50 feet'. Source cost is '2 GP'. Climbing requires tying a rope first."
+ },
+ {
+  "id": "healers-kit",
+  "name": "Healer's Kit",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 5,
+   "uses_total": 10,
+   "action_type": "utilize",
+   "effect": [
+    {
+     "target_condition": "unconscious",
+     "target_hp_value": 0,
+     "result": "stabilized",
+     "check_required": false,
+     "skill": null,
+     "ability_score": null
+    }
+   ]
+  },
+  "flavor_rewritten": "This medical pouch allows a caretaker to halt the fading of life in a fallen ally through careful application.",
+  "adaptation_note": "Source specifies 'ten' uses and '5 GP' cost. Effect triggers on Utilize action targeting an unconscious creature at zero hit points, bypassing the usual Wisdom Medicine check requirement."
+ },
+ {
+  "id": "herbalism-kit",
+  "name": "Herbalism Kit",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 5,
+   "ability_score": "intelligence",
+   "weight_lb": 3,
+   "utility_checks": [
+    {
+     "action": "identify_plant",
+     "dc": 10
+    }
+   ],
+   "crafting_recipes": [
+    "Antitoxin",
+    "Candle",
+    "Healer’s Kit",
+    "Potion of Healing"
+   ]
+  },
+  "flavor_rewritten": "A collection of tools for harvesting and preparing natural materials. Allows the user to recognize flora and synthesize basic remedies from raw ingredients.",
+  "adaptation_note": "Source specifies 'three lb.' weight and 'five GP' cost. Utility check requires DC ten. Crafting list includes four specific items."
+ },
+ {
+  "id": "hirelings-table",
+  "name": "Hirelings Table",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "hireling_types": [
+    {
+     "type_name": "Skilled hireling",
+     "cost_value": 2,
+     "cost_unit": "GP",
+     "duration_unit": "day"
+    },
+    {
+     "type_name": "Untrained hireling",
+     "cost_value": 2,
+     "cost_unit": "SP",
+     "duration_unit": "day"
+    },
+    {
+     "type_name": "Messenger",
+     "cost_value": 2,
+     "cost_unit": "CP",
+     "distance_unit": "mile"
+    }
+   ]
+  },
+  "flavor_rewritten": "Recruit temporary assistance for your journey. Rates vary based on expertise and distance traveled.",
+  "adaptation_note": "Source uses currency (GP/SP/CP) and time/distance metrics. In browser roguelite, these may be abstracted to resource points or fixed encounter costs rather than daily accounting."
+ },
+ {
+  "id": "holy-symbol",
+  "name": "Holy Symbol",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight_varies": true,
+   "cost_varies": true
+  },
+  "flavor_rewritten": "A sacred emblem worn by the faithful.",
+  "adaptation_note": "Source lists weight and cost as 'Varies' without specific values or tables. No browser mechanics defined."
+ },
+ {
+  "id": "holy-symbol-varies",
+  "name": "Holy Symbol (Varies)",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "description": "bejeweled_or_painted_divine_channeling_focus",
+   "valid_user_classes": [
+    "Cleric",
+    "Paladin"
+   ],
+   "function": "Spellcasting_Focus",
+   "forms_source": "Holy_Symbol_table"
+  },
+  "flavor_rewritten": "Carved or adorned to channel divine power, this symbol serves as the focal point for clerics and paladins casting spells.",
+  "adaptation_note": "The specific form depends on a table not included here. The source states it is used as a Spellcasting Focus by Cleric or Paladin."
+ },
+ {
+  "id": "holy-symbol-carrier-types",
+  "name": "Holy Symbol Carrier Types",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "carrier_modes": [
+    "held",
+    "worn",
+    "borne_on_fabric",
+    "on_shield"
+   ]
+  },
+  "flavor_rewritten": "Sacred icons may be grasped in hand, fastened to attire, carried upon banners, or mounted upon shields.",
+  "adaptation_note": "The source table indicates whether a Holy Symbol needs to be held, worn, or borne on fabric (such as a tabard or banner) or a Shield."
+ },
+ {
+  "id": "holy-symbol-carry-methods",
+  "name": "Holy Symbol Carry Methods",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "carry_options": [
+    "held",
+    "worn",
+    "borne_on_fabric",
+    "shield"
+   ],
+   "fabric_types": [
+    "tabard",
+    "banner"
+   ]
+  },
+  "flavor_rewritten": "Divine emblems may be grasped in hand, fastened to attire, displayed upon cloth standards, or affixed to protective shields.",
+  "adaptation_note": "The table indicates whether a Holy Symbol needs to be held, worn, or borne on fabric (such as a tabard or banner) or a Shield."
+ },
+ {
+  "id": "holy-symbol-display-methods",
+  "name": "Holy Symbol Display Methods",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "display_options": [
+    "held",
+    "worn",
+    "borne_on_fabric",
+    "shield"
+   ],
+   "fabric_types": [
+    "tabard",
+    "banner"
+   ]
+  },
+  "flavor_rewritten": "A sacred icon may be gripped in hand, fastened to attire, carried upon cloth, or mounted upon armor.",
+  "adaptation_note": "Source specifies four modes: held, worn, borne on fabric (such as a tabard or banner), or a Shield."
+ },
+ {
+  "id": "holy-symbol-wearing-options",
+  "name": "Holy Symbol Wearing Options",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "usage_types": [
+    "held",
+    "worn",
+    "borne_on_fabric",
+    "shield"
+   ],
+   "fabric_examples": [
+    "tabard",
+    "banner"
+   ]
+  },
+  "flavor_rewritten": "A holy symbol may be gripped in hand, fastened to attire, carried upon cloth such as a banner, or mounted upon a shield.",
+  "adaptation_note": "The source text lists four distinct modes for bearing a Holy Symbol: held, worn, borne on fabric (with examples tabard and banner), or a Shield. No numerical values are present in this specific excerpt."
+ },
+ {
+  "id": "holy-symbols-table",
+  "name": "Holy Symbols Table",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "items": [
+    {
+     "name": "Amulet",
+     "weight": "1 lb.",
+     "cost": "5 GP",
+     "usage": [
+      "worn",
+      "held"
+     ]
+    },
+    {
+     "name": "Emblem",
+     "weight": null,
+     "cost": "5 GP",
+     "usage": [
+      "borne on fabric",
+      "Shield"
+     ],
+     "adaptation_note": "Weight is dash in source indicating negligible or zero weight; represented as null."
+    },
+    {
+     "name": "Reliquary",
+     "weight": "2 lb.",
+     "cost": "5 GP",
+     "usage": [
+      "held"
+     ]
+    }
+   ]
+  },
+  "flavor_rewritten": "Sacred tokens crafted for divine focus, varying by form and portability requirements.",
+  "adaptation_note": "Source lists three distinct holy symbol types (Amulet, Emblem, Reliquary) with specific weights and uniform costs of five gold pieces. Usage constraints differ: Amulets can be worn or held, Emblems are borne on fabric or Shields, and Reliquaries must be held."
+ },
+ {
+  "id": "holy-water",
+  "name": "Holy Water",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight": "1 lb.",
+   "cost": "25 GP"
+  },
+  "flavor_rewritten": "Consecrated liquid contained within a flask, radiating divine potency against unholy entities.",
+  "adaptation_note": "Source provides only weight and cost. No combat mechanics or usage rules are present in the provided source text."
+ },
+ {
+  "id": "hunting-trap",
+  "name": "Hunting Trap",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight_lb": 25,
+   "cost_gp": 5
+  },
+  "flavor_rewritten": "A heavy metal contraption designed to snap shut on unsuspecting prey.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "improvised-weapons",
+  "name": "Improvised Weapons",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "base_damage": "1d4",
+   "range_normal_feet": 20,
+   "range_long_feet": 60,
+   "proficiency_bonus_applied": false,
+   "damage_type_determined_by_dm": true,
+   "equivalent_simple_martial_weapon_possible": true
+  },
+  "flavor_rewritten": "Wield broken objects as makeshift tools of violence. These items lack formal training benefits but can still strike foes at close or moderate distances.",
+  "adaptation_note": "Source specifies proficiency bonus is not added to attack rolls. Damage type is determined by the DM based on the object. Range is defined in feet for throwing mechanics. Equivalent weapons rule allows DM discretion to treat specific improvised items as standard Simple/Martial weapons with their respective rules."
+ },
+ {
+  "id": "influencing-npcs",
+  "name": "Influencing NPCs",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "action_type": "Influence",
+   "advantage_conditions": [
+    {
+     "target_npc": "Ismark",
+     "attitude": "Friendly",
+     "effect": "Advantage"
+    }
+   ]
+  },
+  "flavor_rewritten": "Use the Influence action to sway an NPC's disposition. A favorable attitude grants advantage on the attempt.",
+  "adaptation_note": "Source mentions '2 Influencing NPCs' but provides no numeric value associated with that count other than the header itself; this appears to be a section marker rather than a stat. Advantage is represented structurally as it affects the d20 roll mechanics."
+ },
+ {
+  "id": "ink",
+  "name": "Ink",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 10,
+   "weight_display": "—"
+  },
+  "flavor_rewritten": "A small vessel of dark fluid used for marking surfaces or inscribing magical sigils.",
+  "adaptation_note": "Source lists weight as a dash character indicating negligible or undefined weight in this context."
+ },
+ {
+  "id": "ink-pen",
+  "name": "Ink Pen",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight": null,
+   "cost_cp": 2
+  },
+  "flavor_rewritten": "A simple writing instrument used for inscriptions.",
+  "adaptation_note": "Weight is listed as dash in source, indicating negligible or undefined mass."
+ },
+ {
+  "id": "jewelers-tools",
+  "name": "Jeweler's Tools",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 25,
+   "weight_lb": 2,
+   "ability_score": "Intelligence",
+   "utility_checks": [
+    {
+     "action": "discern_gem_value",
+     "dc": 15
+    }
+   ],
+   "crafting_focuses": [
+    "Arcane Focus",
+    "Holy Symbol"
+   ]
+  },
+  "flavor_rewritten": "Specialized instruments for evaluating precious stones and facilitating magical or divine crafting rituals.",
+  "adaptation_note": "Cost is expressed in gold pieces (GP) and weight in pounds (lb.). Utility check requires a DC of fifteen. Crafting options include arcane focus and holy symbol."
+ },
+ {
+  "id": "jug",
+  "name": "Jug",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight_lb": 4,
+   "cost_cp": 2
+  },
+  "flavor_rewritten": "A simple vessel for holding liquids.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "ladder",
+  "name": "Ladder",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight_lbs": 25,
+   "cost_sp": 1
+  },
+  "flavor_rewritten": "A collapsible framework of rungs and rails used to bridge vertical gaps.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "lamp",
+  "name": "Lamp",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight": "1 lb.",
+   "cost": "5 SP"
+  },
+  "flavor_rewritten": "A simple vessel for holding light within the endless dark.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "lantern-bullseye",
+  "name": "Lantern, Bullseye",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight": "2 lb.",
+   "cost_gp": 10
+  },
+  "flavor_rewritten": "A focused beam cuts through the dark, revealing hidden paths and lurking dangers ahead.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "lantern-hooded",
+  "name": "Lantern, Hooded",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight_lb": 2,
+   "cost_gp": 5
+  },
+  "flavor_rewritten": "A sturdy lantern equipped with a hood to direct its light.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "large-vehicles-notes",
+  "name": "Large Vehicles Notes",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "category": "vehicle_reference",
+   "scope": [
+    "airborne",
+    "waterborne"
+   ],
+   "references_table": "Airborne and Waterborne Vehicles table",
+   "notes_apply_to_all_entries_in_scope": true
+  },
+  "flavor_rewritten": "These guidelines govern all large aerial and maritime craft. Consult the dedicated vehicle compendium for specific operational parameters.",
+  "adaptation_note": "Source text references a 'table' containing statistics but does not list any individual vehicles or numeric stats in this excerpt. No dice, costs, or save values are present."
+ },
+ {
+  "id": "leatherworkers-tools",
+  "name": "Leatherworker's Tools",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 5,
+   "ability_score": "Dexterity",
+   "weight_lb": 5,
+   "utility_checks": [
+    {
+     "action": "Add a design to a leather item",
+     "dc": 10
+    }
+   ],
+   "craftable_items": [
+    "Sling",
+    "Whip",
+    "Hide Armor",
+    "Leather Armor",
+    "Studded Leather Armor",
+    "Backpack",
+    "Crossbow Bolt Case",
+    "Map or Scroll Case",
+    "Parchment",
+    "Pouch",
+    "Quiver",
+    "Waterskin"
+   ]
+  },
+  "flavor_rewritten": "Masterfully crafted gear for shaping hides into functional equipment. These implements allow artisans to embellish their work with intricate patterns.",
+  "adaptation_note": "The 'Craft' field lists items that can be created using these tools rather than a crafting action cost or time. The utility check DC is fixed at ten."
+ },
+ {
+  "id": "assassins-tools",
+  "name": "Level 3: Assassin's Tools",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "level": 3,
+   "granted_items": [
+    "Disguise Kit",
+    "Poisoner's Kit"
+   ],
+   "proficiencies": [
+    "Disguise Kit",
+    "Poisoner's Kit"
+   ]
+  },
+  "flavor_rewritten": "Equip specialized gear for subterfuge and covert operations. Master the use of these tools to conceal identity and administer toxins.",
+  "adaptation_note": "Source grants proficiency with Disguise Kit and Poisoner's Kit alongside the items themselves."
+ },
+ {
+  "id": "lifestyle-expenses",
+  "name": "Lifestyle Expenses",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "description": "Cost of living covering lodging, food, equipment maintenance, and other necessities.",
+   "frequency": "weekly_or_monthly",
+   "selection": [
+    "Wretched",
+    "Squalid",
+    "Poor",
+    "Modest",
+    "Comfortable",
+    "Wealthy",
+    "Aristocratic"
+   ],
+   "mechanic_type": "recurring_payment",
+   "dm_discretion": true,
+   "social_impact": "perception_and_risk_determination"
+  },
+  "flavor_rewritten": "Select a tier of existence to define your daily routine. Your coin determines how the world views you and what dangers await.",
+  "adaptation_note": "The source lists seven specific tiers: Wretched, Squalid, Poor, Modest, Comfortable, Wealthy, and Aristocratic. Each has an associated price not listed in this excerpt. The DM chooses whether this expense occurs weekly or monthly."
+ },
+ {
+  "id": "lifestyle-aristocratic",
+  "name": "Lifestyle: Aristocratic",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "type": "lifestyle",
+   "tier": "aristocratic",
+   "daily_cost": {
+    "amount": 10,
+    "currency": "GP"
+   },
+   "benefits": [
+    {
+     "effect": "staff_support",
+     "description": "Access to staff support"
+    }
+   ],
+   "social_impact": {
+    "visibility": "high",
+    "consequence_options": [
+     "legal_sharing",
+     "illegal_sharing"
+    ]
+   }
+  },
+  "flavor_rewritten": "Living at the highest echelon demands constant expenditure on luxury and attendants. Your conspicuous wealth inevitably draws attention from those seeking a share of your fortune.",
+  "adaptation_note": "The source specifies '10 GP PER DAY' as the cost. The benefit includes having 'a staff'. Social consequences involve sharing wealth via legal or illegal means."
+ },
+ {
+  "id": "lifestyle-comfortable",
+  "name": "Lifestyle: Comfortable",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "type": "lifestyle",
+   "daily_cost_gp": 2,
+   "description_key": "modest_necessities_few_luxuries"
+  },
+  "flavor_rewritten": "You live without hardship but indulge in small pleasures.",
+  "adaptation_note": "Source specifies 'two GP per day'. In a browser roguelite, this is likely modeled as a daily upkeep cost deducted from gold reserves or a passive drain on resources while exploring. The 'few luxuries' aspect may grant minor morale bonuses or reduce stress/hunger rates."
+ },
+ {
+  "id": "lifestyle-modest",
+  "name": "Lifestyle: Modest",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "type": "lifestyle",
+   "tier": "modest",
+   "cost_per_day": {
+    "amount": 1,
+    "currency": "GP"
+   },
+   "description_key": "average_support"
+  },
+  "flavor_rewritten": "Basic sustenance without excess. Covers shelter and food at a functional standard.",
+  "adaptation_note": "Source specifies '1 GP PER DAY'. In browser roguelite context, this is likely abstracted into daily upkeep cost or starting resource deduction rather than real-time tracking."
+ },
+ {
+  "id": "lifestyle-poor",
+  "name": "Lifestyle: Poor",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "type": "lifestyle",
+   "tier": "poor",
+   "cost_per_day": {
+    "currency": "SP",
+    "amount": 2
+   }
+  },
+  "flavor_rewritten": "Living on the bare minimum requires strict budgeting and minimal comforts.",
+  "adaptation_note": "The source specifies a daily cost of 'two SP'. In a browser roguelite, this likely translates to an upkeep cost deducted at the start of each day or cycle. The mechanic is purely economic with no dice rolls involved."
+ },
+ {
+  "id": "lifestyle-squalid",
+  "name": "Lifestyle: Squalid",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "type": "lifestyle",
+   "tier": "squalid",
+   "cost_per_day": "1 SP",
+   "effects": [
+    {
+     "description": "exposure_to_unhealthy_conditions",
+     "risk_level": "high"
+    },
+    {
+     "description": "threat_from_opportunistic_criminals",
+     "risk_level": "elevated"
+    }
+   ]
+  },
+  "flavor_rewritten": "Living on the absolute bottom rung exposes you to filth and danger at every turn.",
+  "adaptation_note": "The source specifies a daily cost of '1 SP'. Browser roguelites typically handle lifestyle costs via an automatic daily deduction from gold/sp currency or by imposing passive negative status effects representing health degradation and theft risk, rather than explicit menu choices for lodging."
+ },
+ {
+  "id": "lifestyle-wealthy",
+  "name": "Lifestyle: Wealthy",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_per_day": "4 GP"
+  },
+  "flavor_rewritten": "This lifestyle provides access to high-end amenities and personal staff.",
+  "adaptation_note": "The source specifies a daily cost of four gold pieces per day. The adaptation note preserves the digit 'four' as written in the source text's prose context, though standard game data typically uses digits for currency."
+ },
+ {
+  "id": "lock",
+  "name": "Lock",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight": "1 lb.",
+   "cost_gp": 10
+  },
+  "flavor_rewritten": "A small metal device used to secure doors and containers against unauthorized access.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "magic",
+  "name": "Magic",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "action_type": "action",
+   "description": "Casts a spell with casting time of an action or activates a feature/magic item requiring this action.",
+   "extended_casting_rules": {
+    "duration_threshold": "1 minute",
+    "requirement": "Must take Magic action on each turn of casting.",
+    "concentration_required": true,
+    "failure_condition": "If concentration is broken, spell fails but spell slot is not expended."
+   }
+  },
+  "flavor_rewritten": "Channel arcane forces through focused intent. Sustain your mental grip to maintain powerful effects over extended periods.",
+  "adaptation_note": "The source specifies '1 minute' as the duration threshold for sustained casting. The failure condition explicitly states that no spell slot is expended if concentration breaks during long casts. This mechanic maps to browser roguelite resource management where maintaining an active buff/skill requires continuous player input or state preservation."
+ },
+ {
+  "id": "magic-item-fit",
+  "name": "Magic Item Fit",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "wearable_adjustment": true,
+   "size_independent": true,
+   "build_independent": true,
+   "adjustment_method": [
+    "easily_adjustable",
+    "magical_self_adjust"
+   ]
+  },
+  "flavor_rewritten": "Garments designed for wear automatically conform to any body type or stature without requiring modification.",
+  "adaptation_note": "The source text states that magic items meant to be worn fit creatures regardless of size or build. It explains this is because garments are either easily adjustable or magically adjust themselves."
+ },
+ {
+  "id": "magic-item-size-fitting",
+  "name": "Magic Item Size Fitting",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {},
+  "flavor_rewritten": "Garments stretch and shift to embrace any form, ensuring that what is worn always fits the one who wears it.",
+  "adaptation_note": "The source states this applies in most cases for creatures regardless of size or build. Magic garments are easily adjustable or magically self-adjusting."
+ },
+ {
+  "id": "magical-effect",
+  "name": "Magical Effect",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "definition_source_types": [
+    "spell",
+    "magic_item",
+    "phenomenon"
+   ],
+   "classification_rule": "rule_labeled_magical"
+  },
+  "flavor_rewritten": "This power stems from arcane origins, whether woven through incantations, embedded within enchanted artifacts, or arising from forces explicitly defined as mystical.",
+  "adaptation_note": "The source defines 'magical' broadly: any effect created by a spell, a magic item, or a phenomenon labeled magical by rules. In-browser roguelites, this usually maps to tags like 'is_magic=true' on skills/items rather than a standalone gear entry."
+ },
+ {
+  "id": "magnifying-glass",
+  "name": "Magnifying Glass",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 100,
+   "weight": null
+  },
+  "flavor_rewritten": "A lens designed to bring distant details into sharp focus.",
+  "adaptation_note": "Weight is listed as dash in source, indicating negligible or undefined weight for browser stats."
+ },
+ {
+  "id": "malnutrition",
+  "name": "Malnutrition",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "type": "hazard",
+   "mechanics": [
+    {
+     "trigger": "daily_food_intake_below_half",
+     "save_dc": 10,
+     "save_ability": "constitution",
+     "failure_effect": {
+      "condition": "exhaustion",
+      "levels_gained": 1,
+      "timing": "end_of_day"
+     }
+    },
+    {
+     "trigger": "zero_food_for_5_days",
+     "effect_at_fifth_day_end": {
+      "condition": "exhaustion",
+      "levels_gained": 1
+     },
+     "subsequent_daily_effect": {
+      "condition": "exhaustion",
+      "levels_gained": 1,
+      "duration": "each_subsequent_day_without_food"
+     }
+    }
+   ],
+   "removal_condition": "eat_full_amount_required_for_one_day",
+   "reference": "Exhaustion"
+  },
+  "flavor_rewritten": "Starvation gnaws at the body's strength. Sustenance restores what hunger has taken.",
+  "adaptation_note": "Source specifies 'half' (no digit) for the first mechanic and '5' (digit) for the starvation duration. Save DC is 10. Exhaustion levels gained are always 1 per trigger event."
+ },
+ {
+  "id": "manacles",
+  "name": "Manacles",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight_lb": 6,
+   "cost_gp": 2
+  },
+  "flavor_rewritten": "Heavy iron rings designed to bind wrists together.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "manacles-with-key",
+  "name": "Manacles with Key",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "includes_key": true,
+   "unlock_method": {
+    "requires_thieves_tools": true,
+    "check_type": "Dexterity (Sleight of Hand)",
+    "difficulty_class": 15
+   }
+  },
+  "flavor_rewritten": "These iron bonds come secured with their own unlocking instrument. Without it, escape demands skillful manipulation of the locking mechanism.",
+  "adaptation_note": "Source specifies DC fifteen Dexterity check using Thieves' Tools to pick lock without key."
+ },
+ {
+  "id": "map",
+  "name": "Map",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight": null,
+   "cost_gp": 1
+  },
+  "flavor_rewritten": "A folded sheet revealing the layout of unknown territories.",
+  "adaptation_note": "Weight is listed as '—' in source; adapted to null for browser engine compatibility."
+ },
+ {
+  "id": "mirror",
+  "name": "Mirror",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight": "1/2 lb.",
+   "cost": "5 GP"
+  },
+  "flavor_rewritten": "A reflective surface used for inspection or signaling.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "multiple-items-of-the-same-kind",
+  "name": "Multiple Items of the Same Kind",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "restriction_type": "slot_conflict",
+   "conflicting_slots": [
+    "footwear",
+    "gloves_or_gauntlets",
+    "bracers",
+    "armor",
+    "headwear",
+    "cloak"
+   ],
+   "max_equipped_per_slot": 1,
+   "dm_exception_possible": true
+  },
+  "flavor_rewritten": "Wearing multiple pieces of identical magical gear creates conflict. The Dungeon Master may grant exceptions to this rule.",
+  "adaptation_note": "Source text uses number-words 'one' repeatedly; these are converted to integer 1 in data structure per strict rules."
+ },
+ {
+  "id": "musical-instrument",
+  "name": "Musical Instrument",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_varies": true,
+   "weight_varies": true,
+   "primary_ability": "Charisma",
+   "utilization_options": [
+    {
+     "action": "Play a known tune",
+     "dc": 10
+    },
+    {
+     "action": "Improvise a song",
+     "dc": 15
+    }
+   ],
+   "variants": [
+    {
+     "name": "Bagpipes",
+     "cost_gp": 30,
+     "weight_lb": 6
+    },
+    {
+     "name": "drum",
+     "cost_gp": 6,
+     "weight_lb": 3
+    },
+    {
+     "name": "dulcimer",
+     "cost_gp": 25,
+     "weight_lb": 10
+    },
+    {
+     "name": "flute",
+     "cost_gp": 2,
+     "weight_lb": 1
+    },
+    {
+     "name": "horn",
+     "cost_gp": 3,
+     "weight_lb": 2
+    },
+    {
+     "name": "lute",
+     "cost_gp": 35,
+     "weight_lb": 2
+    },
+    {
+     "name": "lyre",
+     "cost_gp": 30,
+     "weight_lb": 2
+    },
+    {
+     "name": "pan flute",
+     "cost_gp": 12,
+     "weight_lb": 2
+    },
+    {
+     "name": "shawm",
+     "cost_gp": 2,
+     "weight_lb": 1
+    },
+    {
+     "name": "viol",
+     "cost_gp": 30,
+     "weight_lb": 1
+    }
+   ]
+  },
+  "flavor_rewritten": "A collection of acoustic devices designed to produce melody through breath, string, or percussion. Mastery allows for precise performance of established compositions or spontaneous creation of new harmonies.",
+  "adaptation_note": "The source lists specific cost and weight values for each variant (e.g., Bagpipes at 30 GP / 6 lb.). In the browser roguelite context, these static attributes are preserved in the data structure but may be abstracted during gameplay as generic 'Instrument' gear with variable stats depending on rarity tier."
+ },
+ {
+  "id": "navigators-tools",
+  "name": "Navigator's Tools",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 25,
+   "ability_check": "wisdom",
+   "weight_lb": 2,
+   "actions": [
+    {
+     "action_name": "plot_course",
+     "difficulty_class": 10
+    },
+    {
+     "action_name": "determine_position_by_stargazing",
+     "difficulty_class": 15
+    }
+   ]
+  },
+  "flavor_rewritten": "Instruments for charting unknown paths under the stars. Essential for finding direction when land is out of sight.",
+  "adaptation_note": "Source specifies two distinct utility actions with fixed DCs: plotting a course at DC ten and determining position via stargazing at DC fifteen. No combat or damage mechanics present."
+ },
+ {
+  "id": "navigator-tools",
+  "name": "Navigator's Tools",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 25,
+   "ability_score": "wisdom",
+   "weight_lb": 2,
+   "utility_checks": [
+    {
+     "action": "plot_course",
+     "dc": 10
+    },
+    {
+     "action": "determine_position_stargazing",
+     "dc": 15
+    }
+   ]
+  },
+  "flavor_rewritten": "Precision instruments for charting unknown waters and celestial navigation.",
+  "adaptation_note": "The source lists two distinct utility checks with DCs 10 and 15. In the browser roguelite, these map to skill check opportunities against those specific difficulties."
+ },
+ {
+  "id": "navigator-s-tools",
+  "name": "Navigator's Tools",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 25,
+   "ability_check": "Wisdom",
+   "weight_lb": 2,
+   "actions": [
+    {
+     "action_type": "plot_course",
+     "dc": 10
+    },
+    {
+     "action_type": "determine_position_stargazing",
+     "dc": 15
+    }
+   ]
+  },
+  "flavor_rewritten": "Precision instruments for charting unknown waters and fixing one's place among the stars.",
+  "adaptation_note": "Source specifies DC 10 for plotting a course and DC 15 for determining position via stargazing. Both use Wisdom checks."
+ },
+ {
+  "id": "net",
+  "name": "Net",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight_lbs": 3,
+   "cost_gp": 1
+  },
+  "flavor_rewritten": "A heavy mesh designed to entangle foes.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "object",
+  "name": "Object",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "definition_type": "nonliving_distinct_thing",
+   "composite_rule": "buildings_comprise_multiple_objects"
+  },
+  "flavor_rewritten": "Inanimate entities stand apart as singular units. Structures may contain several such items within their bounds.",
+  "adaptation_note": "Source defines 'Object' as a nonliving, distinct thing and notes that composite things like buildings comprise more than one object."
+ },
+ {
+  "id": "object-armor-class",
+  "name": "Object Armor Class",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "substance_ac_table": [
+    {
+     "threshold": 11,
+     "materials": [
+      "Cloth",
+      "paper",
+      "rope"
+     ]
+    },
+    {
+     "threshold": 13,
+     "materials": [
+      "Crystal",
+      "glass",
+      "ice"
+     ]
+    },
+    {
+     "threshold": 15,
+     "materials": [
+      "Wood"
+     ]
+    },
+    {
+     "threshold": 17,
+     "materials": [
+      "Stone"
+     ]
+    },
+    {
+     "threshold": 19,
+     "materials": [
+      "Iron",
+      "steel"
+     ]
+    },
+    {
+     "threshold": 21,
+     "materials": [
+      "Mithral"
+     ]
+    },
+    {
+     "threshold": 23,
+     "materials": [
+      "Adamantine"
+     ]
+    }
+   ]
+  },
+  "flavor_rewritten": "Inanimate materials possess inherent resilience that determines their ability to withstand physical impacts.",
+  "adaptation_note": "The source lists specific AC values for various material categories. In a browser roguelite, this likely maps to base defense stats or damage reduction thresholds for environmental hazards or construct enemies."
+ },
+ {
+  "id": "object-hit-points",
+  "name": "Object Hit Points",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "size_categories": [
+    {
+     "label": "Tiny",
+     "examples": [
+      "bottle",
+      "lock"
+     ]
+    },
+    {
+     "label": "Small",
+     "examples": [
+      "chest",
+      "lute"
+     ]
+    },
+    {
+     "label": "Medium",
+     "examples": [
+      "barrel",
+      "chandelier"
+     ]
+    },
+    {
+     "label": "Large",
+     "examples": [
+      "cart",
+      "dining table"
+     ]
+    }
+   ],
+   "fragile_hp_scale": [
+    {
+     "level_threshold": 1,
+     "value": "2"
+    },
+    {
+     "level_threshold": 2,
+     "value": "3"
+    },
+    {
+     "level_threshold": 3,
+     "value": "4"
+    },
+    {
+     "level_threshold": 4,
+     "value": "5"
+    }
+   ],
+   "resilient_hp_scale": [
+    {
+     "level_threshold": 1,
+     "value": "5"
+    },
+    {
+     "level_threshold": 2,
+     "value": "10"
+    },
+    {
+     "level_threshold": 3,
+     "value": "18"
+    },
+    {
+     "level_threshold": 4,
+     "value": "27"
+    }
+   ],
+   "damage_dice_by_size_fragile": [
+    {
+     "size_category": "Tiny",
+     "dice": "1d4"
+    },
+    {
+     "size_category": "Small",
+     "dice": "1d6"
+    },
+    {
+     "size_category": "Medium",
+     "dice": "1d8"
+    },
+    {
+     "size_category": "Large",
+     "dice": "1d10"
+    }
+   ],
+   "damage_dice_by_size_resilient": [
+    {
+     "size_category": "Tiny",
+     "dice": "2d4"
+    },
+    {
+     "size_category": "Small",
+     "dice": "3d6"
+    },
+    {
+     "size_category": "Medium",
+     "dice": "4d8"
+    },
+    {
+     "size_category": "Large",
+     "dice": "5d10"
+    }
+   ]
+  },
+  "flavor_rewritten": "Structural integrity varies by form factor. Delicate items shatter easily while sturdy constructs withstand significant abuse.",
+  "adaptation_note": "The source provides fixed HP values for four size categories (Tiny through Large) differentiated into 'Fragile' and 'Resilient' tiers. The parenthetical dice expressions (e.g., 1d4, 2d4) appear to represent damage potential or hardness associated with each tier/size combination rather than hit point totals themselves. In a browser roguelite, these can be mapped as base HP values scaled by item rarity/type, with the dice values determining damage taken from specific attack types."
+ },
+ {
+  "id": "occupied-space",
+  "name": "Occupied Space",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "definition_criteria": [
+    {
+     "condition_type": "creature_presence"
+    },
+    {
+     "condition_type": "object_fill"
+    }
+   ]
+  },
+  "flavor_rewritten": "A location holds occupancy when inhabited by a living entity or entirely blocked by solid matter.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "oil",
+  "name": "Oil",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight_lbs": 1,
+   "cost_sp": 1
+  },
+  "flavor_rewritten": "A heavy viscous fluid stored in a container. It serves as an accelerant for combustion.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "paired-items",
+  "name": "Paired Items",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "requirement": [
+    {
+     "item_type": "boots",
+     "worn_count_required": 2,
+     "body_slots": [
+      "left_foot",
+      "right_foot"
+     ]
+    },
+    {
+     "item_type": "bracers",
+     "worn_count_required": 2,
+     "body_slots": [
+      "left_arm",
+      "right_arm"
+     ]
+    },
+    {
+     "item_type": "gauntlets",
+     "worn_count_required": 2,
+     "body_slots": [
+      "left_hand",
+      "right_hand"
+     ]
+    },
+    {
+     "item_type": "gloves",
+     "worn_count_required": 2,
+     "body_slots": [
+      "left_hand",
+      "right_hand"
+     ]
+    }
+   ],
+   "enforcement_rule": {
+    "condition": "mismatched_pair_or_single_item",
+    "effect": "no_benefits_applied"
+   }
+  },
+  "flavor_rewritten": "Matching equipment sets require both halves to function. Wearing mismatched pieces nullifies all bonuses.",
+  "adaptation_note": "Source specifies that paired items like boots, bracers, gauntlets, and gloves impart benefits only if both are worn. Mismatching or wearing single items results in zero benefit."
+ },
+ {
+  "id": "paper",
+  "name": "Paper",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight": null,
+   "cost_sp": 2
+  },
+  "flavor_rewritten": "A sheet of plain paper.",
+  "adaptation_note": "Source weight is a dash indicating negligible or undefined mass; represented as null in data."
+ },
+ {
+  "id": "paralyzed",
+  "name": "Paralyzed",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "type": "condition",
+   "effects": [
+    {
+     "effect_type": "incapacitated"
+    },
+    {
+     "effect_type": "speed_modification",
+     "speed_value": "0",
+     "increase_allowed": false
+    },
+    {
+     "effect_type": "saving_throw_override",
+     "save_types": [
+      "strength",
+      "dexterity"
+     ],
+     "result": "auto_fail"
+    },
+    {
+     "effect_type": "attack_roll_modifier_for_targets",
+     "modifier": "advantage"
+    },
+    {
+     "effect_type": "critical_hit_trigger",
+     "trigger_condition": "hit",
+     "range_requirement": "within_5_feet",
+     "outcome": "automatic_critical"
+    }
+   ]
+  },
+  "flavor_rewritten": "Total immobility strips away all agency. Enemies strike with impunity, landing devastating blows at close range.",
+  "adaptation_note": "Source specifies 'Speed is 0'. Source specifies 'within 5 feet' for critical hits."
+ },
+ {
+  "id": "parchment",
+  "name": "Parchment",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight": null,
+   "cost_sp": 1
+  },
+  "flavor_rewritten": "A blank sheet ready for ink.",
+  "adaptation_note": "Weight is listed as dash in source; treated as negligible or zero."
+ },
+ {
+  "id": "passengers",
+  "name": "Passengers",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "capacity_type": "Small and Medium passengers via hammocks",
+   "private_accommodation_multiplier": "one-fifth",
+   "costs": [
+    {
+     "type": "hammock",
+     "currency": "SP",
+     "amount": "5",
+     "duration": "day"
+    },
+    {
+     "type": "small private cabin",
+     "currency": "GP",
+     "amount": "2",
+     "duration": "day"
+    }
+   ]
+  },
+  "flavor_rewritten": "Ships provide sleeping quarters for travelers, with prices fluctuating based on comfort level.",
+  "adaptation_note": "Source specifies costs in SP and GP. Private accommodation capacity is reduced to one-fifth of standard hammock count."
+ },
+ {
+  "id": "perfume",
+  "name": "Perfume",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight": null,
+   "cost_gp": 5
+  },
+  "flavor_rewritten": "A small vial of aromatic essence.",
+  "adaptation_note": "Weight is listed as '—' in source; treated as negligible or non-applicable for this browser roguelite context."
+ },
+ {
+  "id": "personality-traits-by-alignment-table",
+  "name": "Personality Traits by Alignment Table",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "roll_expression": "1d4",
+   "alignment_traits": [
+    {
+     "alignment_type": "Chaotic",
+     "trait_options": [
+      {
+       "roll_value": 1,
+       "trait_name": "Boastful"
+      },
+      {
+       "roll_value": 2,
+       "trait_name": "Impulsive"
+      },
+      {
+       "roll_value": 3,
+       "trait_name": "Rebellious"
+      },
+      {
+       "roll_value": 4,
+       "trait_name": "Self-absorbed"
+      }
+     ]
+    },
+    {
+     "alignment_type": "Good",
+     "trait_options": [
+      {
+       "roll_value": 1,
+       "trait_name": "Compassionate"
+      },
+      {
+       "roll_value": 2,
+       "trait_name": "Helpful"
+      },
+      {
+       "roll_value": 3,
+       "trait_name": "Honest"
+      },
+      {
+       "roll_value": 4,
+       "trait_name": "Kind"
+      }
+     ]
+    },
+    {
+     "alignment_type": "Evil",
+     "trait_options": [
+      {
+       "roll_value": 1,
+       "trait_name": "Dishonest"
+      },
+      {
+       "roll_value": 2,
+       "trait_name": "Vengeful"
+      },
+      {
+       "roll_value": 3,
+       "trait_name": "Cruel"
+      },
+      {
+       "roll_value": 4,
+       "trait_name": "Greedy"
+      }
+     ]
+    },
+    {
+     "alignment_type": "Lawful",
+     "trait_options": [
+      {
+       "roll_value": 1,
+       "trait_name": "Cooperative"
+      },
+      {
+       "roll_value": 2,
+       "trait_name": "Loyal"
+      },
+      {
+       "roll_value": 3,
+       "trait_name": "Judgmental"
+      },
+      {
+       "roll_value": 4,
+       "trait_name": "Methodical"
+      }
+     ]
+    },
+    {
+     "alignment_type": "Neutral",
+     "trait_options": [
+      {
+       "roll_value": 1,
+       "trait_name": "Selfish"
+      },
+      {
+       "roll_value": 2,
+       "trait_name": "Disinterested"
+      },
+      {
+       "roll_value": 3,
+       "trait_name": "Laconic"
+      },
+      {
+       "roll_value": 4,
+       "trait_name": "Pragmatic"
+      }
+     ]
+    }
+   ]
+  },
+  "flavor_rewritten": "Your character's core nature manifests through distinct behavioral quirks determined by their moral compass and societal outlook.",
+  "adaptation_note": "The source uses a table where rolling 1d4 selects one of four traits for a given alignment category. This structure maps directly to selecting a random trait from the relevant alignment array."
+ },
+ {
+  "id": "poison-basic",
+  "name": "Poison, Basic",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 100,
+   "weight_symbol": "—"
+  },
+  "flavor_rewritten": "A vial of toxic substance ready to coat a blade or tip an arrow.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "poisoners-kit",
+  "name": "Poisoner's Kit",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 50,
+   "ability_score": "intelligence",
+   "weight_lb": 2,
+   "utility_checks": [
+    {
+     "action": "detect_poisoned_object",
+     "difficulty_class": 10
+    }
+   ],
+   "crafting_recipe": "basic poison"
+  },
+  "flavor_rewritten": "A specialized set of tools for handling toxic substances. Allows identification of contaminated items and creation of lethal compounds.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "pole",
+  "name": "Pole",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight": "7 lb.",
+   "cost": "5 CP"
+  },
+  "flavor_rewritten": "A simple shaft used for reaching or probing.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "pot-iron",
+  "name": "Pot, Iron",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight_lb": 10,
+   "cost_gp": 2
+  },
+  "flavor_rewritten": "A sturdy vessel forged from dark metal, designed for simmering broths and boiling water over an open flame.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "potion-of-healing",
+  "name": "Potion of Healing",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight": "1/2 lb.",
+   "cost_gp": 50
+  },
+  "flavor_rewritten": "A crimson vial containing restorative draughts capable of knitting flesh and mending wounds.",
+  "adaptation_note": "The source text provides weight (1/2 lb.) and cost (50 GP) but lacks healing value details typically associated with this item in other editions. The '5' from the cost is captured as integer 50."
+ },
+ {
+  "id": "pouch",
+  "name": "Pouch",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight_lb": 1,
+   "cost_sp": 5
+  },
+  "flavor_rewritten": "A small container for holding personal items.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "prerequisites-for-the-scribe",
+  "name": "Prerequisites for the Scribe",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "skill_proficiency": [
+    "Arcana"
+   ],
+   "tool_proficiency": [
+    "Calligrapher's Tools"
+   ],
+   "spell_requirement": "prepared_on_each_day_of_inscription",
+   "material_component_handling": "consumed_only_when_complete_if_consumed_by_spell",
+   "save_dc_source": "caster_spell_save_dc",
+   "attack_bonus_source": "caster_spell_attack_bonus"
+  },
+  "flavor_rewritten": "Inscribe magic requires mastery of arcane knowledge or calligraphy and a ready spell. The resulting scroll channels the creator's own power.",
+  "adaptation_note": "Source text lists no numerical values, dice expressions, or upgrade thresholds to structure. The mechanic relies on boolean prerequisites (proficiencies, prepared status) and attribute references (DC/bonus)."
+ },
+ {
+  "id": "priests-pack",
+  "name": "Priest's Pack",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight": "29 lb.",
+   "cost_gp": 33
+  },
+  "flavor_rewritten": "A sturdy pack prepared for religious duties and travel needs.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "prismatic-layers",
+  "name": "Prismatic Layers",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "type": "layered_defense",
+   "layers": [
+    {
+     "index": 1,
+     "color": "Red",
+     "damage_type": "Fire",
+     "save_effect_on_fail": {
+      "dice": "12d6"
+     },
+     "save_effect_on_success": {
+      "modifier": "half_damage"
+     },
+     "interaction_restrictions": [
+      {
+       "effect": "block_ranged_attacks",
+       "scope": "nonmagical"
+      }
+     ],
+     "destruction_conditions": [
+      {
+       "condition_type": "damage_received",
+       "damage_type": "Cold",
+       "threshold": 25
+      }
+     ]
+    },
+    {
+     "index": 2,
+     "color": "Orange",
+     "damage_type": "Acid",
+     "save_effect_on_fail": {
+      "dice": "12d6"
+     },
+     "save_effect_on_success": {
+      "modifier": "half_damage"
+     },
+     "interaction_restrictions": [
+      {
+       "effect": "block_ranged_attacks",
+       "scope": "magical"
+      }
+     ],
+     "destruction_conditions": [
+      {
+       "condition_type": "spell_or_effect",
+       "description": "strong wind such as Gust of Wind"
+      }
+     ]
+    },
+    {
+     "index": 3,
+     "color": "Yellow",
+     "damage_type": "Lightning",
+     "save_effect_on_fail": {
+      "dice": "12d6"
+     },
+     "save_effect_on_success": {
+      "modifier": "half_damage"
+     },
+     "interaction_restrictions": [],
+     "destruction_conditions": [
+      {
+       "condition_type": "damage_received",
+       "damage_type": "Force",
+       "threshold": 60
+      }
+     ]
+    },
+    {
+     "index": 4,
+     "color": "Green",
+     "damage_type": "Poison",
+     "save_effect_on_fail": {
+      "dice": "12d6"
+     },
+     "save_effect_on_success": {
+      "modifier": "half_damage"
+     },
+     "interaction_restrictions": [],
+     "destruction_conditions": [
+      {
+       "condition_type": "spell",
+       "description": "Passwall or spell of equal or greater level that opens portal on solid surface"
+      }
+     ]
+    },
+    {
+     "index": 5,
+     "color": "Blue",
+     "damage_type": "Cold",
+     "save_effect_on_fail": {
+      "dice": "12d6"
+     },
+     "save_effect_on_success": {
+      "modifier": "half_damage"
+     },
+     "interaction_restrictions": [],
+     "destruction_conditions": [
+      {
+       "condition_type": "damage_received",
+       "damage_type": "Fire",
+       "threshold": 25
+      }
+     ]
+    },
+    {
+     "index": 6,
+     "color": "Indigo",
+     "damage_type": null,
+     "save_effect_on_fail": {
+      "conditions_applied": [
+       "Restrained"
+      ],
+      "ongoing_save": {
+       "timing": "end_of_turn",
+       "ability_check": "Constitution",
+       "success_threshold_count": 3,
+       "failure_threshold_count": 3,
+       "success_outcome": "remove_condition_Restrained",
+       "failure_outcome": "apply_condition_Petrified_until_freed_by_Greater_Restoration"
+      }
+     },
+     "save_effect_on_success": null,
+     "interaction_restrictions": [
+      {
+       "effect": "block_spells"
+      }
+     ],
+     "destruction_conditions": [
+      {
+       "condition_type": "spell_light_source",
+       "spell_name": "Daylight"
+      }
+     ]
+    },
+    {
+     "index": 7,
+     "color": "Violet",
+     "damage_type": null,
+     "save_effect_on_fail": {
+      "conditions_applied": [
+       "Blinded"
+      ],
+      "ongoing_save": {
+       "timing": "start_of_next_turn_owner",
+       "ability_check": "Wisdom",
+       "success_outcome": "remove_condition_Blinded",
+       "failure_outcome": "remove_condition_Blinded_and_teleport_to_another_plane_DM_choice"
+      }
+     },
+     "save_effect_on_success": null,
+     "interaction_restrictions": [],
+     "destruction_conditions": [
+      {
+       "condition_type": "spell",
+       "spell_name": "Dispel Magic"
+      }
+     ]
+    }
+   ]
+  },
+  "flavor_rewritten": "Seven shimmering bands of energy form an impenetrable barrier, each hue responding differently to intrusion and magic.",
+  "adaptation_note": "Source specifies exact dice (12d6) for damage layers. Browser game will likely scale this or use fixed high values; kept as '12d6' string in data per rules. Indigo/Violet layers involve complex multi-turn saving throw tracking and planar teleportation; these mechanics are represented structurally but may require specific engine support or DM fiat for the 'DM's choice' aspect."
+ },
+ {
+  "id": "prismatic-rays",
+  "name": "Prismatic Rays",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "type": "ray_attack",
+   "dice_expression": "1d8",
+   "effects": [
+    {
+     "roll_value": 1,
+     "element": "fire",
+     "failed_save_damage": "12d6",
+     "successful_save_damage": "half"
+    },
+    {
+     "roll_value": 2,
+     "element": "acid",
+     "failed_save_damage": "12d6",
+     "successful_save_damage": "half"
+    },
+    {
+     "roll_value": 3,
+     "element": "lightning",
+     "failed_save_damage": "12d6",
+     "successful_save_damage": "half"
+    },
+    {
+     "roll_value": 4,
+     "element": "poison",
+     "failed_save_damage": "12d6",
+     "successful_save_damage": "half"
+    },
+    {
+     "roll_value": 5,
+     "element": "cold",
+     "failed_save_damage": "12d6",
+     "successful_save_damage": "half"
+    },
+    {
+     "roll_value": 6,
+     "condition_on_fail": "restrained",
+     "save_type": "constitution",
+     "save_timing": "end_of_turn",
+     "success_count_to_end": 3,
+     "failure_count_to_petrify": 3,
+     "petrified_condition": true,
+     "freedom_effect": "greater_restoration"
+    },
+    {
+     "roll_value": 7,
+     "condition_on_start": "blinded",
+     "save_type": "wisdom",
+     "save_timing": "start_of_next_turn",
+     "on_success": {
+      "effect": "condition_ends"
+     },
+     "on_failure": {
+      "effect": "teleport_to_other_plane",
+      "plane_choice": "dm"
+     }
+    },
+    {
+     "roll_value": 8,
+     "is_special": true,
+     "rays_struck": 2,
+     "reroll_rule": "reroll_eights"
+    }
+   ]
+  },
+  "flavor_rewritten": "A beam of multicolored light strikes the target, unleashing elemental fury or magical affliction depending on its hue.",
+  "adaptation_note": "The source specifies '12d6' damage for rays one through five. The special case (roll 8) triggers two separate ray attacks, requiring a second roll that excludes result eight. Condition tracking for roll six requires persistent state management for success/failure counts across multiple turns."
+ },
+ {
+  "id": "quiver",
+  "name": "Quiver",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight_lbs": 1,
+   "cost_gp": 1
+  },
+  "flavor_rewritten": "A container designed to hold ammunition securely against the body.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "ram-portable",
+  "name": "Ram, Portable",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight_lb": 35,
+   "cost_gp": 4
+  },
+  "flavor_rewritten": "A heavy wooden beam reinforced with metal tips for battering down barriers.",
+  "adaptation_note": "The source provides only weight and cost. Standard ram mechanics (attack roll bonus, damage on hit, break DC) are omitted from the provided text snippet."
+ },
+ {
+  "id": "rare-languages-table",
+  "name": "Rare Languages Table",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "type": "table",
+   "headers": [
+    "Language",
+    "Origin"
+   ],
+   "rows": [
+    {
+     "language": "Abyssal",
+     "origin": "Demons of the Abyss"
+    },
+    {
+     "language": "Celestial",
+     "origin": "Celestials"
+    },
+    {
+     "language": "Deep Speech",
+     "origin": "Aberrations"
+    },
+    {
+     "language": "Druidic",
+     "origin": "Druidic circles"
+    },
+    {
+     "language": "Infernal",
+     "origin": "Devils of the Nine Hells"
+    },
+    {
+     "language": "Primordial",
+     "origin": "Elementals"
+    },
+    {
+     "language": "Sylvan",
+     "origin": "The Feywild"
+    },
+    {
+     "language": "Thieves' Cant",
+     "origin": "Various criminal guilds"
+    },
+    {
+     "language": "Undercommon",
+     "origin": "The Underdark"
+    }
+   ],
+   "dialects": {
+    "parent_language": "Primordial",
+    "included_dialects": [
+     "Aquan",
+     "Auran",
+     "Ignan",
+     "Terran"
+    ]
+   },
+   "communication_rule": {
+    "condition": "knowing_one_dialect_allows_communication_with_different_dialect",
+    "scope": "creatures_that_know_their_respective_dialect"
+   }
+  },
+  "flavor_rewritten": "Ancient tongues bridge divides between hostile realms and hidden societies. Mastery of these esoteric dialects allows communication across alien boundaries where common speech fails.",
+  "adaptation_note": "The source specifies that Primordial includes four specific dialects (Aquan, Auran, Ignan, Terran) and notes a mechanical rule: creatures knowing one dialect can communicate with those knowing another. This cross-dialect compatibility is preserved in the data structure."
+ },
+ {
+  "id": "rations",
+  "name": "Rations",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight_lb": 2,
+   "cost_sp": 5
+  },
+  "flavor_rewritten": "Prepared meals for sustenance on the road.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "raw-materials",
+  "name": "Raw Materials",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "crafting_cost_ratio": "half",
+   "rounding_rule": "down",
+   "example_item_name": "Plate Armor",
+   "example_sell_price": "1,500 GP",
+   "example_material_cost": "750 GP"
+  },
+  "flavor_rewritten": "Crafters require base components valued at half the final product's price. Availability depends on local resources.",
+  "adaptation_note": "The source specifies that crafting requires raw materials worth half the purchase cost (rounded down). Example given: Plate Armor sells for 1,500 GP and needs 750 GP of raw materials."
+ },
+ {
+  "id": "robe",
+  "name": "Robe",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight": "4 lb.",
+   "cost_gp": 1
+  },
+  "flavor_rewritten": "A simple garment worn by practitioners of arcane arts. It offers minimal protection but signifies the wearer's scholarly status.",
+  "adaptation_note": "The source text provides only weight and cost in gold pieces. No other mechanical properties (such as armor class bonus or special resistances) are listed for this basic gear entry."
+ },
+ {
+  "id": "rope",
+  "name": "Rope",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight": "5 lb.",
+   "cost": "1 GP"
+  },
+  "flavor_rewritten": "A sturdy length of braided fiber used for climbing and securing loads.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "rules-glossary",
+  "name": "Rules Glossary",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "type": "reference",
+   "location": "appendix_c",
+   "purpose": "definition_lookup"
+  },
+  "flavor_rewritten": "Consult the appendix to resolve ambiguous terminology before proceeding.",
+  "adaptation_note": "This entry is purely navigational text defining where to find definitions. It contains no mechanics, dice, or stats to convert."
+ },
+ {
+  "id": "sack",
+  "name": "Sack",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight": "1/2 lb.",
+   "cost": "1 CP"
+  },
+  "flavor_rewritten": "A simple container for holding supplies.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "saddles",
+  "name": "Saddles",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "components": [
+    "bit",
+    "bridle",
+    "reins"
+   ],
+   "variants": [
+    {
+     "type": "Military Saddle",
+     "effect": {
+      "condition": "remaining mounted",
+      "benefit": "Advantage on ability checks"
+     }
+    },
+    {
+     "type": "Exotic Saddle",
+     "requirement": "required for riding aquatic or flying mounts"
+    }
+   ]
+  },
+  "flavor_rewritten": "Standard saddles include essential tack like bits and bridles. Specialized designs offer tactical advantages or enable travel across unique terrains.",
+  "adaptation_note": "Source lists specific components (bit, bridle, reins) which are included in data. Military Saddle grants Advantage on checks to remain mounted. Exotic Saddle is required for aquatic/flying mounts."
+ },
+ {
+  "id": "scholars-pack",
+  "name": "Scholar's Pack",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight_lb": 22,
+   "cost_gp": 40
+  },
+  "flavor_rewritten": "A sturdy container designed for carrying academic materials and scholarly tools.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "scribe-scroll",
+  "name": "Scribe Scroll",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "time_requirement": "8 hours per day of inscription",
+   "consecutive_days_required": false,
+   "cost_basis": "Spell level"
+  },
+  "flavor_rewritten": "Inscribing a magical scroll demands focused labor measured in daily sessions rather than continuous effort.",
+  "adaptation_note": "The source specifies that scribing time depends on the spell level via a table not provided here. Each day of work requires exactly 8 hours. Days do not need to be consecutive."
+ },
+ {
+  "id": "scribing-spell-scrolls",
+  "name": "Scribing Spell Scrolls",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "action_type": "crafting",
+   "prerequisite_class": "spellcaster",
+   "target_item": "Spell Scroll",
+   "rules_reference": "see below"
+  },
+  "flavor_rewritten": "A magic user transfers their arcane knowledge onto parchment, binding a prepared incantation into a portable format for later use.",
+  "adaptation_note": "The source text references 'the rules below' which contain specific numerical requirements (time, cost, checks) not included in this excerpt. Those numbers are absent here."
+ },
+ {
+  "id": "scroll-scribing-time-and-cost",
+  "name": "Scroll Scribing Time and Cost",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "work_hours_per_day": 8,
+   "days_consecutive_required": false
+  },
+  "flavor_rewritten": "Inscribing magic onto parchment demands significant resources. The effort scales with the power of the spell being captured.",
+  "adaptation_note": "The actual time duration in days and monetary cost are determined by a separate Spell Scroll Costs table based on spell level, which is not included in this specific source text excerpt."
+ },
+ {
+  "id": "selling-equipment",
+  "name": "Selling Equipment",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "sell_value_ratio_equipment": "half",
+   "trade_goods_full_value": true,
+   "valuables_full_value": true,
+   "magic_item_prices_source": "Dungeon Masters Guide"
+  },
+  "flavor_rewritten": "Gear returns only a fraction of its purchase price upon resale. Trade goods and valuables maintain their complete market worth.",
+  "adaptation_note": "Equipment sells for half its cost. Trade goods and valuables retain full value. Magic item prices are found in the Dungeon Master’s Guide."
+ },
+ {
+  "id": "services",
+  "name": "Services",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {},
+  "flavor_rewritten": "Adventurers may pay for various expenses and support while traveling.",
+  "adaptation_note": "The source text defines this section as outlining services and other expenses that adventurers might spend money on. No specific numerical values, dice, or mechanics are provided in the excerpt."
+ },
+ {
+  "id": "shield",
+  "name": "Shield",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 10
+  },
+  "flavor_rewritten": "A sturdy barrier raised against incoming blows.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "shields",
+  "name": "Shields",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {},
+  "flavor_rewritten": "A sturdy barrier held against incoming blows.",
+  "adaptation_note": "Source text contains only the title 'SHIELDS' with no mechanical details, dice expressions, ranges, durations, costs, save types, conditions, or trigger timing."
+ },
+ {
+  "id": "ship-repair",
+  "name": "Ship Repair",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "base_cost_per_hp": "20 GP",
+   "base_time_per_hp_days": "1 day",
+   "location_bonus": {
+    "condition": "abundant supplies and skilled labor (e.g., city shipyard)",
+    "cost_multiplier": "halved",
+    "time_multiplier": "halved"
+   }
+  },
+  "flavor_rewritten": "Restore your vessel's integrity at port. A well-stocked harbor cuts the price and wait time in half.",
+  "adaptation_note": "The source specifies repairing '1 Hit Point of damage' takes '1 day' and costs '20 GP'. Abundant locations halve both cost and time."
+ },
+ {
+  "id": "short-rest",
+  "name": "Short Rest",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "duration_hours": 1,
+   "prerequisites": {
+    "min_hit_points": 1
+   },
+   "benefits": [
+    {
+     "type": "hit_point_dice_spend",
+     "mechanic": {
+      "action": "spend_one_or_more_hp_dice",
+      "resolution": "roll_spent_die_plus_constitution_modifier",
+      "regain_formula": "total_of_rolls",
+      "floor_value": 1,
+      "sequential_spending_allowed": true
+     }
+    },
+    {
+     "type": "feature_recharge",
+     "trigger": "on_rest_completion",
+     "scope": "features_specifying_short_rest_recharge"
+    }
+   ],
+   "interruptions": [
+    "rolling_initiative",
+    "casting_spell_non_cantrip",
+    "taking_damage"
+   ]
+  },
+  "flavor_rewritten": "A brief pause in activity allows for recovery and minor recuperation. This period is easily broken by conflict or harm.",
+  "adaptation_note": "The source specifies 'Hit Point Dice' which are a specific resource class distinct from current HP. In the browser roguelite context, this likely maps to a resource pool (like stamina or mana) that regenerates on rest. The 'Constitution modifier' adds complexity; if the browser game uses fixed regeneration rates per level rather than stat-based modifiers, note that here. The interruption list is critical for pacing: any combat action or damage event should immediately terminate the rest state."
+ },
+ {
+  "id": "shovel",
+  "name": "Shovel",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight_lb": 5,
+   "cost_gp": 2
+  },
+  "flavor_rewritten": "A sturdy digging tool designed for moving earth and debris.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "signal-whistle",
+  "name": "Signal Whistle",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight": null,
+   "cost_cp": 5
+  },
+  "flavor_rewritten": "A simple whistle used to send signals.",
+  "adaptation_note": "Weight is listed as dash in source, representing unknown or negligible weight."
+ },
+ {
+  "id": "speed-mechanics",
+  "name": "Speed Mechanics",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "wind_effect": {
+    "condition": "strong_wind",
+    "multiplier": 0.5,
+    "description": "half speed"
+   },
+   "calm_water_movement": {
+    "sail_possible": false,
+    "row_required": true
+   },
+   "current_interaction": {
+    "downstream_mode": "additive",
+    "base_current_speed_mph": 3,
+    "upstream_modes": [
+     "not_rowable_against_significant_current",
+     "pulled_by_draft_animals_on_shores"
+    ]
+   },
+   "rowboat_properties": {
+    "carriable": true,
+    "weight_lbs": 100
+   }
+  },
+  "flavor_rewritten": "Wind dictates vessel velocity while still waters demand manual labor for propulsion. Currents may assist downstream travel or require beast-drawn hauling when moving against the flow.",
+  "adaptation_note": "Source specifies 'half speed' multiplier (0.5), base current speed of 3 miles per hour, and Rowboat weight of 100 pounds. Downstream movement adds current speed to vehicle speed. Upstream movement requires draft animals on shores as rowing is not possible against significant currents."
+ },
+ {
+  "id": "spell-scroll-cantrip",
+  "name": "Spell Scroll (Cantrip)",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_value": 30,
+   "cost_currency": "GP"
+  },
+  "flavor_rewritten": "A fragile parchment inscribed with a minor arcane formula. It dissipates after use.",
+  "adaptation_note": "Source lists cost as '30 GP'. Weight is listed as '—', indicating no weight penalty or negligible mass."
+ },
+ {
+  "id": "spell-scroll-costs-table",
+  "name": "Spell Scroll Costs Table",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "type": "table",
+   "columns": [
+    "spell_level",
+    "time_cost_days",
+    "cost_gp"
+   ],
+   "rows": [
+    {
+     "spell_level": "cantrip",
+     "time_cost_days": 1,
+     "cost_gp": 15
+    },
+    {
+     "spell_level": 1,
+     "time_cost_days": 1,
+     "cost_gp": 25
+    },
+    {
+     "spell_level": 2,
+     "time_cost_days": 3,
+     "cost_gp": 100
+    },
+    {
+     "spell_level": 3,
+     "time_cost_days": 5,
+     "cost_gp": 150
+    },
+    {
+     "spell_level": 4,
+     "time_cost_days": 10,
+     "cost_gp": 1000
+    },
+    {
+     "spell_level": 5,
+     "time_cost_days": 25,
+     "cost_gp": 1500
+    },
+    {
+     "spell_level": 6,
+     "time_cost_days": 40,
+     "cost_gp": 10000
+    },
+    {
+     "spell_level": 7,
+     "time_cost_days": 50,
+     "cost_gp": 12500
+    },
+    {
+     "spell_level": 8,
+     "time_cost_days": 60,
+     "cost_gp": 15000
+    },
+    {
+     "spell_level": 9,
+     "time_cost_days": 120,
+     "cost_gp": 50000
+    }
+   ]
+  },
+  "flavor_rewritten": "Acquiring a scroll requires significant preparation time and gold.",
+  "adaptation_note": "Source lists specific day counts for crafting time based on spell level. Browser roguelites typically abstract this into fixed costs or instant acquisition with higher price."
+ },
+ {
+  "id": "spellcasting-focus",
+  "name": "Spellcasting Focus",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "type": "Holy Symbol"
+  },
+  "flavor_rewritten": "A sacred emblem channeling divine power.",
+  "adaptation_note": "The source text defines this item as a Holy Symbol usable for Paladin spellcasting. No numerical values, dice expressions, ranges, durations, costs, save types, conditions, or scale tables are present in the source text."
+ },
+ {
+  "id": "spellcasting-services-table",
+  "name": "Spellcasting Services Table",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "service_type": "purchased_spell_slots_or_effects",
+   "tiers": [
+    {
+     "level_range": "cantrip",
+     "availability_locations": [
+      "village",
+      "town",
+      "city"
+     ],
+     "cost_gp": 30
+    },
+    {
+     "level_range": "1",
+     "availability_locations": [
+      "village",
+      "town",
+      "city"
+     ],
+     "cost_gp": 50
+    },
+    {
+     "level_range": "2",
+     "availability_locations": [
+      "village",
+      "town",
+      "city"
+     ],
+     "cost_gp": 200
+    },
+    {
+     "level_range": "3",
+     "availability_locations": [
+      "town",
+      "city"
+     ],
+     "cost_gp": 300
+    },
+    {
+     "level_range": "4-5",
+     "availability_locations": [
+      "town",
+      "city"
+     ],
+     "cost_gp": 2000
+    },
+    {
+     "level_range": "6-8",
+     "availability_locations": [
+      "city"
+     ],
+     "cost_gp": 20000
+    },
+    {
+     "level_range": "9",
+     "availability_locations": [
+      "city"
+     ],
+     "cost_gp": 100000
+    }
+   ]
+  },
+  "flavor_rewritten": "Hireling mages offer their arcane arts for coin. The price rises steeply with the power of the spell sought.",
+  "adaptation_note": "Source uses GP currency and specific settlement tiers (village/town/city) to gate availability by spell level ranges. In-browser roguelite, this maps to shop inventory filtering where higher-level items appear only in advanced zones or cost significant gold."
+ },
+ {
+  "id": "spikes-iron",
+  "name": "Spikes, Iron",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight": "5 lb.",
+   "cost_gp": 1
+  },
+  "flavor_rewritten": "Rusted iron points designed to impale and hinder movement across rough terrain.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "spyglass",
+  "name": "Spyglass",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight": "1 lb.",
+   "cost": "1,000 GP"
+  },
+  "flavor_rewritten": "A polished lens tube that magnifies distant sights.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "standard-languages-table",
+  "name": "Standard Languages Table",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "type": "table",
+   "headers": [
+    "1d12",
+    "Language",
+    "Origin"
+   ],
+   "entries": [
+    {
+     "roll_range": [
+      1,
+      1
+     ],
+     "language": "Common Sign Language",
+     "origin": "Sigil"
+    },
+    {
+     "roll_range": [
+      2,
+      2
+     ],
+     "language": "Draconic",
+     "origin": "Dragons"
+    },
+    {
+     "roll_range": [
+      3,
+      4
+     ],
+     "language": "Dwarvish",
+     "origin": "Dwarves"
+    },
+    {
+     "roll_range": [
+      5,
+      6
+     ],
+     "language": "Elvish",
+     "origin": "Elves"
+    },
+    {
+     "roll_range": [
+      7,
+      7
+     ],
+     "language": "Giant",
+     "origin": "Giants"
+    },
+    {
+     "roll_range": [
+      8,
+      8
+     ],
+     "language": "Gnomish",
+     "origin": "Gnomes"
+    },
+    {
+     "roll_range": [
+      9,
+      9
+     ],
+     "language": "Goblin",
+     "origin": "Goblins"
+    },
+    {
+     "roll_range": [
+      10,
+      11
+     ],
+     "language": "Halfling",
+     "origin": "Halflings"
+    },
+    {
+     "roll_range": [
+      12,
+      12
+     ],
+     "language": "Orc",
+     "origin": "Orcs"
+    }
+   ]
+  },
+  "flavor_rewritten": "A chart mapping twelve distinct tongues to their native peoples across the multiverse.",
+  "adaptation_note": "The roll range '1' corresponds to 'Common Sign Language', while ranges like 'three–four' map to single language entries. The header specifies a d12 result."
+ },
+ {
+  "id": "star-map",
+  "name": "Star Map",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "level": "3",
+   "item_type": "Tiny object",
+   "function": [
+    {
+     "type": "spellcasting_focus",
+     "class": "Druid"
+    }
+   ],
+   "form_determination": "table_or_choice",
+   "passive_effects": [
+    {
+     "condition": "holding_map",
+     "prepared_spells": [
+      "Guidance",
+      "Guiding Bolt"
+     ]
+    }
+   ],
+   "free_casting": {
+    "spell": "Guiding Bolt",
+    "cost_mechanic": "uses_per_wisdom_modifier",
+    "minimum_uses": "1",
+    "recovery": "Long Rest"
+   },
+   "replacement": {
+    "trigger": "lost_item",
+    "action": "ceremony",
+    "duration": "1 hour",
+    "timing_constraint": "Short or Long Rest",
+    "side_effect": "destroys_previous_map"
+   }
+  },
+  "flavor_rewritten": "A celestial chart forged from heavenly study, serving as both focus and guide for druidic magic. Its form reflects the stars above, offering aid and direction to those who hold it.",
+  "adaptation_note": "The 'number of times equal to your Wisdom modifier' is stored as a string in minimum_uses/maximum logic would require dynamic calculation based on character stats at runtime; here represented as uses_per_wisdom_modifier with minimum_uses: '1'. The duration '1-hour' is kept as digit-bearing phrase in adaptation note if strict structural representation of time units isn't supported by target engine's action system, but included directly in data.duration. Source specifies 'Wisdom modifier (minimum of once)' - this implies a variable cost per level/stat, not a fixed number."
+ },
+ {
+  "id": "tack-harness-and-drawn-vehicles",
+  "name": "TACK, HARNESS, AND DRAWN VEHICLES",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "items": [
+    {
+     "item_name": "Carriage",
+     "weight_lb": 600,
+     "cost_gp": 100
+    },
+    {
+     "item_name": "Cart",
+     "weight_lb": 200,
+     "cost_gp": 15
+    },
+    {
+     "item_name": "Chariot",
+     "weight_lb": 100,
+     "cost_gp": 250
+    },
+    {
+     "item_name": "Feed per day",
+     "weight_lb": 10,
+     "cost_cp": 5
+    },
+    {
+     "item_name": "Saddle Exotic",
+     "weight_lb": 40,
+     "cost_gp": 60
+    },
+    {
+     "item_name": "Saddle Military",
+     "weight_lb": 30,
+     "cost_gp": 20
+    },
+    {
+     "item_name": "Saddle Riding",
+     "weight_lb": 25,
+     "cost_gp": 10
+    },
+    {
+     "item_name": "Sled",
+     "weight_lb": 300,
+     "cost_gp": 20
+    },
+    {
+     "item_name": "Stabling per day",
+     "weight_lb": null,
+     "cost_sp": 5
+    },
+    {
+     "item_name": "Wagon",
+     "weight_lb": 400,
+     "cost_gp": 35
+    }
+   ]
+  },
+  "flavor_rewritten": "Essential equipment for transport and riding animals. Includes various carts, carriages, saddles, and daily upkeep supplies.",
+  "adaptation_note": "Source lists multiple distinct items with weight in lb and cost in GP/CP/SP. 'Feed per day' and 'Stabling per day' are recurring costs rather than one-time purchases."
+ },
+ {
+  "id": "teleportation-outcome",
+  "name": "Teleportation Outcome",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "table_name": "Teleportation Outcome",
+   "familiarity_levels": [
+    {
+     "level": "Permanent circle",
+     "mishap_range": null,
+     "similar_area_range": null,
+     "off_target_range": null,
+     "on_target_range": "01-00"
+    },
+    {
+     "level": "Linked object",
+     "mishap_range": null,
+     "similar_area_range": null,
+     "off_target_range": null,
+     "on_target_range": "01-00"
+    },
+    {
+     "level": "Very familiar",
+     "mishap_range": "01-05",
+     "similar_area_range": "06-13",
+     "off_target_range": "14-24",
+     "on_target_range": "25-00"
+    },
+    {
+     "level": "Seen casually",
+     "mishap_range": "01-33",
+     "similar_area_range": "34-43",
+     "off_target_range": "44-53",
+     "on_target_range": "54-00"
+    },
+    {
+     "level": "Viewed once or described",
+     "mishap_range": "01-43",
+     "similar_area_range": "44-53",
+     "off_target_range": "54-73",
+     "on_target_range": "74-00"
+    },
+    {
+     "level": "False destination",
+     "mishap_range": "01-50",
+     "similar_area_range": "51-00",
+     "off_target_range": null,
+     "on_target_range": null
+    }
+   ],
+   "chapter_number": "7",
+   "page_number": "231"
+  },
+  "flavor_rewritten": "The spell's success depends entirely on how well the caster knows the destination. Misjudgment can send travelers astray or into dangerous mishaps.",
+  "adaptation_note": "Source text includes Chapter 7 and page 231 markers which are preserved in data."
+ },
+ {
+  "id": "tent",
+  "name": "Tent",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight": "20 lb.",
+   "cost": "2 GP"
+  },
+  "flavor_rewritten": "Portable shelter designed for temporary rest and protection from the elements during expeditions.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "thieves-tools",
+  "name": "Thieves' Tools",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 25,
+   "ability_score": "Dexterity",
+   "weight_lb": 1,
+   "actions": [
+    {
+     "type": "pick_lock",
+     "dc": 15
+    },
+    {
+     "type": "disarm_trap",
+     "dc": 15
+    }
+   ]
+  },
+  "flavor_rewritten": "Specialized implements for bypassing security measures.",
+  "adaptation_note": "Source specifies DC 15 for both picking locks and disarming traps."
+ },
+ {
+  "id": "time",
+  "name": "Time",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "hours_per_day": 8,
+   "cost_divisor": 10,
+   "rounding_rule": "up_to_nearest_day",
+   "consecutive_days_required": false,
+   "default_assistants_allowed": 1,
+   "example_item": "Heavy Crossbow",
+   "example_cost_gp": 50,
+   "example_days_needed": 5
+  },
+  "flavor_rewritten": "Crafting demands focused labor over several days. Additional hands may speed the process if permitted.",
+  "adaptation_note": "Source specifies dividing GP cost by ten to get days, rounding up. Example: Heavy Crossbow costs fifty GP and takes five days. Default assistant limit is one character."
+ },
+ {
+  "id": "time-and-cost",
+  "name": "Time and Cost",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "base_time_hours_per_day": 8,
+   "days_consecutive_required": false,
+   "cost_basis": "spell_level_table"
+  },
+  "flavor_rewritten": "Inscription demands focused labor measured in daily sessions. The required duration scales with the complexity of the magic being bound.",
+  "adaptation_note": "The source specifies that scribing takes time and money based on spell level per the Spell Scroll Costs table. Each day requires working for 8 hours. Days need not be consecutive."
+ },
+ {
+  "id": "time-to-craft",
+  "name": "Time to Craft",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "work_hours_per_day": 8,
+   "cost_divisor": 10,
+   "rounding_rule": "up",
+   "consecutive_days_required": false,
+   "default_assistants_limit": 1,
+   "dm_override_possible": true,
+   "example_item": "Heavy Crossbow",
+   "example_cost_gp": 50,
+   "example_days_needed": 5
+  },
+  "flavor_rewritten": "The duration of creation depends on the item's value. Efforts may be combined to reduce the total time required.",
+  "adaptation_note": "Source specifies dividing purchase cost in GP by 10 to determine days (working 8 hours a day), rounding fractions up. Example given: Heavy Crossbow costs 50 GP and takes 5 days. Multiple days need not be consecutive. Normally only one other character can assist, but DM might allow more."
+ },
+ {
+  "id": "tinderbox",
+  "name": "Tinderbox",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight": "1 lb.",
+   "cost": "5 SP"
+  },
+  "flavor_rewritten": "A small container holding dry materials and a means to create sparks, essential for starting fires in the wild.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "tools",
+  "name": "Tools",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "description_type": "chapter_section_header",
+   "proficiency_requirement": true,
+   "helper_proficiency_required": true
+  },
+  "flavor_rewritten": "Crafting specific items demands specialized equipment and certified expertise. Allies assisting in production must possess equivalent qualifications.",
+  "adaptation_note": "The source text defines a general rule for tool usage rather than a single stat block. It states that the DM assigns required tools for unlisted items. Proficiency is mandatory for both the primary crafter and any helpers."
+ },
+ {
+  "id": "torch",
+  "name": "Torch",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight": "1 lb.",
+   "cost": "1 CP"
+  },
+  "flavor_rewritten": "A simple wooden stick wrapped in resin-soaked cloth, burning steadily to push back the dark.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "travel-services-table",
+  "name": "Travel Services Table",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "services": [
+    {
+     "service_type": "coach_towns",
+     "description": "Coach ride between towns",
+     "cost_per_unit": "3 CP per mile",
+     "unit": "mile"
+    },
+    {
+     "service_type": "coach_city",
+     "description": "Coach ride within a city",
+     "cost_per_unit": "1 CP per mile",
+     "unit": "mile"
+    },
+    {
+     "service_type": "road_gate_toll",
+     "description": "Road or gate toll",
+     "fixed_cost": "1 CP"
+    },
+    {
+     "service_type": "ship_passage",
+     "description": "Ship's passage",
+     "cost_per_unit": "1 SP per mile",
+     "unit": "mile"
+    }
+   ]
+  },
+  "flavor_rewritten": "Choose your mode of transit and pay the fare. Roads, rivers, and gates all demand their due.",
+  "adaptation_note": "The source uses 'CP' (copper pieces) and 'SP' (silver pieces). In this browser roguelite, these currency codes are preserved in the data structure but may need mapping to the game's internal economy system."
+ },
+ {
+  "id": "travel-services-text",
+  "name": "Travel Services Text",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "category": "service_hire",
+   "provider_type": [
+    "driver",
+    "crew"
+   ],
+   "purpose": "passenger_transport",
+   "cost_basis": {
+    "base_rate_source": "travel_table",
+    "additional_costs": [
+     "tolls",
+     "other_expenses"
+    ]
+   }
+  },
+  "flavor_rewritten": "Hired hands guide your party through the wilds, demanding payment for their labor and passage.",
+  "adaptation_note": "The source references a 'Travel table' for base rates but does not provide specific numeric values within this text entry. Additional costs include tolls and other expenses."
+ },
+ {
+  "id": "trinkets",
+  "name": "Trinkets",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "type": "table",
+   "usage_contexts": [
+    "character_creation",
+    "dm_tool"
+   ],
+   "description": "Tiny trinket, a simple item lightly touched by mystery",
+   "application_methods": [
+    "stock_a_room_in_a_dungeon",
+    "fill_a_creatures_pockets"
+   ]
+  },
+  "flavor_rewritten": "A tiny object bearing traces of the unknown. Use it to populate dungeon chambers or creature inventories.",
+  "adaptation_note": "The source references rolling on 'the Trinkets table' but does not provide the specific entries (e.g., 01 through 20) in this excerpt. The previous rejection cited missing numeric keys like '02', '03', etc., which implies a full table list was expected but absent from the provided source text. Only the general description and usage instructions found in the verbatim source are included here."
+ },
+ {
+  "id": "vial",
+  "name": "Vial",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight": null,
+   "cost_gp": 1
+  },
+  "flavor_rewritten": "A small glass container used for holding liquids.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "water-needs-per-day",
+  "name": "WATER NEEDS PER DAY",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "base_requirement_table": [
+    {
+     "size_category": "Tiny",
+     "volume": "1/4 gallon"
+    },
+    {
+     "size_category": "Small",
+     "volume": "1 gallon"
+    },
+    {
+     "size_category": "Medium",
+     "volume": "1 gallon"
+    },
+    {
+     "size_category": "Large",
+     "volume": "4 gallons"
+    },
+    {
+     "size_category": "Huge",
+     "volume": "16 gallons"
+    },
+    {
+     "size_category": "Gargantuan",
+     "volume": "64 gallons"
+    }
+   ]
+  },
+  "flavor_rewritten": "Hydration demands shift drastically depending on physical stature, from negligible sips to voluminous consumption.",
+  "adaptation_note": "Source lists volume requirements per day based on creature size categories ranging from Tiny to Gargantuan. Values include fractions like '1/4' and specific units 'gallon'. No browser analogue exists for passive daily resource tracking in this context, so values are stored in data."
+ },
+ {
+  "id": "waterborne-vehicle-movement-rules",
+  "name": "Waterborne Vehicle Movement Rules",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "movement_conditions": [
+    {
+     "condition": "against_strong_wind",
+     "speed_modifier": "half_speed"
+    },
+    {
+     "condition": "dead_calm_no_wind",
+     "sail_enabled": false,
+     "row_enabled": true,
+     "note": "Keelboats and Rowboats are used on lakes and rivers."
+    }
+   ],
+   "downstream_movement": {
+    "base_vehicle_speed_plus_current": true,
+    "current_speed_miles_per_hour": "3"
+   },
+   "upstream_movement": {
+    "rowing_against_significant_current": false,
+    "alternative_method": "pulled_by_draft_animals_on_shores"
+   },
+   "rowboat_properties": {
+    "portable": true,
+    "weight_pounds": "100"
+   }
+  },
+  "flavor_rewritten": "Wind dictates sailing efficiency while currents aid downstream travel. Heavy boats require animal assistance to navigate upstream against the flow.",
+  "adaptation_note": "Source specifies current speed as '3 miles per hour' and rowboat weight as '100 pounds'. These values are preserved in data fields."
+ },
+ {
+  "id": "waterskin",
+  "name": "Waterskin",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "weight_full": "5 lb.",
+   "cost_sp": 2
+  },
+  "flavor_rewritten": "A container designed to hold water for drinking purposes during travel.",
+  "adaptation_note": "The source specifies weight only when full; browser implementation should track fill level or assume full state."
+ },
+ {
+  "id": "weapon",
+  "name": "Weapon",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "category_options": [
+    "simple",
+    "martial"
+   ],
+   "reference_chapter": "weapons"
+  },
+  "flavor_rewritten": "Equipments designed for combat fall into basic or advanced classifications.",
+  "adaptation_note": "Source references Chapter 6 titled Weapons."
+ },
+ {
+  "id": "wearing-and-wielding-items",
+  "name": "Wearing and Wielding Items",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "item_types": [
+    "boots",
+    "gloves",
+    "hats",
+    "helmets",
+    "rings",
+    "armor",
+    "shield",
+    "cloak",
+    "weapon"
+   ],
+   "usage_requirements": {
+    "boots": "feet",
+    "gloves": "hands",
+    "hats_helmets": "head",
+    "rings": "finger",
+    "armor": "donned",
+    "shield": "strapped_to_arm",
+    "cloak": "fastened_about_shoulders",
+    "weapon": "held"
+   }
+  },
+  "flavor_rewritten": "Magic gear requires specific body placement to function. Each item demands a particular method of attachment or grip.",
+  "adaptation_note": "Source specifies exact anatomical locations for wearables (feet, hands, head, finger) and physical actions for others (donned, strapped, fastened, held). No numerical values exist in this source text."
+ },
+ {
+  "id": "wretched",
+  "name": "Wretched",
+  "kind": "gear",
+  "source_book": "phb2024",
+  "data": {
+   "cost_type": "free"
+  },
+  "flavor_rewritten": "Destiny favors the lucky and the beggar. The open sky offers no shelter from the wild.",
+  "adaptation_note": "Source mentions surviving via chance and charity, and being exposed to natural dangers due to sleeping outside. These are narrative flavor text without specific numerical mechanics to extract into structured data fields."
+ }
+]

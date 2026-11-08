@@ -1,0 +1,891 @@
+[
+ {
+  "id": "acolyte",
+  "name": "Acolyte",
+  "kind": "background",
+  "source_book": "phb2024",
+  "data": {
+   "ability_scores": [
+    "Intelligence",
+    "Wisdom",
+    "Charisma"
+   ],
+   "feat": {
+    "name": "Magic Initiate (Cleric)",
+    "reference": "chapter 5"
+   },
+   "skill_proficiencies": [
+    "Insight",
+    "Religion"
+   ],
+   "tool_proficiencies": [
+    "Calligrapher's Supplies"
+   ],
+   "equipment_options": [
+    {
+     "label": "A",
+     "items": [
+      "Calligrapher's Supplies",
+      "Book (prayers)",
+      "Holy Symbol",
+      "Parchment",
+      "Robe"
+     ],
+     "parchment_count": "10 sheets",
+     "gold_piece_value": "8 GP"
+    },
+    {
+     "label": "B",
+     "gold_piece_value": "50 GP"
+    }
+   ]
+  },
+  "flavor_rewritten": "Devoted to temple service, you performed rites and studied religion under a priest. Through instruction and devotion, you learned to channel divine power.",
+  "adaptation_note": "Source specifies choosing between equipment set A containing '8 GP' or gold option B containing '50 GP'. Parchment quantity is specified as '10 sheets'. Feat references 'chapter 5'. These numerical constraints are preserved in data."
+ },
+ {
+  "id": "appearance",
+  "name": "APPEARANCE",
+  "kind": "background",
+  "source_book": "phb2024",
+  "data": {
+   "entry_count": 3,
+   "title_raw": "3 APPEARANCE"
+  },
+  "flavor_rewritten": "Your character's physical presence defines their initial standing in the world.",
+  "adaptation_note": "The source text '3 APPEARANCE' indicates this is likely a header or list item number rather than a full mechanical background trait with stats. No further mechanical data (dice, saves, modifiers) was present to convert."
+ },
+ {
+  "id": "artisan",
+  "name": "Artisan",
+  "kind": "background",
+  "source_book": "phb2024",
+  "data": {
+   "ability_scores": [
+    "Strength",
+    "Dexterity",
+    "Intelligence"
+   ],
+   "feats": [
+    {
+     "name": "Crafter",
+     "reference": "chapter 5"
+    }
+   ],
+   "skill_proficiencies": [
+    "Investigation",
+    "Persuasion"
+   ],
+   "tool_proficiencies": {
+    "type": "Artisan's Tools",
+    "selection": "choose_one_kind",
+    "reference": "chapter 6"
+   },
+   "equipment_options": [
+    {
+     "label": "A",
+     "items": [
+      {
+       "name": "Artisan's Tools",
+       "note": "same as tool proficiency choice"
+      },
+      {
+       "name": "Pouches",
+       "quantity": 2
+      },
+      {
+       "name": "Traveler's Clothes"
+      },
+      {
+       "name": "GP",
+       "amount": 32
+      }
+     ]
+    },
+    {
+     "label": "B",
+     "items": [
+      {
+       "name": "GP",
+       "amount": 50
+      }
+     ]
+    }
+   ]
+  },
+  "flavor_rewritten": "You started by cleaning workshops for meager pay, eventually learning to craft goods and manage difficult clients. Your trade taught you to notice every small detail.",
+  "adaptation_note": "The source specifies 'three' coppers per day in the backstory text, but this is narrative flavor not mechanical data. Equipment options A and B are mutually exclusive choices. Tool proficiency requires choosing one specific kind from a list referenced in chapter 6."
+ },
+ {
+  "id": "backgrounds-and-species-from-older-books",
+  "name": "BACKGROUNDS AND SPECIES FROM OLDER BOOKS",
+  "kind": "background",
+  "source_book": "phb2024",
+  "data": {
+   "ability_score_adjustments": [
+    {
+     "description": "Increase one score by 2 and a different one by 1",
+     "modifications": [
+      {
+       "score_index": 0,
+       "delta": 2
+      },
+      {
+       "score_index": 1,
+       "delta": 1
+      }
+     ]
+    },
+    {
+     "description": "Increase three scores by 1",
+     "modifications": [
+      {
+       "score_index": 0,
+       "delta": 1
+      },
+      {
+       "score_index": 1,
+       "delta": 1
+      },
+      {
+       "score_index": 2,
+       "delta": 1
+      }
+     ]
+    }
+   ],
+   "max_ability_score_cap": 20,
+   "species_override_rule": "ignore_older_increases_use_background_only",
+   "feat_gain_condition": "if_background_provides_no_feat",
+   "feat_type": "origin"
+  },
+  "flavor_rewritten": "Ancient lineages grant subtle enhancements to your innate capabilities. If your heritage lacks specific gifts, you may select an origin-based advantage.",
+  "adaptation_note": "The source specifies two distinct adjustment patterns: +2/+1 or +1/+1/+1. It also imposes a hard cap of 20 on ability scores during this adjustment. Additionally, if the chosen background does not provide a feat, the player gains an Origin feat instead."
+ },
+ {
+  "id": "backdrops-and-species-from-older-books",
+  "name": "BACKGROUNDS AND SPECIES FROM OLDER BOOKS",
+  "kind": "background",
+  "source_book": "phb2024",
+  "data": {
+   "ability_score_adjustments": [
+    {
+     "option_name": "Primary and Secondary Increase",
+     "adjustments": [
+      {
+       "target_stat": "one",
+       "value": 2
+      },
+      {
+       "target_stat": "different",
+       "value": 1
+      }
+     ]
+    },
+    {
+     "option_name": "Triple Minor Increase",
+     "adjustments": [
+      {
+       "target_stat": "first",
+       "value": 1
+      },
+      {
+       "target_stat": "second",
+       "value": 1
+      },
+      {
+       "target_stat": "third",
+       "value": 1
+      }
+     ]
+    }
+   ],
+   "score_cap": 20,
+   "species_override": true,
+   "feat_provision": {
+    "condition": "no_feat_in_background",
+    "result": "gain_origin_feat_choice"
+   }
+  },
+  "flavor_rewritten": "Ancient lineages offer raw potential without rigid stat blocks. You sculpt your physical traits through experience rather than birthright alone.",
+  "adaptation_note": "The source specifies increasing one score by 2 and a different one by 1, OR increasing three scores by 1. None of these increases can raise a score above 20. Species ability score increases from older books are ignored entirely in favor of background-provided ones. If the chosen background does not provide a feat, the character gains an Origin feat of their choice."
+ },
+ {
+  "id": "backgounds-and-species-from-older-books",
+  "name": "BACKGROUNDS AND SPECIES FROM OLDER BOOKS",
+  "kind": "background",
+  "source_book": "phb2024",
+  "data": {
+   "ability_score_adjustment_rules": [
+    {
+     "rule_type": "single_double_increase",
+     "description": "increase one score by two and a different one by one",
+     "values": {
+      "score_a_bonus": 2,
+      "score_b_bonus": 1
+     }
+    },
+    {
+     "rule_type": "triple_single_increase",
+     "description": "increase three scores by one",
+     "values": {
+      "scores_count": 3,
+      "bonus_per_score": 1
+     }
+    }
+   ],
+   "max_ability_score_cap": 20,
+   "species_override": true,
+   "feat_provision": {
+    "default_state": "none_from_background",
+    "gain_mechanic": "origin_feat_choice"
+   }
+  },
+  "flavor_rewritten": "Legacy backgrounds lack inherent stat boosts. Apply manual adjustments to your attributes while respecting the maximum limit. Old species traits are discarded in favor of current background benefits. If no feat is granted, select an origin feat.",
+  "adaptation_note": "Source specifies increasing one score by two and another by one, OR increasing three scores by one. None can raise a score above twenty. Species increases from older books are ignored entirely when using this background. If the chosen background does not provide a feat, the character gains an Origin feat of their choice."
+ },
+ {
+  "id": "backstory-personality",
+  "name": "BACKSTORY & PERSONALITY",
+  "kind": "background",
+  "source_book": "phb2024",
+  "data": {
+   "alignment_value": "4"
+  },
+  "flavor_rewritten": "Your history shapes who you are. Your moral compass guides your path.",
+  "adaptation_note": "Source contains '2' in header '2 BACKSTORY & PERSONALITY'. This is a section number, not a game mechanic value like alignment (which is '4'). Included in adaptation note as non-mechanical context."
+ },
+ {
+  "id": "character-backgrounds",
+  "name": "Character Backgrounds",
+  "kind": "background",
+  "source_book": "phb2024",
+  "data": {
+   "definition_scope": [
+    "place",
+    "occupation"
+   ],
+   "pre_adventure_formative_factors": true,
+   "narrative_present": true,
+   "narrative_customizable": true
+  },
+  "flavor_rewritten": "Define the roots of your hero through their past home and trade. Shape these memories to fit the story you wish to tell.",
+  "adaptation_note": "The source text describes a general category header 'CHARACTER BACKGROUNDS' rather than a specific mechanical entry with stats. It states backgrounds are a collection of characteristics representing place and occupation formative before adventure. Each background includes a brief narrative which can be altered."
+ },
+ {
+  "id": "criminal",
+  "name": "Criminal",
+  "kind": "background",
+  "source_book": "phb2024",
+  "data": {
+   "ability_scores": [
+    "Dexterity",
+    "Constitution",
+    "Intelligence"
+   ],
+   "feat": "Alert",
+   "skill_proficiencies": [
+    "Sleight of Hand",
+    "Stealth"
+   ],
+   "tool_proficiencies": [
+    "Thieves' Tools"
+   ],
+   "equipment_options": [
+    {
+     "label": "A",
+     "items": [
+      "2 Daggers",
+      "Thieves' Tools",
+      "Crowbar",
+      "2 Pouches",
+      "Traveler's Clothes",
+      "16 GP"
+     ]
+    },
+    {
+     "label": "B",
+     "items": [
+      "50 GP"
+     ]
+    }
+   ]
+  },
+  "flavor_rewritten": "You survived by navigating shadowed streets and exploiting weaknesses in security. Whether you operated as part of a tight-knit crew or stood alone against powerful rivals, danger was your constant companion.",
+  "adaptation_note": "The 'Choose A or B' equipment selection is represented as an array of options. The specific items listed (e.g., '2 Daggers') retain their original digit-bearing format as they appear in the source text. The feat 'Alert' references chapter 5 for details."
+ },
+ {
+  "id": "entertainer",
+  "name": "Entertainer",
+  "kind": "background",
+  "source_book": "phb2024",
+  "data": {
+   "ability_scores": [
+    "Strength",
+    "Dexterity",
+    "Charisma"
+   ],
+   "feats": [
+    {
+     "name": "Musician",
+     "reference": "chapter 5"
+    }
+   ],
+   "skill_proficiencies": [
+    "Acrobatics",
+    "Performance"
+   ],
+   "tool_proficiency": {
+    "type": "Musical Instrument",
+    "choice_count": 1,
+    "reference": "chapter 6"
+   },
+   "equipment_choices": [
+    {
+     "label": "A",
+     "items": [
+      {
+       "name": "Musical Instrument",
+       "note": "same as tool proficiency choice"
+      },
+      {
+       "name": "Costumes",
+       "quantity": 2
+      },
+      {
+       "name": "Mirror"
+      },
+      {
+       "name": "Perfume"
+      },
+      {
+       "name": "Traveler’s Clothes"
+      }
+     ],
+     "currency_gp": 11
+    },
+    {
+     "label": "B",
+     "currency_gp": 50
+    }
+   ]
+  },
+  "flavor_rewritten": "Your formative years were spent traversing traveling shows, trading labor for instruction in physical and artistic disciplines. Mastery of balance, melody, or verse defines your enduring passion for performance.",
+  "adaptation_note": "The source text specifies 'Choose one kind' for the musical instrument, represented here as a single-choice selection with quantity 1. Equipment option A includes specific items plus 11 GP; option B is an alternative lump sum of 50 GP."
+ },
+ {
+  "id": "farmer",
+  "name": "Farmer",
+  "kind": "background",
+  "source_book": "phb2024",
+  "data": {
+   "ability_scores": [
+    "Strength",
+    "Constitution",
+    "Wisdom"
+   ],
+   "feats": [
+    {
+     "name": "Tough",
+     "reference": "chapter five"
+    }
+   ],
+   "skill_proficiencies": [
+    "Animal Handling",
+    "Nature"
+   ],
+   "tool_proficiencies": [
+    "Carpenter’s Tools"
+   ],
+   "equipment_choices": [
+    {
+     "label": "A",
+     "items": [
+      "Sickle",
+      "Carpenter’s Tools",
+      "Healer’s Kit",
+      "Iron Pot",
+      "Shovel",
+      "Traveler’s Clothes"
+     ],
+     "currency_gp": 30
+    },
+    {
+     "label": "B",
+     "currency_gp": 50
+    }
+   ]
+  },
+  "flavor_rewritten": "Years spent tending animals and cultivating the earth forged patience and resilience. This deep connection to nature brings both appreciation for its bounty and respect for its dangers.",
+  "adaptation_note": "Equipment choice is represented as an array of option objects. The feat 'Tough' references chapter 5; in a browser roguelite, this would likely grant static HP or damage reduction bonuses per level rather than a complex feat system, but the mechanical fact of gaining 'Tough' remains."
+ },
+ {
+  "id": "guard",
+  "name": "Guard",
+  "kind": "background",
+  "source_book": "phb2024",
+  "data": {
+   "ability_scores": [
+    "Strength",
+    "Intelligence",
+    "Wisdom"
+   ],
+   "feat": {
+    "name": "Alert",
+    "reference": "chapter 5"
+   },
+   "skill_proficiencies": [
+    "Athletics",
+    "Perception"
+   ],
+   "tool_proficiency": {
+    "type": "Gaming Set",
+    "selection": "one kind",
+    "reference": "chapter 6"
+   },
+   "equipment_options": [
+    {
+     "label": "A",
+     "items": [
+      "Spear",
+      "Light Crossbow",
+      {
+       "item": "Bolts",
+       "quantity": 20
+      },
+      "Gaming Set",
+      "Hooded Lantern",
+      "Manacles",
+      "Quiver",
+      "Traveler's Clothes"
+     ],
+     "currency_gp": 12
+    },
+    {
+     "label": "B",
+     "currency_gp": 50
+    }
+   ]
+  },
+  "flavor_rewritten": "Endless vigils at the watchtower left your legs heavy with memory. One gaze scanned the wild woods for raiders while the other hunted deceit within the walls.",
+  "adaptation_note": "The source specifies 'Choose A or B' for equipment. Option A includes exactly 20 Bolts and 12 GP. Option B provides exactly 50 GP. These quantities are preserved in data."
+ },
+ {
+  "id": "guide",
+  "name": "Guide",
+  "kind": "background",
+  "source_book": "phb2024",
+  "data": {
+   "ability_scores": [
+    "Dexterity",
+    "Constitution",
+    "Wisdom"
+   ],
+   "feat": {
+    "name": "Magic Initiate (Druid)",
+    "reference": "chapter 5"
+   },
+   "skill_proficiencies": [
+    "Stealth",
+    "Survival"
+   ],
+   "tool_proficiencies": [
+    "Cartographer's Tools"
+   ],
+   "equipment_options": [
+    {
+     "label": "A",
+     "items": [
+      "Shortbow",
+      "Arrows 20",
+      "Cartographer's Tools",
+      "Bedroll",
+      "Quiver",
+      "Tent",
+      "Traveler's Clothes",
+      "3 GP"
+     ]
+    },
+    {
+     "label": "B",
+     "items": [
+      "50 GP"
+     ]
+    }
+   ]
+  },
+  "flavor_rewritten": "Raised in the wilds, you know how to survive alone among strange monsters and ancient ruins. You also guide nature priests who taught you basic wild magic.",
+  "adaptation_note": "The background provides a choice between two equipment sets: Set A includes twenty arrows and three gold pieces; Set B provides fifty gold pieces instead."
+ },
+ {
+  "id": "hermit",
+  "name": "Hermit",
+  "kind": "background",
+  "source_book": "phb2024",
+  "data": {
+   "ability_scores": [
+    "Constitution",
+    "Wisdom",
+    "Charisma"
+   ],
+   "feat": {
+    "name": "Healer",
+    "reference": "chapter 5"
+   },
+   "skill_proficiencies": [
+    "Medicine",
+    "Religion"
+   ],
+   "tool_proficiencies": [
+    "Herbalism Kit"
+   ],
+   "equipment_options": [
+    {
+     "label": "A",
+     "items": [
+      "Quarterstaff",
+      "Herbalism Kit",
+      "Bedroll",
+      "Book (philosophy)",
+      "Lamp",
+      "Oil (3 flasks)",
+      "Traveler’s Clothes",
+      "16 GP"
+     ]
+    },
+    {
+     "label": "B",
+     "items": [
+      "50 GP"
+     ]
+    }
+   ]
+  },
+  "flavor_rewritten": "Years of isolation among forest creatures and rare visitors forged a mind attuned to the hidden mysteries of existence.",
+  "adaptation_note": "Source lists specific equipment choices including '16 GP' and '50 GP'. Source references 'chapter 5' for Feat details."
+ },
+ {
+  "id": "merchant",
+  "name": "Merchant",
+  "kind": "background",
+  "source_book": "phb2024",
+  "data": {
+   "ability_scores": [
+    "Constitution",
+    "Intelligence",
+    "Charisma"
+   ],
+   "feats": [
+    "Lucky"
+   ],
+   "skill_proficiencies": [
+    "Animal Handling",
+    "Persuasion"
+   ],
+   "tool_proficiencies": [
+    "Navigator’s Tools"
+   ],
+   "equipment_options": [
+    {
+     "label": "A",
+     "items": [
+      "Navigator’s Tools",
+      "two Pouches",
+      "Traveler’s Clothes",
+      "twenty-two GP"
+     ]
+    },
+    {
+     "label": "B",
+     "items": [
+      "fifty GP"
+     ]
+    }
+   ]
+  },
+  "flavor_rewritten": "Apprenticed to a trader or caravan master, you mastered the flow of commerce across distant lands.",
+  "adaptation_note": "Source specifies equipment choice A includes '2 Pouches' and '22 GP', while choice B provides '50 GP'. Feat Lucky references chapter 5 for details."
+ },
+ {
+  "id": "noble",
+  "name": "Noble",
+  "kind": "background",
+  "source_book": "phb2024",
+  "data": {
+   "ability_scores": [
+    "Strength",
+    "Intelligence",
+    "Charisma"
+   ],
+   "feat": {
+    "name": "Skilled",
+    "reference": "chapter 5"
+   },
+   "skill_proficiencies": [
+    "History",
+    "Persuasion"
+   ],
+   "tool_proficiency": {
+    "type": "Gaming Set",
+    "selection": "one kind",
+    "reference": "chapter 6"
+   },
+   "equipment_choices": [
+    {
+     "label": "A",
+     "items": [
+      "Gaming Set",
+      "Fine Clothes",
+      "Perfume",
+      "29 GP"
+     ]
+    },
+    {
+     "label": "B",
+     "items": [
+      "50 GP"
+     ]
+    }
+   ]
+  },
+  "flavor_rewritten": "Raised within castle walls amidst inherited privilege, you endured an elite education that sparked both appreciation and resentment. Courtly observation of your lineage taught you the intricacies of leadership.",
+  "adaptation_note": "Source specifies 'choose one kind' for Gaming Set proficiency. Equipment offers a binary choice between set A (specific items including 29 GP) and set B (50 GP). Feat references chapter 5; Tool Proficiency references chapter 6."
+ },
+ {
+  "id": "parts-of-a-background",
+  "name": "Parts of a Background",
+  "kind": "background",
+  "source_book": "phb2024",
+  "data": {
+   "ability_score_increase_options": [
+    {
+     "type": "two_scores",
+     "increase_values": [
+      "2",
+      "1"
+     ]
+    },
+    {
+     "type": "three_scores",
+     "increase_value": "1"
+    }
+   ],
+   "max_ability_score": 20,
+   "feat_source_reference": "chapter 5",
+   "skill_proficiency_count": 2,
+   "tool_proficiency_type": "single_tool_or_category_choice",
+   "tool_category_example": "Artisan's Tools",
+   "tools_detail_reference": "chapter 6",
+   "equipment_choices": [
+    {
+     "option": "equipment_package"
+    },
+    {
+     "option": "gold_piece_amount",
+     "amount": "50 GP"
+    }
+   ]
+  },
+  "flavor_rewritten": "Define your character's origins through innate aptitudes, specialized training, and starting provisions.",
+  "adaptation_note": "The source specifies increasing one score by 2 and another by 1, OR increasing all three by 1. The max score is capped at 20. Skill proficiency grants two skills. Tool proficiency grants one tool or choice from Artisan's Tools category (details in chapter 6). Equipment offers either a package or 50 GP."
+ },
+ {
+  "id": "sage",
+  "name": "Sage",
+  "kind": "background",
+  "source_book": "phb2024",
+  "data": {
+   "ability_scores": [
+    "Constitution",
+    "Intelligence",
+    "Wisdom"
+   ],
+   "feat": {
+    "name": "Magic Initiate (Wizard)",
+    "reference": "chapter 5"
+   },
+   "skill_proficiencies": [
+    "Arcana",
+    "History"
+   ],
+   "tool_proficiencies": [
+    "Calligrapher’s Supplies"
+   ],
+   "equipment_options": [
+    {
+     "label": "A",
+     "items": [
+      "Quarterstaff",
+      "Calligrapher’s Supplies",
+      "Book (history)",
+      {
+       "item": "Parchment",
+       "quantity": "8 sheets"
+      },
+      "Robe",
+      {
+       "currency": "GP",
+       "amount": 8
+      }
+     ]
+    },
+    {
+     "label": "B",
+     "currency": "GP",
+     "amount": 50
+    }
+   ]
+  },
+  "flavor_rewritten": "Years spent wandering between estates and monasteries allowed you to trade labor for knowledge. Endless nights were dedicated to studying ancient texts, uncovering the secrets of existence and the basics of arcane power.",
+  "adaptation_note": "Source specifies '8 sheets' of parchment and '8 GP' in option A, plus '50 GP' in option B. These quantities are preserved exactly as written."
+ },
+ {
+  "id": "scribe",
+  "name": "Scribe",
+  "kind": "background",
+  "source_book": "phb2024",
+  "data": {
+   "ability_scores": [
+    "Dexterity",
+    "Intelligence",
+    "Wisdom"
+   ],
+   "feat": "Skilled",
+   "skill_proficiencies": [
+    "Investigation",
+    "Perception"
+   ],
+   "tool_proficiencies": [
+    "Calligrapher’s Supplies"
+   ],
+   "equipment_options": [
+    {
+     "label": "A",
+     "items": [
+      "Calligrapher’s Supplies",
+      "Fine Clothes",
+      "Lamp",
+      "Oil (3 flasks)",
+      "Parchment (12 sheets)"
+     ],
+     "currency_gp": 23
+    },
+    {
+     "label": "B",
+     "items": [],
+     "currency_gp": 50
+    }
+   ]
+  },
+  "flavor_rewritten": "Formative years in a scriptorium or government agency forged a master of clear handwriting and precise documentation. This background instills an unwavering attention to detail, ensuring errors are eliminated from every text produced.",
+  "adaptation_note": "The 'Choose A or B' equipment selection is represented as two distinct options within the data structure. The specific counts for oil (3) and parchment (12) are preserved in the item strings. The feat Skilled references chapter 5 mechanics which are not detailed here but are retained by name."
+ },
+ {
+  "id": "session-zero",
+  "name": "Session Zero",
+  "kind": "background",
+  "source_book": "phb2024",
+  "data": {},
+  "flavor_rewritten": "Gather before the journey begins to align expectations and define relationships between companions.",
+  "adaptation_note": "The source describes a real-world pre-game ritual rather than an in-game mechanic with stats, dice, or numerical effects. Therefore, no structured data fields were generated as there are no game mechanics to convert."
+ },
+ {
+  "id": "soldier",
+  "name": "Soldier",
+  "kind": "background",
+  "source_book": "phb2024",
+  "data": {
+   "ability_scores": [
+    "Strength",
+    "Dexterity",
+    "Constitution"
+   ],
+   "feat": "Savage Attacker",
+   "skill_proficiencies": [
+    "Athletics",
+    "Intimidation"
+   ],
+   "tool_proficiency": {
+    "type": "Gaming Set",
+    "choice": true
+   },
+   "equipment_options": [
+    {
+     "label": "A",
+     "items": [
+      "Spear",
+      "Shortbow",
+      {
+       "item": "Arrows",
+       "quantity": "20"
+      },
+      "Gaming Set",
+      "Healer’s Kit",
+      "Quiver",
+      "Traveler’s Clothes",
+      {
+       "currency": "GP",
+       "amount": "14"
+      }
+     ]
+    },
+    {
+     "label": "B",
+     "items": [
+      {
+       "currency": "GP",
+       "amount": "50"
+      }
+     ]
+    }
+   ]
+  },
+  "flavor_rewritten": "Warfare defines your existence from maturity onward. Combat instincts drive your actions on the battlefield.",
+  "adaptation_note": "Source references 'chapter 5' for feat details and 'chapter 6' for gaming sets. Equipment offers a choice between set A or set B."
+ },
+ {
+  "id": "wayfarer",
+  "name": "Wayfarer",
+  "kind": "background",
+  "source_book": "phb2024",
+  "data": {
+   "ability_scores": [
+    "Dexterity",
+    "Wisdom",
+    "Charisma"
+   ],
+   "feats": [
+    "Lucky"
+   ],
+   "skill_proficiencies": [
+    "Insight",
+    "Stealth"
+   ],
+   "tool_proficiencies": [
+    "Thieves’ Tools"
+   ],
+   "equipment_choices": [
+    {
+     "label": "A",
+     "items": [
+      "2 Daggers",
+      "Thieves’ Tools",
+      "Gaming Set (any)",
+      "Bedroll",
+      "2 Pouches",
+      "Traveler’s Clothes",
+      "16 GP"
+     ]
+    },
+    {
+     "label": "B",
+     "items": [
+      "50 GP"
+     ]
+    }
+   ]
+  },
+  "flavor_rewritten": "Raised among street outcasts, you survived through odd jobs and occasional theft while holding onto your pride. Your story remains unfinished.",
+  "adaptation_note": "The 'Lucky' feat references chapter 5 of the source book; this mechanical effect is noted here as it requires external lookup for exact browser implementation details."
+ }
+]

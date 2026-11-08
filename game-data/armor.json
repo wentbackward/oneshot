@@ -1,0 +1,247 @@
+[
+ {
+  "id": "armor-class",
+  "name": "Armor Class",
+  "kind": "armor",
+  "source_book": "phb2024",
+  "data": {
+   "base_value": 10,
+   "modifier_type": "dexterity_modifier",
+   "attack_target": true,
+   "multiple_base_rules_allowed": false,
+   "related_mechanic": "Attack Roll"
+  },
+  "flavor_rewritten": "This value determines how hard it is for enemies to land a blow on you. You select only one method to calculate this defense.",
+  "adaptation_note": "The source specifies a base calculation of '10 plus your Dexterity modifier'. It states that if multiple rules provide a base AC calculation, the player chooses one and cannot combine them."
+ },
+ {
+  "id": "barding",
+  "name": "Barding",
+  "kind": "armor",
+  "source_book": "phb2024",
+  "data": {
+   "type": "mount_armor",
+   "base_cost_multiplier": 4,
+   "weight_multiplier": 2,
+   "eligible_base_armors": [
+    "light_armor",
+    "medium_armor",
+    "heavy_armor"
+   ]
+  },
+  "flavor_rewritten": "Reinforced plating crafted specifically for steed protection.",
+  "adaptation_note": "Cost is four times the normal cost, and it weighs twice as much."
+ },
+ {
+  "id": "breastplate",
+  "name": "Breastplate",
+  "kind": "armor",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 400
+  },
+  "flavor_rewritten": "A sturdy piece of metal armor covering the torso.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "chain-mail",
+  "name": "Chain Mail",
+  "kind": "armor",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 75
+  },
+  "flavor_rewritten": "Interlocking metal rings provide reliable protection against physical blows.",
+  "adaptation_note": "The source provides only the name and cost. Standard AC bonuses for Chain Mail are omitted as they were not present in the provided source text."
+ },
+ {
+  "id": "chain-shirt",
+  "name": "Chain Shirt",
+  "kind": "armor",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 50
+  },
+  "flavor_rewritten": "A flexible garment of interlocking metal rings providing reliable protection.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "half-plate-armor",
+  "name": "Half Plate Armor",
+  "kind": "armor",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 750,
+   "type": "medium_armor"
+  },
+  "flavor_rewritten": "Layered metal plates offer substantial protection while allowing moderate mobility.",
+  "adaptation_note": "Source lists cost as '750 GP'. Standard Half Plate in D&D 5e provides AC 15 + Dex modifier (max 2) and has Stealth Disadvantage. These structural mechanics are not present in the provided source text snippet."
+ },
+ {
+  "id": "heavy-armor",
+  "name": "Heavy Armor",
+  "kind": "armor",
+  "source_book": "phb2024",
+  "data": {},
+  "flavor_rewritten": "Forged plates offer maximum protection against physical harm.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "hide-armor",
+  "name": "Hide Armor",
+  "kind": "armor",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 10,
+   "type": "light_armor"
+  },
+  "flavor_rewritten": "Crafted from tanned beast hides stitched together with sinew. Provides basic protection against glancing blows while allowing freedom of movement.",
+  "adaptation_note": "Source specifies cost as '10 GP'. Browser roguelites typically handle armor by assigning AC bonuses and encumbrance rather than raw gold costs at runtime; this cost field is preserved in data for inventory tracking but may be ignored during combat calculations."
+ },
+ {
+  "id": "leather-armor",
+  "name": "Leather Armor",
+  "kind": "armor",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 10,
+   "currency": "GP"
+  },
+  "flavor_rewritten": "Tanned hide offers basic protection against minor threats.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "light-armor",
+  "name": "Light Armor",
+  "kind": "armor",
+  "source_book": "phb2024",
+  "data": {
+   "type": "light_armor"
+  },
+  "flavor_rewritten": "A light shield of protection that allows freedom of movement without heavy burden.",
+  "adaptation_note": "The source text provided is merely the title 'LIGHT ARMOR' with no mechanical stats. In the browser roguelite, this represents the category of armor allowing Dexterity bonuses to AC without Stealth Disadvantage."
+ },
+ {
+  "id": "medium-armor",
+  "name": "Medium Armor",
+  "kind": "armor",
+  "source_book": "phb2024",
+  "data": {
+   "type": "medium_armor",
+   "base_ac_calculation": {
+    "formula": "13 + dex_mod",
+    "max_dex_bonus": 2
+   },
+   "stealth_disadvantage": false,
+   "weight_category": "medium"
+  },
+  "flavor_rewritten": "A balanced suit offering reliable protection without sacrificing mobility.",
+  "adaptation_note": "Source text provided is 'MEDIUM ARMOR' with no specific mechanical stats listed. Standard D&D 5e rules apply: AC equals 13 plus Dexterity modifier up to a maximum of +2, and it does not impose disadvantage on Stealth checks."
+ },
+ {
+  "id": "padded-armor",
+  "name": "Padded Armor",
+  "kind": "armor",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 5
+  },
+  "flavor_rewritten": "Lightweight armor offering minimal protection.",
+  "adaptation_note": "Cost is five gold pieces."
+ },
+ {
+  "id": "plate-armor",
+  "name": "Plate Armor",
+  "kind": "armor",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 1500,
+   "type": "heavy_armor"
+  },
+  "flavor_rewritten": "Heavy steel plates offer maximum protection at the cost of mobility.",
+  "adaptation_note": "The source provides only name, kind, and cost. Standard D&D rules imply heavy armor properties which are not explicitly stated in the provided text snippet."
+ },
+ {
+  "id": "ring-mail",
+  "name": "Ring Mail",
+  "kind": "armor",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 30
+  },
+  "flavor_rewritten": "Interlocking metal rings provide basic protection against incoming strikes.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "robe",
+  "name": "Robe",
+  "kind": "armor",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 1,
+   "significance_types": [
+    "vocational",
+    "ceremonial"
+   ],
+   "access_requirements": {
+    "requires_wearing": true,
+    "specific_colors_or_symbols": true
+   }
+  },
+  "flavor_rewritten": "Garments denoting specific roles or rituals. Certain places restrict entry to those adorned with particular hues or emblems.",
+  "adaptation_note": "The source specifies a cost of one GP and notes that access depends on wearing robes with specific colors or symbols."
+ },
+ {
+  "id": "scale-mail",
+  "name": "Scale Mail",
+  "kind": "armor",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 50
+  },
+  "flavor_rewritten": "Interlocking metal plates provide reliable protection against incoming strikes.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "shield",
+  "name": "Shield",
+  "kind": "armor",
+  "source_book": "phb2024",
+  "data": {
+   "ac_bonus": "+2",
+   "strength_requirement": null,
+   "stealth_disadvantage": false,
+   "weight_lb": 6,
+   "cost_gp": 10
+  },
+  "flavor_rewritten": "A sturdy defensive plate that bolsters protection against incoming blows.",
+  "adaptation_note": "The source specifies a +2 AC bonus, no strength requirement, no stealth penalty, weighs 6 lb., and costs 10 GP."
+ },
+ {
+  "id": "splint-armor",
+  "name": "Splint Armor",
+  "kind": "armor",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 200,
+   "type": "medium_armor"
+  },
+  "flavor_rewritten": "Heavy plates interlocked for robust protection.",
+  "adaptation_note": "Source lists cost as '200 GP' but does not specify AC bonus or stealth disadvantage in the provided snippet. In The Endless Descent, medium armor typically grants +2 base AC with a -1 penalty to Dexterity-based checks unless specified otherwise by specific upgrades."
+ },
+ {
+  "id": "studded-leather-armor",
+  "name": "Studded Leather Armor",
+  "kind": "armor",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 45,
+   "base_ac_flat": 12,
+   "dex_bonus_max": null,
+   "disadvantage_stealth": false,
+   "str_requirement": null
+  },
+  "flavor_rewritten": "Toughened hide reinforced with small metal studs offers reliable protection without restricting movement.",
+  "adaptation_note": "Source lists only cost and name. Standard D&D 5e Studded Leather provides AC 12 + Dex modifier (max none) and imposes no Stealth disadvantage; these base stats are assumed structural defaults for the armor kind in this system."
+ }
+]

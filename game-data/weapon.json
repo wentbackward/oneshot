@@ -1,0 +1,1326 @@
+[
+ {
+  "id": "ammunition",
+  "name": "Ammunition",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "type": "property",
+   "usage_rule": {
+    "requirement": "has_ammo",
+    "cost_per_attack": "1",
+    "draw_action": "part_of_attack"
+   },
+   "recovery": {
+    "time_cost": "1 minute",
+    "amount_recovered": "half_used",
+    "rounding": "down",
+    "fate_unrecovered": "lost"
+   }
+  },
+  "flavor_rewritten": "Ranged attacks consume specific projectiles drawn during the action. Survivors may salvage a portion of spent ammo after combat concludes.",
+  "adaptation_note": "The source specifies 'one piece' per attack and recovering 'half' (rounded down) after '1 minute'. In a browser roguelite, ammunition is typically tracked as an integer inventory count decremented by one on use. Recovery mechanics are often abstracted into gold purchase or vendor sell-back rather than time-based scavenging, but the numerical ratio remains half."
+ },
+ {
+  "id": "battleaxe",
+  "name": "Battleaxe",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 10,
+   "type": "melee"
+  },
+  "flavor_rewritten": "A heavy blade mounted on a sturdy haft, designed for cleaving through armor and bone with devastating force.",
+  "adaptation_note": "The source provides only the name, cost (10 GP), and implicit classification as a weapon. No damage dice, proficiency requirements, or weight are listed in the provided snippet, so these standard RPG attributes are omitted from data but assumed present in the full PHB2024 context."
+ },
+ {
+  "id": "blowgun",
+  "name": "Blowgun",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 10
+  },
+  "flavor_rewritten": "A simple tube designed to propel small darts using lung power.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "cleave",
+  "name": "Cleave",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "type": "melee_attack_trigger",
+   "trigger_condition": {
+    "attack_type": "melee_attack_roll",
+    "target_status": "hit"
+   },
+   "effect": {
+    "action": "make_melee_attack_roll_against_second_target",
+    "range_requirement": "5_feet_from_first_target",
+    "reach_requirement": "within_user_reach",
+    "damage_application": {
+     "base_damage": "weapon_damage",
+     "ability_modifier_bonus": "exclude_unless_negative"
+    },
+    "frequency_limit": "once_per_turn"
+   }
+  },
+  "flavor_rewritten": "Strike down one foe and immediately lash out at another nearby enemy. The force of the blow carries through, though your usual fighting prowess does not enhance this secondary hit.",
+  "adaptation_note": "The source specifies a range of '5 feet'. In the browser roguelite grid system, this translates to an adjacency check (distance 1) from the primary target. This is represented structurally as 'adjacent_to_primary' in the game logic."
+ },
+ {
+  "id": "club",
+  "name": "Club",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_sp": 1,
+   "type": "melee"
+  },
+  "flavor_rewritten": "A simple wooden baton used for blunt force impact.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "dagger",
+  "name": "Dagger",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 2,
+   "damage_dice": "1d4",
+   "properties": [
+    "finesse",
+    "light",
+    "thrown"
+   ],
+   "thrown_range": {
+    "normal": 20,
+    "long": 60
+   }
+  },
+  "flavor_rewritten": "A slender blade designed for quick strikes and close-quarters combat.",
+  "adaptation_note": "Source text provided was incomplete ('Dagger\\n2 GP'). Standard PHB dagger stats (1d4 damage, finesse/light/thrown properties, 20/60 ft range) were inferred to satisfy structural requirements but are not present in the verbatim source snippet."
+ },
+ {
+  "id": "dart",
+  "name": "Dart",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_cp": 5,
+   "type": "thrown"
+  },
+  "flavor_rewritten": "A small projectile designed for silent throwing.",
+  "adaptation_note": "Source lists cost as '5 CP'. Standard D&D dart mechanics (range, damage) are omitted from source text but would typically apply."
+ },
+ {
+  "id": "finesse",
+  "name": "Finesse",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "attack_modifier_options": [
+    "Strength",
+    "Dexterity"
+   ],
+   "modifier_constraint": "consistent_across_rolls",
+   "affected_actions": [
+    "attack_roll",
+    "damage_roll"
+   ]
+  },
+  "flavor_rewritten": "Choose which attribute guides your strike. That single choice applies to both the aim and the impact.",
+  "adaptation_note": "The source allows choosing between Strength or Dexterity modifiers for both attack and damage rolls, requiring consistency across both."
+ },
+ {
+  "id": "flail",
+  "name": "Flail",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 10,
+   "type": "melee"
+  },
+  "flavor_rewritten": "A heavy iron head swings on a chain attached to a handle.",
+  "adaptation_note": "The source provides only the name and cost. Standard weapon properties like damage dice are omitted as they were not present in the provided source text."
+ },
+ {
+  "id": "glaive",
+  "name": "Glaive",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 20,
+   "type": "melee_weapon"
+  },
+  "flavor_rewritten": "A versatile polearm with a long reach.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "grappling",
+  "name": "GRAPPLING",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "mechanic_type": "condition_application",
+   "trigger": {
+    "action": "unarmed_strike",
+    "note": "monsters may use special attacks, tentacles, maws, or other body parts"
+   },
+   "constraints": {
+    "limb_requirement": "free_hand_or_equivalent_body_part",
+    "max_targets_per_limb": 1,
+    "targeting_lockout": true
+   },
+   "escape_mechanic": {
+    "cost": "action",
+    "check_types": [
+     {
+      "ability": "strength",
+      "skill": "athletics"
+     },
+     {
+      "ability": "dexterity",
+      "skill": "acrobatics"
+     }
+    ],
+    "difficulty_target": "grapple_escape_dc",
+    "success_effect": "end_condition_self"
+   },
+   "auto_termination_conditions": [
+    "grappler_incapacitated",
+    "distance_exceeds_grapple_range"
+   ]
+  },
+  "flavor_rewritten": "Seize your foe to restrict their movement. Maintain the hold until they break free or you release them.",
+  "adaptation_note": "The source specifies 'Strength (Athletics)' and 'Dexterity (Acrobatics)' checks against a static escape DC rather than opposed rolls. It defines specific termination triggers: grappler becomes Incapacitated or distance exceeds range. Browser adaptation must handle these discrete state changes."
+ },
+ {
+  "id": "graze",
+  "name": "Graze",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "trigger": "attack_miss",
+   "damage_source": "ability_modifier_used_for_attack",
+   "damage_type_match": true,
+   "scaling_rule": "ability_modifier_only"
+  },
+  "flavor_rewritten": "A glancing blow still finds purchase.",
+  "adaptation_note": "The damage equals the ability modifier used for the attack roll. Damage type matches the weapon's normal damage type. Scaling is strictly limited to increases in that specific ability modifier."
+ },
+ {
+  "id": "greataxe",
+  "name": "Greataxe",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 30
+  },
+  "flavor_rewritten": "A heavy blade designed for crushing blows.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "greatclub",
+  "name": "Greatclub",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_sp": 2,
+   "type": "melee"
+  },
+  "flavor_rewritten": "A heavy wooden club designed for crushing blows.",
+  "adaptation_note": "Source lists cost as '2 SP'. No damage die or properties listed in source snippet."
+ },
+ {
+  "id": "greatsword",
+  "name": "Greatsword",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 50
+  },
+  "flavor_rewritten": "A massive blade designed for crushing blows.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "halberd",
+  "name": "Halberd",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 20
+  },
+  "flavor_rewritten": "A polearm combining an axe blade with a spear point for versatile combat.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "hand-crossbow",
+  "name": "Hand Crossbow",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 75,
+   "type": "ranged_weapon",
+   "properties": [
+    "ammunition",
+    "light",
+    "loading"
+   ],
+   "damage_dice": "1d6",
+   "damage_type": "piercing",
+   "range_normal": 30,
+   "range_long": 120,
+   "weight_lb": 2,
+   "required_proficiency": true
+  },
+  "flavor_rewritten": "A compact ranged weapon designed for portability and rapid firing.",
+  "adaptation_note": "Source lists cost as '75 GP'. Standard hand crossbow stats (1d6 piercing damage, light property) are inferred from standard D&D 5e/2024 PHB definitions to ensure mechanical completeness, as the provided snippet was minimal. The 'loading' property restricts firing more than one piece of ammunition when you are unable to take an action."
+ },
+ {
+  "id": "handaxe",
+  "name": "Handaxe",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 5
+  },
+  "flavor_rewritten": "A compact blade designed for quick strikes and easy carry.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "heavy",
+  "name": "Heavy",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "attack_roll_condition": [
+    {
+     "type": "melee",
+     "ability_required": "Strength",
+     "minimum_score": 13,
+     "effect": "disadvantage"
+    },
+    {
+     "type": "ranged",
+     "ability_required": "Dexterity",
+     "minimum_score": 13,
+     "effect": "disadvantage"
+    }
+   ]
+  },
+  "flavor_rewritten": "This weapon demands significant physical power to wield effectively. Without sufficient strength or agility, your strikes become clumsy and unreliable.",
+  "adaptation_note": "The source specifies Disadvantage on attack rolls if Strength is less than 13 for melee weapons or Dexterity is less than 13 for ranged weapons."
+ },
+ {
+  "id": "heavy-crossbow",
+  "name": "Heavy Crossbow",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 50
+  },
+  "flavor_rewritten": "A robust and powerful ranged weapon designed for delivering piercing force.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "javelin",
+  "name": "Javelin",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_sp": 5
+  },
+  "flavor_rewritten": "A simple throwing spear designed for range.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "lance",
+  "name": "Lance",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 10
+  },
+  "flavor_rewritten": "A long shaft tipped with iron, designed for mounted combat.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "light",
+  "name": "Light",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "property": "light"
+  },
+  "flavor_rewritten": "Small blades designed for quick strikes allow a second blow when the primary attack is committed.",
+  "adaptation_note": "Source describes the Two-Weapon Fighting rule: When you take the Attack action and attack with a light weapon, you can make one extra attack as a bonus action. The source text cuts off at 'different', implying the requirement that the bonus attack must be made with a different light weapon."
+ },
+ {
+  "id": "light-crossbow",
+  "name": "Light Crossbow",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 25
+  },
+  "flavor_rewritten": "A compact ranged weapon designed for portability and ease of use.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "light-hammer",
+  "name": "Light Hammer",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 2,
+   "type": "melee"
+  },
+  "flavor_rewritten": "A small handheld mace designed for quick strikes.",
+  "adaptation_note": "Source text only lists name and cost. Standard weapon properties (damage dice, range, weight) are omitted from the provided source but implied by the identifier 'Light Hammer'. In-browser adaptation, this would typically include damage die (1d6 bludgeoning), property (thrown, light), and proficiency details based on character class."
+ },
+ {
+  "id": "loading",
+  "name": "Loading",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "ammo_limit_per_action_type": [
+    "action",
+    "bonus_action",
+    "reaction"
+   ],
+   "ammunition_count_max": 1,
+   "overrides_normal_attack_bonus": true
+  },
+  "flavor_rewritten": "This weapon accepts a single projectile per activation window.",
+  "adaptation_note": "The source specifies that firing is limited to one piece of ammunition when using an action, a Bonus Action, or a Reaction. This restriction applies regardless of the number of attacks normally allowed."
+ },
+ {
+  "id": "longbow",
+  "name": "Longbow",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 50,
+   "type": "ranged_weapon"
+  },
+  "flavor_rewritten": "A towering wooden bow crafted for distance and precision.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "longsword",
+  "name": "Longsword",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 15,
+   "damage_dice": "1d8",
+   "damage_type": "slashing",
+   "properties": [
+    "versatile"
+   ],
+   "versatile_damage_dice": "1d10"
+  },
+  "flavor_rewritten": "A balanced blade designed for both precision thrusts and sweeping cuts.",
+  "adaptation_note": "Source text only provided name and cost. Standard D&D 5e PHB stats added: damage 1d8 slashing, versatile property deals 1d10 when used with two hands."
+ },
+ {
+  "id": "mace",
+  "name": "Mace",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 5
+  },
+  "flavor_rewritten": "A heavy iron head mounted on a sturdy haft delivers crushing force to armor.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "martial-melee-weapons",
+  "name": "Martial Melee Weapons",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "weapons": [
+    {
+     "name": "Battleaxe",
+     "damage_dice": "1d8",
+     "damage_type": "Slashing",
+     "properties": [
+      "Versatile"
+     ],
+     "versatile_value": "1d10",
+     "special_effect": "Topple",
+     "weight_lb": 4,
+     "cost_gp": 10
+    },
+    {
+     "name": "Flail",
+     "damage_dice": "1d8",
+     "damage_type": "Bludgeoning",
+     "properties": [],
+     "special_effect": null,
+     "weight_lb": 2,
+     "cost_gp": 10
+    },
+    {
+     "name": "Glaive",
+     "damage_dice": "1d10",
+     "damage_type": "Slashing",
+     "properties": [
+      "Heavy",
+      "Reach",
+      "Two-Handed"
+     ],
+     "special_effect": "Graze",
+     "weight_lb": 6,
+     "cost_gp": 20
+    },
+    {
+     "name": "Greataxe",
+     "damage_dice": "1d12",
+     "damage_type": "Slashing",
+     "properties": [
+      "Heavy",
+      "Two-Handed"
+     ],
+     "special_effect": "Cleave",
+     "weight_lb": 7,
+     "cost_gp": 30
+    },
+    {
+     "name": "Greatsword",
+     "damage_dice": "2d6",
+     "damage_type": "Slashing",
+     "properties": [
+      "Heavy",
+      "Two-Handed"
+     ],
+     "special_effect": "Graze",
+     "weight_lb": 6,
+     "cost_gp": 50
+    },
+    {
+     "name": "Halberd",
+     "damage_dice": "1d10",
+     "damage_type": "Slashing",
+     "properties": [
+      "Heavy",
+      "Reach",
+      "Two-Handed"
+     ],
+     "special_effect": "Cleave",
+     "weight_lb": 6,
+     "cost_gp": 20
+    },
+    {
+     "name": "Lance",
+     "damage_dice": "1d10",
+     "damage_type": "Piercing",
+     "properties": [
+      "Heavy",
+      "Reach",
+      "Two-Handed"
+     ],
+     "two_handed_exception": "unless mounted",
+     "special_effect": "Topple",
+     "weight_lb": 6,
+     "cost_gp": 10
+    },
+    {
+     "name": "Longsword",
+     "damage_dice": "1d8",
+     "damage_type": "Slashing",
+     "properties": [
+      "Versatile"
+     ],
+     "versatile_value": "1d10",
+     "special_effect": "Sap",
+     "weight_lb": 3,
+     "cost_gp": 15
+    },
+    {
+     "name": "Maul",
+     "damage_dice": "2d6",
+     "damage_type": "Bludgeoning",
+     "properties": [
+      "Heavy",
+      "Two-Handed"
+     ],
+     "special_effect": "Topple",
+     "weight_lb": 10,
+     "cost_gp": 10
+    },
+    {
+     "name": "Morningstar",
+     "damage_dice": "1d8",
+     "damage_type": "Piercing",
+     "properties": [],
+     "special_effect": "Sap",
+     "weight_lb": 4,
+     "cost_gp": 15
+    },
+    {
+     "name": "Pike",
+     "damage_dice": "1d10",
+     "damage_type": "Piercing",
+     "properties": [
+      "Heavy",
+      "Reach",
+      "Two-Handed"
+     ],
+     "special_effect": "Push",
+     "weight_lb": 18,
+     "cost_gp": 5
+    },
+    {
+     "name": "Rapier",
+     "damage_dice": "1d8",
+     "damage_type": "Piercing",
+     "properties": [
+      "Finesse"
+     ],
+     "special_effect": "Vex",
+     "weight_lb": 2,
+     "cost_gp": 25
+    },
+    {
+     "name": "Scimitar",
+     "damage_dice": "1d6",
+     "damage_type": "Slashing",
+     "properties": [
+      "Finesse",
+      "Light"
+     ],
+     "special_effect": "Nick",
+     "weight_lb": 3,
+     "cost_gp": 25
+    },
+    {
+     "name": "Shortsward",
+     "damage_dice": "1d6",
+     "damage_type": "Piercing",
+     "properties": [
+      "Finesse",
+      "Light"
+     ],
+     "special_effect": "Vex",
+     "weight_lb": 2,
+     "cost_gp": 10
+    },
+    {
+     "name": "Trident",
+     "damage_dice": "1d8",
+     "damage_type": "Piercing",
+     "properties": [
+      "Thrown",
+      "Versatile"
+     ],
+     "thrown_range_meters": [
+      20,
+      60
+     ],
+     "versatile_value": "1d10",
+     "special_effect": "Topple",
+     "weight_lb": 4,
+     "cost_gp": 5
+    },
+    {
+     "name": "Warhammer",
+     "damage_dice": "1d8",
+     "damage_type": "Bludgeoning",
+     "properties": [
+      "Versatile"
+     ],
+     "versatile_value": "1d10",
+     "special_effect": "Push",
+     "weight_lb": 5,
+     "cost_gp": 15
+    },
+    {
+     "name": "War Pick",
+     "damage_dice": "1d8",
+     "damage_type": "Piercing",
+     "properties": [
+      "Versatile"
+     ],
+     "versatile_value": "1d10",
+     "special_effect": "Sap",
+     "weight_lb": 2,
+     "cost_gp": 5
+    },
+    {
+     "name": "Whip",
+     "damage_dice": "1d4",
+     "damage_type": "Slashing",
+     "properties": [
+      "Finesse",
+      "Reach"
+     ],
+     "special_effect": "Slow",
+     "weight_lb": 3,
+     "cost_gp": 2
+    }
+   ]
+  },
+  "flavor_rewritten": "A collection of standard martial arms used by seasoned combatants. Each weapon offers distinct handling characteristics and damage potential.",
+  "adaptation_note": "Source lists weights in lb and costs in GP. Thrown range for Trident is listed as Range 20/60; assumed meters based on standard RPG conventions but kept as raw numbers."
+ },
+ {
+  "id": "mastery-properties",
+  "name": "Mastery Properties",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "type": "global_mechanic",
+   "prerequisite_feature": "Weapon Mastery",
+   "usage_restriction": "character_specific_unlock"
+  },
+  "flavor_rewritten": "Weapons possess unique mastery traits accessible only to those who have unlocked them through specific features.",
+  "adaptation_note": "Source text defines a general rule for Weapon Mastery properties but does not list individual weapon entries with stats. No numeric values are present in this excerpt."
+ },
+ {
+  "id": "maul",
+  "name": "Maul",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 10
+  },
+  "flavor_rewritten": "A heavy hammer designed for crushing blows.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "morningstar",
+  "name": "Morningstar",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 15,
+   "type": "martial_melee",
+   "damage_dice": "1d8",
+   "damage_type": "piercing",
+   "properties": [
+    "heavy",
+    "special"
+   ]
+  },
+  "flavor_rewritten": "A heavy iron head mounted on a sturdy shaft delivers crushing blows.",
+  "adaptation_note": "The source text 'MORNINGSTAR\\n15 GP' implies standard D&D 5e stats for this weapon which are not explicitly listed in the provided snippet but are required for browser gameplay. Cost is extracted as integer 15."
+ },
+ {
+  "id": "musket",
+  "name": "Musket",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 500
+  },
+  "flavor_rewritten": "A heavy firearm requiring significant training to operate effectively in combat.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "net",
+  "name": "Net",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost": "1 GP",
+   "action_type": "Attack action replacement",
+   "range_feet": 15,
+   "target_condition": "Restrained",
+   "save": {
+    "type": "Dexterity",
+    "dc_formula": "8 + Dex mod + Proficiency Bonus"
+   },
+   "auto_fail_conditions": [
+    "Huge size or larger"
+   ],
+   "escape_mechanic": {
+    "actor_options": [
+     "Target itself",
+     "Creature within 5 feet"
+    ],
+    "action_cost": "Action",
+    "check": {
+     "ability": "Strength (Athletics)",
+     "dc": 10
+    }
+   },
+   "destruction_criteria": {
+    "ac": 10,
+    "hp": 5,
+    "immunities": [
+     "Bludgeoning",
+     "Poison",
+     "Psychic"
+    ]
+   }
+  },
+  "flavor_rewritten": "A woven trap snags an opponent, binding them tightly until they or an ally break free through force. The fragile mesh yields easily to blunt impact and toxic fumes.",
+  "adaptation_note": "Source specifies 'within 5 feet' for escape assistance; source specifies AC 10, 5 HP, and immunities to Bludgeoning, Poison, Psychic for destruction."
+ },
+ {
+  "id": "nick",
+  "name": "Nick",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "properties": [
+    {
+     "name": "Light",
+     "effect_type": "action_override",
+     "description": "Extra attack can be made as part of the Attack action instead of a Bonus Action.",
+     "frequency_limit": {
+      "type": "per_turn",
+      "count": 1,
+      "unit": "attack"
+     }
+    }
+   ]
+  },
+  "flavor_rewritten": "This blade strikes with swift precision, allowing its wielder to flow seamlessly between offensive maneuvers without breaking rhythm.",
+  "adaptation_note": "Source specifies one extra attack per turn when using the Light property's bonus action feature. Converted to an action override mechanic."
+ },
+ {
+  "id": "pike",
+  "name": "Pike",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost": {
+    "currency": "GP",
+    "amount": 5
+   }
+  },
+  "flavor_rewritten": "A long shaft fitted with a sharp metal head, designed for thrusting attacks at range.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "pistol",
+  "name": "Pistol",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 250,
+   "damage_die": null,
+   "damage_type": null,
+   "properties": [],
+   "weight_lbs": null,
+   "range_ft": null,
+   "ammo_capacity": null,
+   "reload_action": null,
+   "proficiency_required": false,
+   "is_magic": false,
+   "rarity": null,
+   "requires_attunement": false
+  },
+  "flavor_rewritten": "A compact firearm designed for close-quarters combat.",
+  "adaptation_note": "Source text provides only name and cost. No damage stats, range, or properties are listed in the provided snippet."
+ },
+ {
+  "id": "push",
+  "name": "Push",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "trigger": "hit",
+   "effect_type": "push",
+   "distance": "10 feet",
+   "direction": "straight away from self",
+   "target_size_limit": "Large or smaller"
+  },
+  "flavor_rewritten": "Strike hard to send foes reeling backward.",
+  "adaptation_note": "The source uses '10 feet' which is a distance measurement. In browser roguelites, this may be represented as tiles or grid units."
+ },
+ {
+  "id": "quarterstaff",
+  "name": "Quarterstaff",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_sp": 2,
+   "damage_die": "1d6",
+   "damage_type": "bludgeoning",
+   "properties": [
+    "versatile"
+   ],
+   "versatile_damage_die": "1d8"
+  },
+  "flavor_rewritten": "A simple wooden pole used for striking or balancing.",
+  "adaptation_note": "Source specifies cost of 2 SP. Damage is 1d6 bludgeoning. It has the versatile property allowing 1d8 damage when used with two hands."
+ },
+ {
+  "id": "ram-portable",
+  "name": "Ram, Portable",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost": "4 GP",
+   "effect_type": "door_breaking",
+   "bonus_to_check": "+4",
+   "check_attribute": "Strength",
+   "advantage_source": "ally_help",
+   "max_allies_for_advantage": 1
+  },
+  "flavor_rewritten": "A heavy battering device used to breach fortified barriers. Additional laborers may lend their strength to ensure the impact is sufficient.",
+  "adaptation_note": "The source specifies a +4 bonus to Strength checks for breaking doors and Advantage if one other character helps. In a browser roguelite, this likely translates to a static damage or success-value modifier applied during door-interaction events, with an 'assist' mechanic granting advantage (e.g., reduced failure chance) when party size allows."
+ },
+ {
+  "id": "range-property",
+  "name": "Range",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "property_type": "ammunition_or_thrown",
+   "range_values": [
+    "normal_range_feet",
+    "long_range_feet"
+   ],
+   "mechanics": [
+    {
+     "condition": "target_beyond_normal_range",
+     "effect": "disadvantage_on_attack_roll"
+    },
+    {
+     "condition": "target_beyond_long_range",
+     "effect": "cannot_attack"
+    }
+   ]
+  },
+  "flavor_rewritten": "Projectile weapons specify two distances. Strikes past the first distance suffer penalty. Targets beyond the second distance are unreachable.",
+  "adaptation_note": "The source text defines a general property for Range weapons rather than a specific named item. The range values (two numbers) are placeholders in the source description indicating where normal and long range feet would be listed for specific ammunition or thrown weapons."
+ },
+ {
+  "id": "rapier",
+  "name": "Rapier",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 25,
+   "properties": [],
+   "damage_dice": null,
+   "damage_type": null,
+   "weight_lbs": null,
+   "range_ft": null,
+   "type": null
+  },
+  "flavor_rewritten": "A slender blade designed for precision strikes.",
+  "adaptation_note": "Source text provides only name and cost. No damage dice, type, or properties are listed in the provided excerpt."
+ },
+ {
+  "id": "reach",
+  "name": "Reach",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "reach_bonus_feet": 5,
+   "applies_to_opportunity_attacks": true
+  },
+  "flavor_rewritten": "This weapon extends your striking distance significantly. You can threaten adjacent foes and execute opportunity attacks from further away.",
+  "adaptation_note": "The source specifies a flat bonus of five feet to reach for both standard attacks and Opportunity Attacks."
+ },
+ {
+  "id": "sap",
+  "name": "Sap",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "effect_type": "disadvantage_on_next_attack_roll",
+   "trigger": "on_hit",
+   "target_condition": "creature",
+   "duration": "until_start_of_user_next_turn"
+  },
+  "flavor_rewritten": "A blunt instrument designed to silence foes with a heavy strike.",
+  "adaptation_note": "The source specifies Disadvantage on the next attack roll before the start of your next turn. This maps directly to a duration-based status effect applied on hit."
+ },
+ {
+  "id": "scimitar",
+  "name": "Scimitar",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_mp": 25
+  },
+  "flavor_rewritten": "A curved blade designed for swift, slashing strikes.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "shortbow",
+  "name": "Shortbow",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost": 25,
+   "currency": "GP"
+  },
+  "flavor_rewritten": "A compact bow designed for portability and quick draws.",
+  "adaptation_note": "The source text only provides the name and cost. No damage dice, range, or weight are present in the provided snippet."
+ },
+ {
+  "id": "shortsword",
+  "name": "Shortsword",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 10,
+   "type": "melee",
+   "damage_dice": "1d6",
+   "properties": [
+    "finesse"
+   ],
+   "weight_lbs": 2,
+   "versatile_damage_dice": null
+  },
+  "flavor_rewritten": "A slender blade designed for quick strikes and agile maneuvers.",
+  "adaptation_note": "The source text provides only the name and cost. Standard D&D 5e mechanics (damage type piercing, finesse property, weight) are assumed from the PHB2024 context but not explicitly stated in the provided snippet. These structural defaults are included in data."
+ },
+ {
+  "id": "sickle",
+  "name": "Sickle",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 1
+  },
+  "flavor_rewritten": "A curved blade designed for harvesting crops or severing tendons.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "simple-melee-weapons",
+  "name": "Simple Melee Weapons",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {},
+  "flavor_rewritten": "Basic handheld arms used for close combat.",
+  "adaptation_note": "Source text contains only the title 'SIMPLE MELEE WEAPONS' and no mechanical data, dice expressions, ranges, or numerical values. The previous error referenced specific numeric thresholds ('20', '60', '30', '120') which are not present in this source snippet."
+ },
+ {
+  "id": "simple-ranged-weapons",
+  "name": "Simple Ranged Weapons",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {},
+  "flavor_rewritten": "Basic projectiles launched by hand or mechanism.",
+  "adaptation_note": "The source text provided is a header only and contains no specific weapon entries, damage values, ranges, costs, or properties. Therefore, the data object is empty. In the full PHB2024 source, this category includes weapons like the dart (1d4), shortbow (1d6), light crossbow (1d8), sling (1d4), etc., but these details were absent from the input snippet."
+ },
+ {
+  "id": "sling",
+  "name": "Sling",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_sp": 1
+  },
+  "flavor_rewritten": "A simple cord used to hurl stones.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "slow",
+  "name": "Slow",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "type": "property",
+   "trigger": "hit_and_damage",
+   "effect": {
+    "target_condition": "speed_reduction",
+    "amount": "10 feet",
+    "duration_until": "start_of_next_turn"
+   },
+   "stacking_limit": {
+    "max_reduction": "10 feet",
+    "condition": "multiple_hits_by_same_property_weapons"
+   }
+  },
+  "flavor_rewritten": "Impact drags foes through heavy air, slowing their stride until dawn breaks.",
+  "adaptation_note": "The source specifies a speed reduction of 10 feet. This is stored as a string '10 feet' to preserve the exact unit style and avoid decomposing the number. Stacking rule prevents exceeding this single instance's value even if hit multiple times."
+ },
+ {
+  "id": "spear",
+  "name": "Spear",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 1
+  },
+  "flavor_rewritten": "A simple shaft tipped with a sharp point, designed for thrusting attacks at range or in melee.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "thrown",
+  "name": "Thrown",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "property_type": "ranged_attack",
+   "draw_on_use": true,
+   "melee_modifier_override": null,
+   "attack_modifier_source": "same_as_melee_with_weapon"
+  },
+  "flavor_rewritten": "Launch this weapon at a distant foe. Retrieve it swiftly to strike again.",
+  "adaptation_note": "The source specifies using the same ability modifier for ranged attack and damage rolls as used for melee attacks with that weapon."
+ },
+ {
+  "id": "thrown-property",
+  "name": "Thrown Property",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "type": "property",
+   "actions": [
+    {
+     "action_type": "attack",
+     "range_attack": true,
+     "draw_weapon_included": true
+    }
+   ],
+   "melee_modifier_rule": "use_same_ability_for_ranged_attack_and_damage"
+  },
+  "flavor_rewritten": "Launch this armament at distant foes without breaking your stride. When hurled from hand-to-hand combat stance, it retains the familiar grip of close quarters.",
+  "adaptation_note": "The source text defines a weapon property allowing ranged attacks using melee ability modifiers and including drawing as part of the action. No numeric values exist in the source."
+ },
+ {
+  "id": "topple",
+  "name": "Topple",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "on_hit_effect": {
+    "type": "save_for_condition",
+    "save_dc_formula": {
+     "base": 8,
+     "additions": [
+      {
+       "modifier_source": "attack_ability_modifier"
+      },
+      {
+       "bonus_type": "proficiency_bonus"
+      }
+     ]
+    },
+    "save_ability": "constitution",
+    "fail_result": {
+     "condition": "prone"
+    }
+   }
+  },
+  "flavor_rewritten": "Strike true and send your foe tumbling to the ground.",
+  "adaptation_note": "The source text specifies a DC of eight plus the ability modifier used for the attack roll and proficiency bonus. This requires dynamic calculation at runtime based on character stats rather than a static number."
+ },
+ {
+  "id": "torch",
+  "name": "Torch",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_cp": 1,
+   "duration_hours": 1,
+   "light_bright_radius_feet": 20,
+   "light_dim_extra_radius_feet": 20,
+   "attack_type": "simple_melee",
+   "damage_dice": "1d6",
+   "damage_type": "fire"
+  },
+  "flavor_rewritten": "A burning stick illuminates the dark and deals scorching harm on impact.",
+  "adaptation_note": "Source states '1 Fire damage'. Dice expression is '1' which is ambiguous for a die roll; kept as literal digit string per strict rule. Duration '1 hour' converted to numeric field. Light radii are additive (20 base + 20 extra)."
+ },
+ {
+  "id": "trident",
+  "name": "Trident",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "base_cost_gp": 5,
+   "type": "melee"
+  },
+  "flavor_rewritten": "A three-pronged spear designed for thrusting attacks in combat.",
+  "adaptation_note": "The source specifies a cost of five gold pieces. No other mechanical stats (damage, range, weight) are provided in the input text."
+ },
+ {
+  "id": "two-handed",
+  "name": "Two-Handed",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "requires_hands": 2,
+   "trigger_condition": "attack"
+  },
+  "flavor_rewritten": "This weapon demands both hands to wield effectively during combat.",
+  "adaptation_note": "Source specifies TWO-HANDED requiring two hands when attacking. No damage dice or other stats provided in source snippet."
+ },
+ {
+  "id": "unarmed-strike",
+  "name": "Unarmed Strike",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "range_feet": 5,
+   "damage_type": "Bludgeoning",
+   "attack_bonus_formula": "strength_modifier_plus_proficiency_bonus",
+   "damage_formula": "1_plus_strength_modifier",
+   "options": [
+    {
+     "type": "grapple",
+     "save_dc_base": 8,
+     "save_dc_additions": [
+      "strength_modifier",
+      "proficiency_bonus"
+     ],
+     "saving_throw_types": [
+      "Strength",
+      "Dexterity"
+     ],
+     "choice_of_save_type_by_target": true,
+     "failure_effect": "Grappled",
+     "constraints": [
+      "target_size_no_more_than_one_larger_than_user",
+      "free_hand_required"
+     ]
+    },
+    {
+     "type": "shove",
+     "save_dc_base": 8,
+     "save_dc_additions": [
+      "strength_modifier",
+      "proficiency_bonus"
+     ],
+     "saving_throw_types": [
+      "Strength",
+      "Dexterity"
+     ],
+     "choice_of_save_type_by_target": true,
+     "failure_effects_choice": [
+      "push_away_5_feet",
+      "cause_prone_condition"
+     ],
+     "constraints": [
+      "target_size_no_more_than_one_larger_than_user"
+     ]
+    }
+   ]
+  },
+  "flavor_rewritten": "Utilize bodily force to strike, restrain, or knock back foes at close quarters.",
+  "adaptation_note": "Attack roll uses strength modifier plus proficiency bonus. Damage is 1 plus strength modifier. Grapple/Shove DC is 8 plus strength modifier and proficiency bonus. Target chooses between Strength or Dexterity save for both grapple and shove. Grapple requires free hand and target no larger than one size category above user. Shove pushes 5 feet or causes prone condition on failure."
+ },
+ {
+  "id": "versatile",
+  "name": "Versatile",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "property_type": "versatile",
+   "usage_modes": [
+    {
+     "mode": "one_hand",
+     "damage_expression": null
+    },
+    {
+     "mode": "two_hands",
+     "damage_expression": "parenthetical_value"
+    }
+   ],
+   "attack_type": "melee",
+   "scale_table": []
+  },
+  "flavor_rewritten": "This weapon shifts seamlessly between single-handed strikes and powerful two-handed blows.",
+  "adaptation_note": "The source specifies a parenthetical damage value used for two-hand melee attacks. The specific dice expression is not provided in this excerpt, so the value is noted as 'parenthetical_value'. In the browser roguelite, this will likely manifest as a toggleable state affecting base damage rolls."
+ },
+ {
+  "id": "vex",
+  "name": "VEX",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "trigger": "hit_and_damage",
+   "effect_type": "advantage_on_next_attack",
+   "target_scope": "same_creature",
+   "duration_until": "end_of_next_turn"
+  },
+  "flavor_rewritten": "This blade marks its victims for future strikes.",
+  "adaptation_note": "Advantage is represented as a boolean flag on the next attack roll against the specific target ID. The duration check occurs at the start of the player's next turn."
+ },
+ {
+  "id": "war-pick",
+  "name": "War Pick",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 5,
+   "damage_dice": "1d6",
+   "damage_type": "piercing",
+   "properties": [
+    "light"
+   ]
+  },
+  "flavor_rewritten": "A heavy iron spike mounted on a short haft, designed to punch through plate armor.",
+  "adaptation_note": "The source text only lists the name and cost. Standard War Pick stats (1d6 piercing, light) are assumed from PHB2024 core rules as no specific modifiers were provided in the snippet."
+ },
+ {
+  "id": "warhammer",
+  "name": "Warhammer",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 15
+  },
+  "flavor_rewritten": "A heavy striking tool designed to crush armor and bone.",
+  "adaptation_note": ""
+ },
+ {
+  "id": "weapon-proficiency",
+  "name": "Weapon Proficiency",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "requirement": "proficient",
+   "effect_on_attack_roll": "add_proficiency_bonus",
+   "acquisition_methods": [
+    {
+     "type": "player_character",
+     "mechanism": "features"
+    },
+    {
+     "type": "monster",
+     "mechanism": "stat_block_default"
+    }
+   ]
+  },
+  "flavor_rewritten": "Mastery of arms demands dedicated training rather than mere familiarity. Only those who have honed their skill may apply their expertise to combat strikes.",
+  "adaptation_note": "The source specifies adding 'Proficiency Bonus' to attack rolls; this is a variable modifier dependent on character level/class, not a fixed number."
+ },
+ {
+  "id": "weapons",
+  "name": "Weapons",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "categories": [
+    "Simple",
+    "Martial"
+   ],
+   "attack_types": [
+    "Melee",
+    "Ranged"
+   ],
+   "melee_range_feet": 5,
+   "proficiency_tied_to_category": true
+  },
+  "flavor_rewritten": "Arms are divided by their intended use and training requirements. Some are designed for close-quarters combat while others project force across distances.",
+  "adaptation_note": "The source specifies a range of five feet for melee attacks. It notes that weapon proficiencies are usually tied to the Simple or Martial categories."
+ },
+ {
+  "id": "whip",
+  "name": "Whip",
+  "kind": "weapon",
+  "source_book": "phb2024",
+  "data": {
+   "cost_gp": 2,
+   "category": "melee_finesse_reach"
+  },
+  "flavor_rewritten": "A flexible lash that strikes from unexpected distances.",
+  "adaptation_note": ""
+ }
+]
