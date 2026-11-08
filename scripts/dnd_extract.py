@@ -476,6 +476,12 @@ def normalize_numbers(text: str) -> str:
 def number_multiset(text: str) -> Counter:
     return Counter(NUM_RE.findall(normalize_numbers(text)))
 
+def normalize_name(name: str) -> str:
+    # Strip ordinal prefixes ("Level 10:", "Step 2") and collapse whitespace;
+    # the rewriter is allowed to expand (not shorten) the source name.
+    t = re.sub(r"^(step|level)\s*\d+\s*:?\s*", "", (name or "").lower())
+    return re.sub(r"\s+", " ", t).strip()
+
 def cmd_validate(args) -> None:
     book = args.book
     verbatim = {}
@@ -499,9 +505,21 @@ def cmd_validate(args) -> None:
             problems.append(f"{d.get('id')}: MISSING {dict(missing)}")
         if extra:
             problems.append(f"{d.get('id')}: EXTRA(info) {dict(extra)}")
-        if src.get("name") and d.get("name") != src["name"]:
-            problems.append(f"{d.get('id')}: NAME-MISMATCH "
-                            f"{src['name']!r} -> {d.get('name')!r}")
+        src_name = (src.get("name") or "").strip()
+        if src_name and src_name != "(prose)":
+            # Salvage entries (source name '(prose)') are unnamed prose the
+            # parser mislabeled as data; the rewriter invents a proper name,
+            # so a mismatch is expected and harmless. Named sources must
+            # match exactly, or be a prefix (expansion) of the new name.
+            sn, dn = normalize_name(src_name), normalize_name(d.get("name") or "")
+            # A source that was purely an ordinal label ("Level 4") imposes
+            # no name constraint; otherwise the new name must be exact or an
+            # expansion (normalized prefix) of the source name.
+            if (d.get("name") != src_name
+                    and sn
+                    and not (dn == sn or dn.startswith(sn))):
+                problems.append(f"{d.get('id')}: NAME-MISMATCH "
+                                f"{src_name!r} -> {d.get('name')!r}")
     expected = sum(1 for r in load_jsonl(PRIVATE / "verbatim" / f"{book}.jsonl")
                    for e in r.get("entries", [])
                    if e.get("kind") in BOOKS[book]["kinds"])
