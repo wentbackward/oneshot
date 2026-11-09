@@ -8,7 +8,9 @@
 # commits onto the current <remote>/<base>, verify the tree equals the gated train-<branch> tree, push it to
 # the branch (with a lease on the head that was gated), create the PR if missing (title and body from the
 # notes file), squash-merge exactly that head (--match-head-commit), confirm the PR is MERGED and delete
-# the remote branch.
+# the remote branch. When every row of the train is merged, the train's train-<branch> bookkeeping refs are
+# deleted (they are load-bearing only while the train is in flight; an interrupted train keeps its refs so
+# the resume can replay against the gated heads without re-gating).
 #
 # Exit: 0 all merged, 2 usage/config, 3 replay conflict, 4 tree differs from the gated one (re-gate),
 # 5 notes file missing, 6 branch changed since the gate, 7 PR not merged, 8 not gated green.
@@ -112,19 +114,40 @@ for branch in "$@"; do
   # Remove the ticket's worktree now that the train is merged: the loop created it, so the
   # loop owns its deletion. A DIRTY worktree is kept — uncommitted work is evidence, and
   # nothing may be destroyed to tidy a directory. (Legacy sibling worktrees are collected by
-  # scripts/cleanup-worktrees.sh.)
+  # scripts/cleanup-worktrees.sh.) The probe is FAIL-CLOSED like cleanup-worktrees.sh's:
+  # a failing `status` is unclassifiable, never clean — it would read empty-on-failure as
+  # clean and destroy uncommitted work at the most automated moment of the loop.
   wt=$(git worktree list --porcelain | awk -v b="refs/heads/$branch" '$1 == "worktree" { w = $2 } $1 == "branch" && $2 == b { print w }')
   if [ -n "$wt" ] && [ -d "$wt" ]; then
-    if [ -z "$(git -C "$wt" status --porcelain 2>/dev/null)" ]; then
-      git worktree remove "$wt" >/dev/null 2>&1 || true
-      git worktree prune >/dev/null 2>&1 || true
-      git branch -q -D "$branch" >/dev/null 2>&1 || true
-      echo "cleaned worktree $wt (branch $branch)"
+    if st=$(git -C "$wt" status --porcelain 2>/dev/null); then
+      if [ -z "$st" ]; then
+        git worktree remove "$wt" >/dev/null 2>&1 || true
+        git worktree prune >/dev/null 2>&1 || true
+        git branch -q -D "$branch" >/dev/null 2>&1 || true
+        echo "cleaned worktree $wt (branch $branch)"
+      else
+        echo "KEPT worktree $wt — uncommitted changes; remove by hand when ready"
+      fi
     else
-      echo "KEPT worktree $wt — uncommitted changes; remove by hand when ready"
+      echo "KEPT worktree $wt — status probe failed; remove by hand when ready"
     fi
   fi
   previous=$branch
+done
+# Every row of the train is now merged (rows not passed as args were already merged before this
+# run, and this loop only exits 0 after marking the rest): the loop that created the
+# train-<branch> refs owns their deletion. All rows of the TRAIN FILE are deleted, not just
+# this run's args — a resume only sees the pending branches, and the earlier rows' refs would
+# leak forever otherwise. A ref that vanished by hand is no news; a ref git REFUSES to
+# delete (e.g. checked out somewhere) is printed, not swallowed — the residue must be
+# diagnosable, not a silent permanent leak.
+awk '{print $1}' "$train_file" | while IFS= read -r branch; do
+  git -C "$DL_ROOT" rev-parse -q --verify "refs/heads/train-$branch" >/dev/null || continue
+  if ! del_err=$(git -C "$DL_ROOT" branch -q -D "train-$branch" 2>&1 >/dev/null); then
+    reason=$(printf '%s' "$del_err" | tr '\n' ' ' | sed -e 's/[[:space:]][[:space:]]*/ /g' -e 's/^ //' -e 's/ $//')
+    [ -n "$reason" ] || reason="no diagnostic captured"
+    echo "KEPT train-$branch (delete refused: $reason)"
+  fi
 done
 rm -f "$train_file"
 echo "notes kept in $(dl_notes_dir)"

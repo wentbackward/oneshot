@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { Type, type TSchema } from "typebox";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import type { AgentToolResult, AgentToolUpdateCallback, ToolDefinition } from "@earendil-works/pi-coding-agent";
-import { loadConfig, resolvePaths, resolveState, repoSlugFromRemote, type DevloopConfig, type Paths } from "./config.ts";
+import { loadConfig, resolvePaths, resolveState, repoSlugFromRemote, scenariosOn, type DevloopConfig, type Paths } from "./config.ts";
 import { readState, updateState, pruneDead, runningCount, type DispatchEntry, type DispatchState } from "./state.ts";
 import {
 	branchSlug,
@@ -15,11 +15,16 @@ import {
 	assembleReviewerBrief,
 	assembleVerifierBrief,
 	assembleAnalystBrief,
+	assembleScenarioWriterBrief,
+	parseScenarioLines,
+	scenarioLinesForTicket,
+	buildScenarioComment,
 } from "./brief.ts";
 import * as childreg from "./childreg.ts";
 import { spawnPi, type ChildResult } from "./child.ts";
 import { discoverRoles, findRole } from "./roles.ts";
-import { listOpenIssues, listClosedIssueNumbers, addLabel, latestComment, addComment } from "./issues.ts";
+import { listOpenIssues, listClosedIssueNumbers, addLabel, latestComment, addComment, type Issue } from "./issues.ts";
+import { scanStore, coveredTicketsFromScan } from "./scenarios.ts";
 import {
 	evaluateStopGate,
 	runFastCheck,
@@ -109,8 +114,53 @@ function git(args: string[], cwd: string): void {
 	execFileSync("git", args, { cwd, stdio: "pipe" });
 }
 
-function parseReportStatus(report: string): "done" | "blocked" {
-	return /STATUS:\s*BLOCKED/.test(report) ? "blocked" : "done";
+/** Default delay for the single retry when GitHub's issue list lags a just-created ticket.
+ * Module-private: `listLagRetryMs` is the only consumer, and a named constant the tests
+ * could not reach anyway (the wait is driven by the documented MULTIPI_LIST_LAG_RETRY_MS
+ * seam) is not public API. */
+const LIST_LAG_RETRY_MS_DEFAULT = 1500;
+
+/**
+ * The one bounded list-lag retry wait. Documented env seam `MULTIPI_LIST_LAG_RETRY_MS` (ms):
+ * tests drive dispatch without the real 1.5 s wall-clock wait; unset or non-positive values
+ * fall back to the 1500 ms default. (Supersedes the no-seam clause of the 2026-11-09
+ * findOpenTicket DECISIONS entry — review of #11, round 2.)
+ */
+function listLagRetryMs(): number {
+	const raw = Number(process.env.MULTIPI_LIST_LAG_RETRY_MS);
+	return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : LIST_LAG_RETRY_MS_DEFAULT;
+}
+
+/**
+ * Find an open ticket with one bounded retry. GitHub's list endpoint briefly lags a
+ * just-created issue — precisely the moment at which the scenario-writer (and the
+ * implementer) gets dispatched — so re-list once after a short wait before refusing.
+ */
+export async function findOpenTicket(repoSlug: string, ticket: number): Promise<Issue | undefined> {
+	let issue = listOpenIssues(repoSlug).find((i) => i.number === ticket);
+	if (!issue) {
+		await new Promise((r) => setTimeout(r, listLagRetryMs()));
+		issue = listOpenIssues(repoSlug).find((i) => i.number === ticket);
+	}
+	return issue;
+}
+
+/**
+ * Terminal-line classification of a role report — the one uniform rule for every role.
+ * Only the report's LAST non-empty line decides, and it must match the role's contract:
+ *  - implementer / scenario-writer / analyst / verifier: `STATUS: DONE` | `STATUS: BLOCKED`
+ *  - code-reviewer: `VERDICT: APPROVE` | `VERDICT: CHANGES [REQUIRED]` (a finished review → done)
+ * Marker mentions anywhere else in the body (quotes, documented contracts) can never decide;
+ * a report lacking a terminal marker keeps the crashed semantics (ticket #22).
+ */
+export function classifyReport(role: string, report: string): "done" | "blocked" | "crashed" {
+	const last = report.split("\n").map((l) => l.trim()).reverse().find((l) => l !== "") ?? "";
+	if (role === "code-reviewer") {
+		return /^VERDICT:\s*(APPROVE\b|CHANGES(?:\s+REQUIRED)?\b)/.test(last) ? "done" : "crashed";
+	}
+	if (/^STATUS:\s*BLOCKED\b/.test(last)) return "blocked";
+	if (/^STATUS:\s*DONE\b/.test(last)) return "done";
+	return "crashed";
 }
 
 interface DispatchParams {
@@ -184,6 +234,68 @@ async function dispatchImpl(ctx: ToolContext, params: DispatchParams, signal: Ab
 		return reportResult(role.name, undefined, analystEntry, res, `\nplan file: ${planPath}`);
 	}
 
+	// ---- scenario-writer: holdout scenarios for a ticket (repo root, no worktree, no capacity slot)
+	if (params.role === "scenario-writer") {
+		const ticket = params.ticket;
+		if (ticket === undefined) return { ...text("scenario-writer requires `ticket`"), isError: true };
+		if (!scenariosOn(ctx.cfg)) {
+			return { ...text("the scenario store is off in this repo's config (a `scenarios` block or `factory: dark` turns it on) — there is nowhere to write the ticket's scenarios"), isError: true };
+		}
+		const key = `scenario-writer-${ticket}`; // distinct from the implementer's <ticket> key
+		const state = pruneDead(readState(ctx.stateDir));
+		if (state[key]?.status === "running") {
+			return { ...text(`a scenario-writer for #${ticket} is already running. In-flight: ${inFlightList(state)}`), isError: true };
+		}
+		const issue = await findOpenTicket(ctx.repoSlug, ticket);
+		if (!issue) return { ...text(`ticket #${ticket} not found among open issues (already merged/closed?)`), isError: true };
+		const entry: DispatchEntry = {
+			pid: 0,
+			role: role.name,
+			worktree: ctx.cfg.root,
+			startedAt: Date.now(),
+			status: "running",
+		};
+		persistEntry(ctx, key, entry);
+		const brief = assembleScenarioWriterBrief({
+			ticket,
+			title: issue.title,
+			body: issue.body,
+			storeDir: ctx.paths.scenariosDir,
+			repoRoot: ctx.cfg.root,
+		});
+		const ac = spawnAndTrack(ctx, key, role, { task: brief, worktree: ctx.cfg.root, signal, onUpdate, ticket });
+		const res = await ac.promise;
+		finishEntry(ctx, key, entry, res, signal);
+
+		// Outcome-driven side effects, routed through the terminal-line classifier (#22):
+		// DONE -> the ticket gets the scenario TITLES only (the dark-mode review list);
+		// BLOCKED (e.g. the store lies inside the repository) -> dl/blocked.
+		let extra = "";
+		const verdict = classifyReport(role.name, res.finalText);
+		if (verdict === "done" && !res.aborted) {
+			// Only this ticket's own lines (t<ticket>-) may land on its review list; a writer
+			// reporting a foreign id cannot pollute it.
+			const lines = scenarioLinesForTicket(ticket, parseScenarioLines(res.finalText));
+			if (lines.length === 0) {
+				extra = "\n(no scenario lines for this ticket in the report; nothing commented)";
+			} else {
+				try {
+					addComment(ctx.repoSlug, ticket, buildScenarioComment(ticket, lines));
+					extra = `\nscenarios on the ticket (${lines.length}, titles only): ${lines.map((l) => l.id).join(", ")}`;
+				} catch (e) {
+					extra = `\nWARNING: could not comment the scenarios: ${(e as Error).message.split("\n")[0]}`;
+				}
+			}
+		} else if (verdict === "blocked") {
+			try {
+				addLabel(ctx.repoSlug, ticket, "dl/blocked");
+			} catch {
+				/* labelling is best-effort; the report carries the reason */
+			}
+		}
+		return reportResult(role.name, ticket, entry, res, extra);
+	}
+
 	// ---- code-reviewer: reviews an existing pushed branch -------------------
 	if (params.role === "code-reviewer") {
 		const state = pruneDead(readState(ctx.stateDir));
@@ -243,13 +355,18 @@ async function dispatchImpl(ctx: ToolContext, params: DispatchParams, signal: Ab
 		return { ...text(`capacity full: ${runningImplementers.length}/${cap} implementers in flight: ${inFlightList(state)}. Wait for a report (or cancel a ticket) and dispatch again.`), isError: true };
 	}
 
-	const issues = listOpenIssues(ctx.repoSlug);
-	let issue = issues.find((i) => i.number === ticket);
-	if (!issue) {
-		// GitHub's list endpoint briefly lags a just-created issue; one bounded retry, then refuse.
-		await new Promise((r) => setTimeout(r, 1500));
-		issue = listOpenIssues(ctx.repoSlug).find((i) => i.number === ticket);
+	// Startability rule (spec §4): with the store on, a ticket needs a valid t<ticket>- scenario
+	// BEFORE any implementation can start. Local refusal (the scan is a plain read), placed with
+	// the other local refusals so no worktree/label/GitHub side effect precedes it. An UNREADABLE
+	// store covers nothing (fail-closed) — a broken store never starts work it cannot verify.
+	if (scenariosOn(ctx.cfg) && !coveredTicketsFromScan(scanStore(ctx.paths.scenariosDir)).includes(ticket)) {
+		return {
+			...text(`ticket #${ticket} is not startable: the scenario store holds no valid t${ticket}- scenario covering it (dark-factory spec §4). Dispatch the scenario-writer for #${ticket} first, then re-dispatch the implementer.`),
+			isError: true,
+		};
 	}
+
+	const issue = await findOpenTicket(ctx.repoSlug, ticket);
 	if (!issue) return { ...text(`ticket #${ticket} not found among open issues (already merged/closed?)`), isError: true };
 	const slug = branchSlug(issue.title);
 	const branch = prev?.branch ?? (slug ? `feat/${ticket}-${slug}` : `feat/${ticket}`);
@@ -291,7 +408,7 @@ async function dispatchImpl(ctx: ToolContext, params: DispatchParams, signal: Ab
 	// Outcome-driven side effects: PR + labels. The report contract (STATUS line) decides, not the
 	// transport's stop reason — a child that delivered DONE but exited oddly still did the job.
 	let extra = "";
-	const verdict = parseReportStatus(res.finalText);
+	const verdict = classifyReport(role.name, res.finalText);
 	if (verdict === "done" && !res.aborted) {
 		try {
 			const out = execFileSync("bash", [path.join(ctx.scriptsDir, "open-pr.sh"), branch], {
@@ -353,6 +470,7 @@ function spawnAndTrack(
 		appendSystemPrompt: role.filePath,
 		tools: role.tools,
 		model: role.model,
+		role: role.name,
 		cwd: opts.worktree,
 		signal: controller.signal,
 		silenceMs: ctx.cfg.childSilenceMinutes * 60_000,
@@ -388,7 +506,7 @@ function spawnAndTrack(
 	}).then((res) => {
 		controllers.delete(key);
 		const now = Date.now();
-		const status = res.aborted ? "interrupted" : /STATUS:\s*BLOCKED/.test(res.finalText) ? "blocked" : /STATUS:\s*DONE/.test(res.finalText) ? "done" : "crashed";
+		const status = res.aborted ? "interrupted" : classifyReport(role.name, res.finalText);
 		childreg.updateChild(key, { status, endedAt: now }, { at: now, kind: "end", text: `finished (${status}, $${res.usage.cost.toFixed(2)})` });
 		return res;
 	});
@@ -408,18 +526,10 @@ export function finishEntry(ctx: ToolContext, key: string, entry: DispatchEntry,
 		entry.report = res.finalText || res.stderr || res.errorMessage || "";
 		entry.stopReason = res.stopReason;
 		if (res.errorMessage) entry.error = res.errorMessage;
-		if (res.aborted || signal?.aborted) entry.status = "interrupted";
-		else if (entry.role === "code-reviewer") {
-			// The reviewer's contract is VERDICT: APPROVE / CHANGES REQUIRED — not STATUS: DONE.
-			// Classifying on the implementer's contract recorded every finished review as
-			// "crashed" (observed live in two projects: full reports, stopReason=stop).
-			if (/VERDICT:\s*(APPROVE|CHANGES)/.test(res.finalText)) entry.status = "done";
-			else if (/STATUS:\s*BLOCKED/.test(res.finalText)) entry.status = "blocked";
-			else entry.status = "crashed";
-		}
-		else if (/STATUS:\s*BLOCKED/.test(res.finalText)) entry.status = "blocked";
-		else if (/STATUS:\s*DONE/.test(res.finalText)) entry.status = "done";
-		else entry.status = "crashed";
+		// One uniform rule for every role: the last non-empty line decides, against the role's
+		// contract (STATUS for implementer/analyst/verifier/scenario-writer, VERDICT for the
+		// reviewer). Marker quotes in the body never decide; no terminal marker -> crashed (#22).
+		entry.status = res.aborted || signal?.aborted ? "interrupted" : classifyReport(entry.role, res.finalText);
 		// Keep the live pid recorded at spawn time (the entry object still carries the 0 placeholder).
 		state[key] = { ...entry, pid: state[key]?.pid ?? entry.pid };
 	});
@@ -665,6 +775,10 @@ export async function evaluateSettle(cwd: string): Promise<{ entries: { type: "c
 		const [fc, issues, closed] = await Promise.all([runFastCheck(cfg.fastCheck ?? null, ctx.cfg.root), listOpenIssues(ctx.repoSlug), listClosedIssueNumbers(ctx.repoSlug)]);
 		const state = pruneDead(readState(ctx.stateDir));
 		const running = Object.values(state).filter((e) => e.status === "running" && e.role === "implementer").length;
+		// Startability rule (spec §4): with the store on, only tickets covered by a valid
+		// t<ticket>- scenario drive the loop; a missing store dir scans to [] (nothing covered)
+		// and an unreadable store likewise covers nothing (fail-closed).
+		const storeOn = scenariosOn(cfg);
 		const decision = evaluateStopGate({
 			fastCheckPassed: fc.passed,
 			fastCheckTail: fc.tail,
@@ -684,6 +798,8 @@ export async function evaluateSettle(cwd: string): Promise<{ entries: { type: "c
 				.filter((n) => Number.isFinite(n)),
 			running,
 			cap: cfg.heavy.slots,
+			scenariosOn: storeOn,
+			covered: storeOn ? coveredTicketsFromScan(scanStore(ctx.paths.scenariosDir)) : [],
 		});
 		if (decision.action === "pass") {
 			if (decision.gaveUp) resetCounter(counterPath(ctx.cfg.root));
@@ -719,8 +835,8 @@ export async function formatEditedFile(cwd: string, filePath: string): Promise<v
 // Tool registrations
 // ---------------------------------------------------------------------------
 const DispatchSchema = Type.Object({
-	role: Type.String({ description: "implementer | code-reviewer | verifier | analyst" }),
-	ticket: Type.Optional(Type.Number({ description: "Issue number (required for implementer and code-reviewer)" })),
+	role: Type.String({ description: "implementer | code-reviewer | verifier | analyst | scenario-writer" }),
+	ticket: Type.Optional(Type.Number({ description: "Issue number (required for implementer, code-reviewer and scenario-writer)" })),
 	branch: Type.Optional(Type.String({ description: "Branch override (code-reviewer)" })),
 	worktree: Type.Optional(Type.String({ description: "Worktree for verifier (defaults to the repo root)" })),
 	task: Type.Optional(Type.String({ description: "Free-form assignment (verifier)" })),
@@ -736,7 +852,7 @@ export function makeTools(instructions?: string): Array<ToolDefinition<TSchema, 
 		label: "Dispatch dev-loop role agent",
 		promptGuidelines: instructions ? [instructions] : undefined,
 		description:
-			"Dispatch one role agent (implementer / code-reviewer / verifier) as an isolated headless child working in its own git worktree. For implementer pass the ticket; everything else (branch, worktree, ports, notes path, brief) is computed deterministically. Blocks until the child reports. At most N implementers run concurrently (N = heavy.slots); a further dispatch is refused with the in-flight list.",
+			"Dispatch one role agent (implementer / code-reviewer / verifier / analyst / scenario-writer) as an isolated headless child. Implementer runs in its own git worktree; analyst and scenario-writer run at the repo root (no worktree, no capacity slot). For implementer and scenario-writer pass the ticket; everything else (branch, worktree, ports, notes path, brief) is computed deterministically. Blocks until the child reports. At most N implementers run concurrently (N = heavy.slots); a further dispatch is refused with the in-flight list.",
 		parameters: DispatchSchema,
 		execute: (_id, params: Params<typeof DispatchSchema>, signal, onUpdate, toolCtx) => runGuarded(toolCtx, (c) => dispatchImpl(c, params, signal, onUpdate)),
 	});
