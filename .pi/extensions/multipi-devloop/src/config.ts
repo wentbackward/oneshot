@@ -18,6 +18,35 @@ export interface HeavyConfig {
 export interface StopGateConfig { requireCleanTree: boolean; maxBlocks: number; }
 export interface MergeConfig { method: string; deleteBranch: boolean; }
 
+/** Orchestrator-side bounds (spec 2026-11-15 §2): the devloop_* tool-call ceiling. */
+export interface OrchestratorConfig {
+	/** Minutes before a devloop_* tool call resolves with a timeout error (default 45). */
+	toolTimeoutMinutes: number;
+}
+
+/** Permission-policy posture (permission-policy spec §3): what an UNMATCHED call does. */
+export type PolicyPosture = "allow" | "ask";
+
+/** Permission-policy knobs (permission-policy spec §6/§7.3/§11-P1). The `policy` block of .devloop.json.
+ * Rule arrays live in the sibling permissions.json (loaded by extension/src/policy.ts). */
+export interface PolicyConfig {
+	/** Default-allow with curated deny/ask classes (operator-confirmed); "ask" is the strict flip (future). */
+	posture: PolicyPosture;
+	/** Repo allowlist: "self" or absolute MAIN-repo ROOTS (spec §7.1) — the parent of the
+	 * .git common dir, i.e. what rev-parse resolves every acting checkout TO. A linked
+	 * WORKTREE path is an inert entry: it parses (it is absolute) but never matches, because
+	 * the evaluator compares resolved main roots against these (schema note, ticket #55). */
+	repos: string[];
+	/** Foreign absolute MAIN-repo ROOTS where a mutation ASKS instead of denying (spec §7.1)
+	 * — the same main-root, not worktree-path, convention as `repos`. */
+	secondaries: string[];
+	/** Ask-token TTL in minutes (spec §6; consumed by the phase-2 mint). */
+	tokenTtlMinutes: number;
+}
+
+/** Confirmed defaults (operator 2026-11-09): default-allow, self-only, no secondaries, 10 min TTL. */
+export const DEFAULT_POLICY: PolicyConfig = { posture: "allow", repos: ["self"], secondaries: [], tokenTtlMinutes: 10 };
+
 /** Operating mode preset (dark-factory spec §1); see scenariosOn for the defaults it sets. */
 export type FactoryMode = "collaborative" | "dark";
 
@@ -57,6 +86,10 @@ export interface DevloopConfig {
 	heavy: HeavyConfig;
 	stopGate: StopGateConfig;
 	merge: MergeConfig;
+	/** Ask-token TTL / repo allowlist / posture (spec §11-P1); always present, defaults when the block is absent. */
+	policy: PolicyConfig;
+	/** Tool-call bound (spec 2026-11-15 §2); always present, defaults when the block is absent. */
+	orchestrator: OrchestratorConfig;
 	deploy?: string;
 }
 
@@ -78,6 +111,29 @@ function num(v: unknown, d: number): number {
 }
 function bool(v: unknown, d: boolean): boolean {
 	return typeof v === "boolean" ? v : d;
+}
+
+/** Parse the `policy` block (permission-policy spec §11-P1). Absent ⇒ confirmed defaults.
+ * Garbage posture coerces to the default (config-layer discipline, cf. factory); a repos list
+ * with ANY untrusted entry (not "self", not an absolute path) invalidates the whole list to
+ * ["self"] — widening the allowlist is a fail-closed direction, not a per-entry filter.
+ * secondaries keep only absolute paths (dropping an entry can only tighten). */
+export function parsePolicyBlock(raw: unknown): PolicyConfig {
+	const o = (typeof raw === "object" && raw !== null && !Array.isArray(raw)) ? (raw as Record<string, unknown>) : {};
+	const reposRaw = Array.isArray(o.repos) ? o.repos : null;
+	let repos: string[];
+	if (reposRaw === null || reposRaw.length === 0) {
+		repos = ["self"];
+	} else if (reposRaw.every((r) => r === "self" || (typeof r === "string" && r.startsWith("/")))) {
+		repos = [...new Set(reposRaw as string[])];
+	} else {
+		repos = ["self"]; // one untrusted entry ⇒ the list is untrusted ⇒ self-only (fail closed)
+	}
+	const secondaries = Array.isArray(o.secondaries)
+		? [...new Set(o.secondaries.filter((s): s is string => typeof s === "string" && s.startsWith("/")))]
+		: [];
+	const ttl = typeof o.token_ttl_minutes === "number" && Number.isFinite(o.token_ttl_minutes) && o.token_ttl_minutes > 0 ? o.token_ttl_minutes : 10;
+	return { posture: o.posture === "ask" ? "ask" : "allow", repos, secondaries, tokenTtlMinutes: ttl };
 }
 
 /** Root of the main worktree containing cwd (mirrors scripts/lib/common.sh dl_main_root). */
@@ -123,6 +179,10 @@ export function loadConfig(cwd: string, env: NodeJS.ProcessEnv = process.env): D
 		};
 	}
 	const checksRaw = Array.isArray(raw.checks) ? raw.checks : [];
+	// orchestrator.tool_timeout_minutes (spec 2026-11-15 §2): only a finite POSITIVE number is
+	// honoured — 0/negative/string would become a bogus bound (an instant or imaginary timeout).
+	const oc = (raw.orchestrator ?? {}) as Record<string, unknown>;
+	const toolTimeout = num(oc.tool_timeout_minutes, -1);
 	const checks: CheckSpec[] = checksRaw.map((c, i) => {
 		if (typeof c === "string") return { name: `check-${i + 1}`, command: c, heavy: true };
 		const o = (c ?? {}) as Record<string, unknown>;
@@ -161,6 +221,8 @@ export function loadConfig(cwd: string, env: NodeJS.ProcessEnv = process.env): D
 		},
 		stopGate: { requireCleanTree: bool(sg.require_clean_tree, true), maxBlocks: num(sg.max_blocks, 5) },
 		merge: { method: str(mg.method, "squash"), deleteBranch: bool(mg.delete_branch, true) },
+		policy: parsePolicyBlock(raw.policy),
+		orchestrator: { toolTimeoutMinutes: toolTimeout > 0 ? toolTimeout : 45 },
 		deploy: str(raw.deploy) || undefined,
 	};
 }

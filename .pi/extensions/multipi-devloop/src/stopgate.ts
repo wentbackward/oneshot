@@ -1,6 +1,7 @@
-import { execFileSync, execFile } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { collectStream } from "./streamcap.ts";
 
 export interface IssueInfo {
 	number: number;
@@ -94,13 +95,16 @@ export function evaluateStopGate(i: StopGateInputs): StopGateDecision {
 		return {
 			action: "block",
 			bumpCounter: false,
-			message: `${startable} ticket(s) are startable (unblocked, dependencies closed) and a dispatch slot is free (running ${i.running}/${i.cap}). Keep going: dispatch them with devloop.dispatch, gate and merge what is dl/gated.`,
+			message: `${startable} ticket(s) are startable (unblocked, dependencies closed) and a dispatch slot is free (running ${i.running}/${i.cap}). Keep going: dispatch them with devloop_dispatch, gate and merge what is dl/gated.`,
 		};
 	}
 	return { action: "pass" };
 }
 
 // --- IO helpers (thin, tested indirectly via the tools) ---
+
+const FAST_CHECK_TIMEOUT_MS = 10 * 60_000;
+const FAST_CHECK_MAX_BUFFER = 2 * 1024 * 1024;
 
 /** Per-repo counter file, stored next to the repo's git dir (never committed). */
 export function counterPath(repoRoot: string): string {
@@ -136,15 +140,32 @@ export function resetCounter(p: string): void {
 export function runFastCheck(command: string | null, cwd: string): Promise<{ passed: boolean; tail: string }> {
 	if (!command) return Promise.resolve({ passed: true, tail: "(fast check not configured)" });
 	return new Promise((resolve) => {
-		execFile(
-			"bash",
-			["-c", command],
-			{ cwd, timeout: 10 * 60_000, env: process.env, maxBuffer: 2 * 1024 * 1024 },
-			(err, stdout, stderr) => {
-				const combined = `${stdout ?? ""}${stderr ?? ""}`;
-				resolve({ passed: !err, tail: combined.split("\n").filter((l) => l.trim()).slice(-30).join("\n") });
-			},
-		);
+		// Spawning (rather than execFile, whose options ignore `stdio` in Node 24) with stdin
+		// "ignore": a check that reads stdin (REPL, `read`) must see immediate EOF, never a pipe
+		// the parent holds open for the entire run — that hung devloop_gate (see #48/#41).
+		const child = spawn("bash", ["-c", command], { cwd, stdio: ["ignore", "pipe", "pipe"] });
+		// As in execFile: maxBuffer is enforced per stream; the tail combines stdout then stderr.
+		const out = collectStream(child.stdout!, FAST_CHECK_MAX_BUFFER, () => child.kill("SIGTERM"));
+		const err = collectStream(child.stderr!, FAST_CHECK_MAX_BUFFER, () => child.kill("SIGTERM"));
+		let spawnErr = "";
+		const timer = setTimeout(() => child.kill("SIGTERM"), FAST_CHECK_TIMEOUT_MS);
+		child.on("error", (e: Error) => {
+			// spawn failure: "close" still follows and maps to RED — keep the message for the tail.
+			spawnErr = e.message;
+		});
+		child.on("close", (code) => {
+			clearTimeout(timer);
+			const combined =
+				Buffer.concat(out).toString() +
+				Buffer.concat(err).toString() +
+				(spawnErr ? `\nspawn error: ${spawnErr}\n` : "");
+			// code===0 alone is the fail-safe: signal kills (code=null) and spawn failures
+			// (negative errno) are not 0, so they land RED just like non-zero exits.
+			resolve({
+				passed: code === 0,
+				tail: combined.split("\n").filter((l) => l.trim()).slice(-30).join("\n"),
+			});
+		});
 	});
 }
 

@@ -7,7 +7,11 @@
 # branch's rebased head as train-<branch>. A branch already stacked on the previous one in the train replays
 # only its own commits (rebase --onto), so no branch ever carries foreign commits. Then it runs every check
 # of .devloop.json "checks" once on the top of the stack; heavy checks run through heavy.sh, so the
-# machine-wide slot limit and memory cap apply. When the scenario store is on (dark-factory spec §5), the
+# machine-wide slot limit and memory cap apply. The gate's own git work and every check run with
+# the dogfood policy-shim dirs SCRUBBED from PATH (entries whose git or gh is an interpreted
+# script, 2-byte `#!` magic — ticket #70, authority separation); the seam
+# MULTIPI_GATE_SCRUB_POLICY_SHIMS controls it (default 1 = scrub; 0 restores the armed PATH).
+# When the scenario store is on (dark-factory spec §5), the
 # scenario stage (scenario-stage.sh) then runs on the train top: a red stage is TRAIN RED (no record), the
 # stage's exit 2 propagates as the gate's exit 2, and a failed check prints `scenarios skipped` instead.
 #
@@ -15,11 +19,34 @@
 # 2 usage/config (includes a stage usage/config error), 3 rebase conflict (the output names the branch:
 # drop it from the train, rebase it after the others merge).
 set -u
-scripts_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# Pure-bash bootstrap (no dirname, no pwd(1)): a PATH the scrub below empties entirely
+# carries no coreutils, and the named dl_die must still be reachable (ticket #67).
+# The cd runs in a SUBSHELL — the script's cwd must stay where the operator called it.
+case "${BASH_SOURCE[0]}" in
+  */*) _sd=${BASH_SOURCE[0]%/*} ;;
+  *) _sd=. ;;
+esac
+scripts_dir=$(cd -- "$_sd" && printf '%s' "$PWD")
 # shellcheck source=lib/common.sh
 . "$scripts_dir/lib/common.sh"
 
 [ $# -gt 0 ] || dl_die "usage: gate-train.sh <branch> [<branch> ...]"
+
+# --- policy-shim PATH scrub (ticket #70, authority separation) ----------------------
+# The dogfood policy shims protect the loop's SESSIONS; they must never veto the loop's
+# own verification. Rebuild PATH dropping every entry whose git or gh is an INTERPRETED
+# script (2-byte `#!` magic — dl_scrub_policy_shims, lib/common.sh) BEFORE any git work
+# of the gate (config load, worktree setup, stacking, checks, stage). Seam
+# MULTIPI_GATE_SCRUB_POLICY_SHIMS: default 1 (scrub); 0 restores the armed PATH for
+# tests that exercise the armed posture.
+if [ "${MULTIPI_GATE_SCRUB_POLICY_SHIMS:-1}" != 0 ]; then
+  PATH=$(dl_scrub_policy_shims "$PATH")
+  # Named error, not a downstream command-not-found cascade (review of #70 r1): the
+  # bootstrap and the scrub are pure shell, so this is reachable even with PATH gone.
+  [ -n "$PATH" ] || dl_die "policy-shim scrub emptied PATH (every entry carried an interpreted git or gh — nothing left to run)"
+  export PATH
+fi
+
 dl_load_config required
 [ "$(cfg_len checks)" -gt 0 ] || dl_die "no \"checks\" in $DL_CONFIG"
 

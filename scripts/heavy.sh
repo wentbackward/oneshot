@@ -12,7 +12,16 @@
 # entries to delete), heavy.clean_temp_minutes (120), heavy.poll_seconds (10).
 # Environment: MULTIPI_LOCK_DIR overrides the lock directory, MULTIPI_HEAVY_SLOTS the slot count.
 set -u
-scripts_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# Pure-bash bootstrap (no dirname, no pwd(1)): a PATH that an upstream actor
+# scrubbed or emptied entirely carries no coreutils, and the named dl_die must
+# still be reachable (alignment with gate-train.sh, the ticket #67 form; #76
+# item 2). The cd runs in a SUBSHELL — the script's cwd must stay where the
+# operator called it.
+case "${BASH_SOURCE[0]}" in
+  */*) _sd=${BASH_SOURCE[0]%/*} ;;
+  *) _sd=. ;;
+esac
+scripts_dir=$(cd -- "$_sd" && printf '%s' "$PWD")
 # shellcheck source=lib/common.sh
 . "$scripts_dir/lib/common.sh"
 
@@ -58,8 +67,52 @@ clean_stale_temp() {
   fi
   for entry in "$lock_dir"/slot*.d; do
     [ -d "$entry" ] || continue
-    if ! kill -0 "$(cat "$entry/pid" 2>/dev/null || echo 0)" 2>/dev/null; then rm -rf -- "$entry"; fi
+    slot_sweepable "$entry" && rm -rf -- "$entry"
   done
+}
+
+# slot_holder_dead LOCKDIR: true when a slot-lock directory holds NO live owner: no pid file
+# at all, an unusable one (non-numeric, a leading zero, 0), or a pid that is not running.
+# A SIGKILLed holder skips its EXIT trap, so its lock must ALWAYS read as FREE (ticket #68).
+# `0` is rejected by the regex, not by `kill -0`: pid 0 targets the CALLER'S own process
+# group and would answer "alive" for a ghost — the exact fallback the header forbids.
+slot_holder_dead() { # slot_holder_dead LOCKDIR
+  local pid=""
+  [ -f "$1/pid" ] || return 0
+  pid=$(tr -d '[:space:]' <"$1/pid" 2>/dev/null)
+  [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 0
+  kill -0 "$pid" 2>/dev/null && return 1
+  return 0
+}
+
+# slot_sweepable LOCKDIR: a slot-lock dir may be REMOVED only when its owner is dead AND
+# the dir is at least one poll tick OLD. A holder between its `mkdir` and its
+# `echo $$ > pid` looks ownerless for a few microseconds — the grace tick closes that
+# window (ticket #67, review of #68 r3: the sweep racing a fresh dir would let two jobs
+# into one slot). Unstat-able dirs read as UNSWEEPABLE: the fail-safe direction (a stalled
+# queue is recoverable by deletion; a double-acquire is not). `stat -c %Y` (GNU) and
+# `stat -f %m` (BSD) cover both platforms the mkdir path exists for.
+slot_sweepable() { # slot_sweepable LOCKDIR
+  local mt
+  slot_holder_dead "$1" || return 1
+  mt=$(stat -c %Y "$1" 2>/dev/null) || mt=$(stat -f %m "$1" 2>/dev/null) || return 1
+  [ $(( $(date +%s) - mt )) -ge "$poll_seconds" ]
+}
+
+# have_flock: a flock that actually WORKS. The probe performs the SAME operation the slot
+# locks perform — a non-blocking exclusive acquisition on a scratch file via an inherited
+# fd — because a NAME check is not a capability check: `flock --version` is missing from a
+# working busybox flock (the old probe silently downgraded it to the mkdir path, ticket
+# #67) and a broken placeholder answers `command -v` but fails at use (ticket #68). The
+# scratch file is per-pid and deleted afterwards; the lock is released with the subshell.
+have_flock() {
+  local f rc
+  command -v flock >/dev/null 2>&1 || return 1
+  f="${TMPDIR:-/tmp}/.multipi-have-flock.$$.tmp"
+  ( flock -n 9 ) 9>>"$f"
+  rc=$?
+  rm -f "$f"
+  return "$rc"
 }
 
 # have_memory_cap: true when systemd can run a transient user scope with a memory limit.
@@ -106,7 +159,18 @@ try_slot_flock() {
 try_slot_mkdir() {
   local slot=$1 rc=0
   shift
-  if mkdir "$lock_dir/slot$slot.d" 2>/dev/null; then
+  local d="$lock_dir/slot$slot.d"
+  # A holder SIGKILLed mid-hold (EXIT trap skipped) leaves its dir with a dead pid — or no
+  # pid file at all; either way the lock reads as FREE. The startup sweep (clean_stale_temp)
+  # already ran BEFORE this slot was taken, so a WAITING instance must re-check at
+  # acquisition, or it polls the ghost forever (ticket #68). The check is
+  # slot_sweepable, not slot_holder_dead: a FRESH ownerless dir may belong to a holder
+  # between its mkdir and its pid write, and sweeping it is the sub-ms double-acquire of
+  # ticket #67 — the grace tick (>= poll_seconds old) closes the window.
+  if [ -d "$d" ] && slot_sweepable "$d"; then
+    rm -rf -- "$d"
+  fi
+  if mkdir "$d" 2>/dev/null; then
     ran=yes
     echo $$ >"$lock_dir/slot$slot.d/pid"
     trap 'rm -rf -- "$lock_dir/slot$slot.d"' EXIT INT TERM
@@ -119,11 +183,15 @@ try_slot_mkdir() {
 }
 
 clean_stale_temp
+# Whether flock WORKS is a property of the system, not of each poll: probe once, reuse
+# the answer inside the loop (review round 2 — no repeated version probes per slot per tick).
+use_flock=no
+have_flock && use_flock=yes
 waiting_said=""
 while true; do
   for ((slot = 1; slot <= slots; slot++)); do
     ran=""
-    if command -v flock >/dev/null 2>&1; then
+    if [ "$use_flock" = yes ]; then
       try_slot_flock "$slot" "$@"
     else
       try_slot_mkdir "$slot" "$@"

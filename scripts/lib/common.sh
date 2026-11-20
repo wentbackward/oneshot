@@ -140,6 +140,40 @@ dl_canonical() {
   realpath -m -q -- "$1" 2>/dev/null || printf '%s\n' "$1"
 }
 
+# dl_scrub_policy_shims PATH -> the same PATH minus every entry whose git or gh is an
+# INTERPRETED script (2-byte `#!` magic on the resolved file) — the dogfood policy-shim
+# directories (ticket #70, authority separation: the shims protect the loop's sessions
+# and must never veto the loop's own verification). Compiled binaries (whose first two
+# bytes are not `#!`) are kept; unresolvable and empty entries pass through untouched.
+# The caller owns the seam MULTIPI_GATE_SCRUB_POLICY_SHIMS (default 1; 0 = armed PATH).
+# Pure shell end to end (the `#!` probe is a bash read, not head(1)): a PATH the scrub
+# empties entirely must still reach gate-train's named dl_die, and an empty PATH carries
+# no coreutils (ticket #67, review of #70 r1).
+dl_scrub_policy_shims() {
+  local entry real bin drop out="" magic
+  local -a parts
+  local IFS=':'
+  read -r -a parts <<<"$1"
+  for entry in ${parts[@]+"${parts[@]}"}; do
+    [ -n "$entry" ] || continue
+    real=$(cd "$entry" 2>/dev/null && pwd -P) || real=""
+    if [ -n "$real" ]; then
+      drop=0
+      for bin in git gh; do
+        if [ -f "$real/$bin" ]; then
+          magic=""
+          IFS= read -r -n 2 magic <"$real/$bin" 2>/dev/null || true
+          [ "$magic" = "#!" ] && { drop=1; break; }
+        fi
+      done
+      [ "$drop" = 1 ] && continue
+    fi
+    out+="${out:+:}$entry"
+  done
+  printf '%s\n' "$out"
+  return 0
+}
+
 dl_notes_dir() {
   local configured
   configured=$(cfg notes_dir "")

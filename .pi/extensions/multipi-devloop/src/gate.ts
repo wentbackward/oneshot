@@ -1,5 +1,6 @@
-import { execFile } from "node:child_process";
+import { spawn } from "node:child_process";
 import path from "node:path";
+import { collectStream } from "./streamcap.ts";
 
 export interface GateOutcome {
 	status: "green" | "red" | "conflict" | "error";
@@ -23,20 +24,43 @@ function tailLines(out: string, n = 30): string[] {
 	return out.split("\n").filter((l) => l.trim()).slice(-n);
 }
 
+const SCRIPT_MAX_BUFFER = 20 * 1024 * 1024;
+
+/**
+ * Normalize a spawn "close" code to execFile-era semantics: a signal-killed child arrives as
+ * code=null, and a failed spawn as code=-errno (e.g. -2) — execFile's callback delivered both
+ * as `err`, which this file's parsers read as 1. Anything but a real exit code maps to 1 so
+ * the pinned gate classification (red=1 vs error) never flips.
+ */
+export function normalizeCloseCode(code: number | null): number {
+	return code !== null && code >= 0 ? code : 1;
+}
+
 export function runScript(script: string, opts: TrainRunOptions): Promise<{ code: number; stdout: string; stderr: string }> {
 	return new Promise((resolve) => {
-		execFile(
-			"bash",
-			[path.join(opts.scriptsDir, script), ...opts.branches],
-			{ cwd: opts.repoRoot, env: { ...process.env, ...opts.env }, maxBuffer: 20 * 1024 * 1024 },
-			(error, stdout, stderr) => {
-				const code = error ? (typeof (error as NodeJS.ErrnoException & { code?: unknown }).code === "number"
-					? (error as { code: number }).code
-					: 1)
-					: 0;
-				resolve({ code, stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
-			},
-		);
+		// Spawning (rather than execFile, whose options ignore `stdio` in Node 24) with stdin
+		// "ignore": a check that reads stdin (REPL, `read`) must see immediate EOF, never a pipe
+		// the parent holds open for the entire run — that hung devloop_gate (see #48/#41).
+		const child = spawn("bash", [path.join(opts.scriptsDir, script), ...opts.branches], {
+			cwd: opts.repoRoot,
+			env: { ...process.env, ...opts.env },
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+		const out = collectStream(child.stdout!, SCRIPT_MAX_BUFFER, () => child.kill("SIGTERM"));
+		const err = collectStream(child.stderr!, SCRIPT_MAX_BUFFER, () => child.kill("SIGTERM"));
+		let spawnErr = "";
+		child.on("error", (e: Error) => {
+			// spawn failure (e.g. missing interpreter): "close" still follows and maps to code 1,
+			// like execFile's error path — keep the message so the tail carries a diagnostic.
+			spawnErr = e.message;
+		});
+		child.on("close", (code) => {
+			resolve({
+				code: normalizeCloseCode(code),
+				stdout: Buffer.concat(out).toString(),
+				stderr: Buffer.concat(err).toString() + (spawnErr ? `\nspawn error: ${spawnErr}\n` : ""),
+			});
+		});
 	});
 }
 
