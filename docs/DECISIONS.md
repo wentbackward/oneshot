@@ -3019,3 +3019,13 @@ arcade physics).
   accumulation tolerance (100 additions of 1/60 differ from one
   multiply by ~1 ulp — that is accumulation error, not drift; the
   hash already pins bit-exact replay between twins).
+- **Review follow-up: `World.advance`'s delta clamp is a documented
+  caller-side precondition, not enforced inside `advance()` (review
+  should-fix 4).** Alternatives: clamp inside `advance()` (silently
+  drops the excess past the cap — changes accumulator accounting
+  semantics, and a test feeding raw deltas could no longer detect a
+  regression) or a throwing guard (a runtime failure mode for a
+  defensive concern). The app already clamps via `clampDelta()` →
+  `MAX_FRAME_DELTA` in `fishtank-main.ts`, so one enforcement site plus
+  a documented precondition on `advance()` is the simplest contract
+  that keeps fixed-step semantics pure.

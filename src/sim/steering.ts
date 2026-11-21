@@ -90,8 +90,9 @@ function unit(x: number, y: number): Vec2 {
 
 // ---------- the six forces ----------
 
-/** Separation: steer AWAY from frenemies, weighted 1/d² so the
- *  closer they press the harder they push. */
+/** Separation: steer AWAY from frenemies with the standard Reynolds
+ *  1/d weighting — each neighbour contributes its unit push direction
+ *  scaled by 1/d, so the closer they press the harder they push. */
 export function separation(self: MovingBody, neighbours: MovingBody[]): Vec2 {
   const sum = zero();
   const r2 = NEIGHBOUR_RADIUS * NEIGHBOUR_RADIUS;

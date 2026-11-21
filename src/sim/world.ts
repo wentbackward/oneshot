@@ -81,7 +81,15 @@ export class World {
   /** Feed up to deltaSeconds of wall time to the sim: consume it in
    *  exact FIXED_DT steps, carry the leftover. Returns the number of
    *  steps taken. The app's only entry point — tests drive step(dt)
-   *  directly. */
+   *  directly.
+   *
+   *  Precondition (enforced by the CALLER, not here): deltaSeconds
+   *  must be clamped into [0, MAX_FRAME_DELTA] before this call —
+   *  fishtank-main.ts does this via clampDelta() — so a tab switch
+   *  or long pause cannot burst thousands of fixed steps in one
+   *  frame. advance() deliberately does not clamp itself: silently
+   *  dropping the excess would change the accumulator's accounting
+   *  semantics. */
   advance(deltaSeconds: number): number {
     this.acc += Math.max(0, deltaSeconds);
     let steps = 0;

@@ -65,9 +65,10 @@ export class SpatialGrid<T extends Positioned> {
     this.indexOf.set(item, index);
   }
 
-  /** Tell the grid that an already-inserted item moved. Cheaper to
-   *  express intent than re-inserting; behaves like insert for
-   *  items that are not tracked yet. */
+  /** Express intent at the call site that an already-inserted item
+   *  moved. A plain alias of insert() — identical behaviour, no
+   *  performance difference (an untracked item is simply put in);
+   *  it exists so callers read "it moved", not "re-inserted it". */
   update(item: T): void {
     this.insert(item);
   }

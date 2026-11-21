@@ -76,9 +76,10 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       this.cells[index]?.push(item);
       this.indexOf.set(item, index);
     }
-    /** Tell the grid that an already-inserted item moved. Cheaper to
-     *  express intent than re-inserting; behaves like insert for
-     *  items that are not tracked yet. */
+    /** Express intent at the call site that an already-inserted item
+     *  moved. A plain alias of insert() — identical behaviour, no
+     *  performance difference (an untracked item is simply put in);
+     *  it exists so callers read "it moved", not "re-inserted it". */
     update(item) {
       this.insert(item);
     }
@@ -185,7 +186,15 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
     /** Feed up to deltaSeconds of wall time to the sim: consume it in
      *  exact FIXED_DT steps, carry the leftover. Returns the number of
      *  steps taken. The app's only entry point — tests drive step(dt)
-     *  directly. */
+     *  directly.
+     *
+     *  Precondition (enforced by the CALLER, not here): deltaSeconds
+     *  must be clamped into [0, MAX_FRAME_DELTA] before this call —
+     *  fishtank-main.ts does this via clampDelta() — so a tab switch
+     *  or long pause cannot burst thousands of fixed steps in one
+     *  frame. advance() deliberately does not clamp itself: silently
+     *  dropping the excess would change the accumulator's accounting
+     *  semantics. */
     advance(deltaSeconds) {
       this.acc += Math.max(0, deltaSeconds);
       let steps = 0;

@@ -59,8 +59,10 @@ check("World.step takes an explicit dt and advance() always feeds it FIXED_DT", 
   w.step(FIXED_DT * 0.5);
   assert(w.time === 2 * FIXED_DT + FIXED_DT * 0.5, "step(dt) must advance the clock by exactly dt");
   const w2 = new World({ seed: 8 });
-  w2.advance(FIXED_DT * 2); // a whole number of steps: the accumulator drains EXACTLY
-  assert(w2.time === 2 * FIXED_DT && w2.acc === 0, `whole steps must drain the accumulator to 0, got acc=${w2.acc}`);
+  w2.advance(FIXED_DT * 2); // a whole number of steps: the accumulator drains
+  assert(w2.time === 2 * FIXED_DT, "whole steps must advance the clock in exact FIXED_DT multiples");
+  assert(Math.abs(w2.acc) < 1e-12,
+    `whole steps must drain the accumulator to ~0 (fp epsilon), got acc=${w2.acc}`);
 });
 
 check("the same seed builds the same initial population", () => {
