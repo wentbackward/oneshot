@@ -3129,3 +3129,72 @@ arcade physics).
   recomputation (rejected — per-frame string churn in the hot path,
   against the AGENTS.md 60 fps rule) or a module singleton (the
   wart this removes).
+
+## 2026-11-21 — Ticket #124: apex predator with patrol, stalking and rest
+
+- **Sim-only scope: the predator ships as a pure sim state machine
+  (`src/sim/predator.ts`) with NO renderer pass, no HUD entry and no
+  UI wiring.** All four acceptance criteria are behavioural sim
+  properties ("the state machine is pure sim, hence fully unit-
+  testable"), and the PRD's per-species rendering rules (articulated
+  spine, caudal fin) have their own ticket surface — mirroring how
+  #119 shipped the engine before #120 gave it tetras. Alternatives:
+  a minimal drawn body now (rejected — pixel art for a species the
+  ticket never asks to render would land untested and unreviewed in
+  the same squash). The predator IS live in the shipped app: it
+  patrols the default tank and eats genuinely isolated stragglers.
+- **Direct kinematics, no inertia: each fixed step SETS the velocity
+  to (heading direction) × (state speed)** — patrol/stalk/rest each
+  own a named speed constant. This makes the behavioural contracts
+  exact and auditable (patrol never exceeds PREDATOR_PATROL_SPEED;
+  the chase closes MONOTONICALLY because PREDATOR_STALK_SPEED = 380
+  > TETRA_MAX_SPEED = 220, so closure is ≥ 160 u/s per step; the rest
+  window is a plain integer countdown). Alternatives: Reynolds
+  `seek()`-style acceleration (rejected — velocity lag lets the
+  first chase frame open distance and makes "distance decreases every
+  frame" seed-fragile) or a velocity lerp (same objection, softer).
+- **"Isolated" prey = no fellow tetra within PREDATOR_ISOLATION_
+  RADIUS (160); the nearest isolated tetra within PREDATOR_SIGHT_
+  RANGE (400) is locked.** The radius is wider than the tetras'
+  personal NEIGHBOUR_RADIUS (64) so the rule reads at swimming scale,
+  and neighbourhood is answered by the world's existing spatial grid
+  (PRD §1) — zero new data structures, one query per candidate.
+  A locked prey that ceases to be isolated releases the lock back to
+  patrol. Alternatives: nearest tetra regardless of school (rejected
+  — schools are safe by the PRD: "stalks ISOLATED prey"), or a
+  fear/escape reaction added to tetras (out of scope — that is a
+  tetra behaviour with its own ticket; tetras are unaffected by
+  this change).
+- **Tuning that PROVES criterion 4, not just assumes it:** hunger is
+  in [0,1], rises at PREDATOR_HUNGER_RATE = 0.06 s⁻¹ (fresh belly →
+  stalkable in ≈ 11.7 s), threshold 0.7, rest 240 steps (4 s ⇒ only
+  ≈ 0.24 hunger recovered). A fed predator mathematically cannot
+  re-stalk during its rest window — the test asserts the peak.
+  Alternatives: freeze hunger during rest (artificial, and the
+  criterion explicitly frames hunger rising-but-below-threshold).
+- **Rest boundary step semantics: the countdown decrements at the TOP
+  of each post-capture step; the step that brings it to 0 is the
+  boundary step and already executes as a normal patrol step** (full
+  PREDATOR_PATROL_SPEED toward the current waypoint). So rest =
+  exactly PREDATOR_REST_STEPS − 1 drift steps plus one boundary step
+  on which patrol resumes — "rests for exactly N steps" and "normal
+  patrol resumes AT the boundary step" both hold literally.
+  Alternatives: boundary step still drifting (test would then see
+  rest speed on what the criterion calls the patrol step).
+- **Capture is a single splice in one place (`World.agents`)** — the
+  tetra pass and grid rebuild only see the victim gone on the NEXT
+  step, so no in-flight reference can dangle; `fedCount` is the
+  telemetry for the future HUD. The predator is stepped AFTER the
+  tetras (prey positions current) and is NOT inserted into the
+  neighbour grid (tetras have no predator-avoidance yet).
+- **`TANK_WIDTH`/`TANK_HEIGHT` moved to `constants.ts` with a
+  re-export from `world.ts`** so `predator.ts` can depend on the
+  arena without a runtime import cycle (`world.ts` imports the
+  `ApexPredator` class; `predator.ts` imports only the `World`/
+  `Tetra` TYPES, which erase at compile time). All existing importers
+  (tests, `render/tetras.ts`) are untouched.
+- **`serializeState()` gained one `P:` line** (state, pose, velocity,
+  hunger, waypoint index, rest countdown, feed count) so the
+  determinism fingerprint covers the predator; the pinned serializer
+  contract test (fishtank-determinism) now validates that line's
+  fixed-decimal/integer shape.
