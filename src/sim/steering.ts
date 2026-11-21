@@ -54,7 +54,7 @@ export const NEIGHBOUR_RADIUS = 64;
 
 /** How hard a body steers toward its neighbours' centroid per unit
  *  of distance. */
-export const COHESION_GAIN = 0.05;
+export const COHESION_GAIN = 0.35;
 
 /** How close to a wall a body must come before being pushed back;
  *  the push ramps linearly to full strength AT the wall. */
