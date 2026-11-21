@@ -371,7 +371,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
         if (y < 0) y = 0;
         else if (y > TANK_HEIGHT) y = TANK_HEIGHT;
         const nx = Math.hypot(vx, vy);
-        const heading = nx > 0 ? Math.atan2(vy, vx) : t.heading;
+        const heading = Math.atan2(vy, vx);
         const instantTorque = wrapPi(heading - t.heading) / dt;
         t.torque += TORQUE_SMOOTHING * (instantTorque - t.torque);
         t.x = x;
