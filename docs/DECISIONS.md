@@ -2855,3 +2855,65 @@ arcade physics).
   and its workflow predates the automatic-token pattern); oneshot takes
   the tighter form. Migrating world-cal is a candidate for a later
   ticket, not a scope creep here.
+
+## 2026-11-21 — Ticket #117: fishtank scaffold — TS source tree, build pipeline, generated HTML
+
+- **The hub back link is deliberately absent from fishtank.html.** Ticket
+  #118 owns the back link (and the hub entry); the gate's
+  self-containment check excludes only `href="index.html"`, mirroring the
+  bricks/asteroids checks, which is exactly tolerant of #118's later
+  change. Alternative: add the back link now (rejected — duplicate scope,
+  and it would ship before the hub entry exists).
+- **Dockerfile, packager FILES and the index.html hub are untouched.**
+  fishtank does not join the shippable collection until #118 links it into
+  the hub; it then joins the packager's FILES array and the Dockerfile COPY
+  line (a gate check pins the current triple, so touching it now would only
+  create churn).
+- **IIFE test seam on globalThis (`FIXED_DT`, `FISH_TANK_WORLD`).** The
+  acceptance criteria query a named `FIXED_DT` constant from node:vm, and an
+  esbuild `iife` bundle exposes no module exports; the entry publishes the
+  constant and the live world on globalThis at boot, documented as a test
+  seam in src/fishtank-main.ts. Alternatives: umd + globalName (still
+  export-surface only) or re-declaring the constant in the page shell
+  (duplication that drifts).
+- **The build script owns the HTML shell and the `<style>` block.**
+  scripts/build-fishtank.mjs holds the page template and CSS inline, so one
+  file is the single source of truth and byte-determinism is trivial.
+  Alternatives: a separate template file (second source of truth) or
+  generating CSS from TS (over-engineered for a scaffold).
+- **Output bytes depend on the root package.json AND tsconfig.json, and
+  the builder pins `absWorkingDir` to the repo root.** Discovered empirically
+  by the pristine-copy test: esbuild reads the nearest package.json
+  (`"type": "module"` flips module classification) and the nearest
+  tsconfig.json (`"strict"` makes it inject a `"use strict"` prologue), and
+  its chunk-separator path comments are relative to the working directory.
+  Pinning absWorkingDir makes the artifact independent of the invoking cwd;
+  any future tree that rebuilds the game must carry both files.
+- **Relative imports carry explicit `.ts` extensions.** Native node
+  type-stripping requires resolvable specifiers for the flag-free
+  `import()` smoke test; esbuild and tsc accept `.ts` specifiers via
+  `allowImportingTsExtensions`. Alternative: extensionless imports (rejected —
+  breaks the criterion-5 import walk).
+- **typescript pinned to 5.9.3, not the 7.x line.** The 7.x release is the
+  rewritten native compiler; the 5.9 line is the known-stable target for the
+  strict flags we rely on (`erasableSyntaxOnly`, `verbatimModuleSyntax`).
+  Bumping is a future toolchain ticket, not a scaffold concern.
+- **Frame delta floored at 0 s and capped at MAX_FRAME_DELTA = 0.25 s**
+  before it feeds the fixed-step accumulator (same rationale as the bricks
+  `MAX_FRAME_SECONDS` clamp: timestamp rewinds must not go backwards, tab
+  switches must not burst thousands of steps).
+- **Gate runs lockfile-enforced `npm ci` as the FIRST `.devloop.json`
+  check (2026-11-21, gate-red train-check-22).** A clean gate worktree has
+  no shared `node_modules`, so the fishtank test loop (which shells out to
+  esbuild and tsc) failed 3 of 16 checks when `npm ci` sat mid-array; the
+  scaffold test now pins the position, not just the presence. Alternatives:
+  per-test lazy install (slow, non-lockfile) or making the tests skip when
+  node_modules is absent (weakened the criteria — rejected).
+- **`package.json` declares an explicit Node floor: `"engines": {"node":
+  ">=24.0.0"}` (2026-11-21, review should-fix).** The gate runs Node 24 LTS
+  (flag-free `import()` of `.ts` sources needs >= 23.6; a non-LTS floor buys
+  nothing). Alternatives: `>=23.6.0` (earliest technically-working, but an
+  un-LTS'd minor as a support pledge) or leaving it undeclared (the status
+  quo the review flagged). The field is dependency metadata only: the lock
+  root entry mirrors name/devDependencies, so `npm ci` still satisfies the
+  committed lockfile unchanged.

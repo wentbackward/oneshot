@@ -3,6 +3,7 @@
   "remote": "origin",
   "fast_check": "",
   "checks": [
+    "npm ci",
     "test -s bricks.html",
     "head -c 15 bricks.html | tr -d '\\0' | grep -qi '<!doctype html>'",
     "grep -q 'requestAnimationFrame' bricks.html",
@@ -24,6 +25,13 @@
     "test -f Dockerfile && grep -q 'caddy:latest' Dockerfile",
     "grep -q 'COPY index.html bricks.html asteroids.html' Dockerfile",
     "grep -q 'ghcr.io/wentbackward/oneshot' .github/workflows/deploy.yml",
+    "test -s fishtank.html",
+    "head -c 15 fishtank.html | tr -d '\\0' | grep -qi '<!doctype html>'",
+    "grep -q 'requestAnimationFrame' fishtank.html",
+    "grep -qE '<canvas' fishtank.html",
+    "[ \"$(grep -E '(src|href)=' fishtank.html | grep -v 'href=\"index.html\"' | wc -l)\" -eq 0 ]",
+    "node scripts/build-fishtank.mjs --check",
+    "npm run typecheck",
     "for f in tests/*.test.mjs; do timeout 60 node \"$f\" || exit 1; done"
   ],
   "heavy": { "slots": 2 },
