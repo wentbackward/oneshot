@@ -65,6 +65,33 @@ check("World.step takes an explicit dt and advance() always feeds it FIXED_DT", 
     `whole steps must drain the accumulator to ~0 (fp epsilon), got acc=${w2.acc}`);
 });
 
+check("advance() rejects a NaN delta: 0 steps, accumulator left clean and drivable", () => {
+  const w = new World({ seed: 11 });
+  w.advance(FIXED_DT); // one clean step first, so state is non-trivial
+  const accBefore = w.acc;
+  const timeBefore = w.time;
+  const steps = w.advance(Number.NaN);
+  assert(steps === 0, `NaN delta must yield 0 steps, got ${steps}`);
+  assert(Number.isFinite(w.acc), `NaN delta must not poison the accumulator, got acc=${w.acc}`);
+  assert(w.acc === accBefore, "rejected delta must leave the accumulator untouched");
+  assert(w.time === timeBefore, "rejected delta must not advance the clock");
+  // the world must stay drivable afterwards: a whole step still works
+  const t1 = w.advance(FIXED_DT);
+  assert(t1 === 1, `one whole FIXED_DT must still take exactly 1 step after a NaN, got ${t1}`);
+  assert(w.time === timeBefore + FIXED_DT, "clock must advance normally after a rejected delta");
+});
+
+check("advance() rejects an infinite delta: 0 steps, no step-loop spin, state untouched", () => {
+  const w = new World({ seed: 12 });
+  const pos = w.serializeState();
+  const stepsPos = w.advance(Number.POSITIVE_INFINITY); // would spin forever unguarded
+  assert(stepsPos === 0, `+Infinity delta must yield 0 steps, got ${stepsPos}`);
+  const stepsNeg = w.advance(Number.NEGATIVE_INFINITY);
+  assert(stepsNeg === 0, `-Infinity delta must yield 0 steps, got ${stepsNeg}`);
+  assert(Number.isFinite(w.acc) && w.time === 0, `rejected deltas must not touch the sim, got time=${w.time}, acc=${w.acc}`);
+  assert(w.serializeState() === pos, "state must be byte-identical after rejected deltas");
+});
+
 check("the same seed builds the same initial population", () => {
   const a = new World({ seed: 1234 });
   const b = new World({ seed: 1234 });
@@ -101,20 +128,25 @@ check("a different seed produces a different trajectory (the seed matters)", () 
 // bounded, time is exact — the properties that make the hash
 // meaningful
 // ================================================================
+// toFixed(6) is a FIXED-SHAPE formatter, so the serialized fields are
+// pinned on the RAW STRINGS (not through a Number/String round-trip,
+// which would absorb formatter changes into a clean re-format):
+// sign?, integer part, dot, up to 6 decimals, nothing else.
+const SERIALIZED_FIELD_RE = /^-?\d+\.\d{0,6}$/;
+
 check("serialized state uses fixed 6-decimal precision for every coordinate", () => {
   const w = new World({ seed: 55 });
   w.step(FIXED_DT);
-  const s = w.serializeState();
-  const lines = s.split("\n").slice(1); // first line is the clock
-  assert(lines.length === w.agents.length, "one state line per agent");
-  for (const line of lines) {
-    const nums = line.split(",").map(Number);
-    assert(nums.length === 4, `agent line must carry x,y,vx,vy, got "${line}"`);
-    for (const n of nums) {
-      assert(Number.isFinite(n), `state must be finite, got ${n}`);
-      const str = String(n);
-      const frac = str.includes(".") ? str.split(".")[1] : "";
-      assert(frac.length <= 6, `precision must be fixed (<= 6 decimals), got ${str}`);
+  const lines = w.serializeState().split("\n");
+  assert(lines.length === w.agents.length + 1, "clock line + one state line per agent");
+  const agentLines = lines.slice(1); // first line is the clock
+  for (const line of agentLines) {
+    const fields = line.split(",");
+    assert(fields.length === 4, `agent line must carry x,y,vx,vy, got "${line}"`);
+    for (const f of fields) {
+      assert(SERIALIZED_FIELD_RE.test(f),
+        `coordinate field must be raw fixed-decimal (/-?\\d+\\.\\d{0,6}/), got "${f}"`);
+      assert(Number.isFinite(Number(f)), `state must be finite, got "${f}"`);
     }
   }
 });
