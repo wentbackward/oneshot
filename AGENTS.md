@@ -8,19 +8,26 @@ external assets or libraries):
 
 - Campaign 1: the asteroid shooter in `asteroids.html` (see `ASTEROIDS.PRD.md`)
 - Campaign 2: the brick-breaker in `bricks.html` (see `BRICKBREAKER.PRD.md`)
+- Campaign 3: the fish-tank aquarium in `fishtank.html` (see `FISHTANK.PRD.md`) —
+  unlike the other two, its committed `.html` is generated from `src/`
+  TypeScript by `scripts/build-fishtank.mjs` (needs `npm ci`); the gate proves
+  the committed file is fresh via `node scripts/build-fishtank.mjs --check`
+  and `npm run typecheck`
 - `index.html` is the hub page (pure CSS, no JS) linking all the products;
   each product carries an inert back link to it.
 
 ## Distribution
 
-The repo root IS the deployable: `index.html`, `bricks.html`, `asteroids.html`
-are exactly the files a host needs. `scripts/package-oneshot.sh` bundles them
-into `dist/oneshot.zip` (folder `oneshot/`, python3 std-lib, byte-
+The repo root IS the deployable: `index.html`, `bricks.html`, `asteroids.html`,
+`fishtank.html` are exactly the files a host needs. `scripts/package-oneshot.sh`
+bundles them into `dist/oneshot.zip` (folder `oneshot/`, python3 std-lib, byte-
 deterministic) for drop-in hosting — e.g. extract under a WordPress site and
 serve `/oneshot/index.html`. `dist/` is gitignored. The pack's contract is
-locked by `tests/oneshot-pack.test.mjs`; when a new game joins the collection,
-add it to the packager's `FILES` array, the hub, the test's expected
-members, AND the Dockerfile's COPY line (a gate check pins the latter).
+locked by `tests/oneshot-pack.test.mjs` and the cross-wiring contract (Dockerfile
+COPY line ↔ gate grep ↔ packager FILES ↔ hub links ↔ CI toolchain order) by
+`tests/oneshot-wiring.test.mjs`; when a new game joins the collection, add it to
+the packager's `FILES` array, the hub, the tests' expected members, AND the
+Dockerfile's COPY line (a gate check pins the latter).
 
 ## Deployment (Docker + Caddy, same pattern as world-cal)
 

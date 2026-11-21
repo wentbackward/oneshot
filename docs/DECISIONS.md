@@ -2917,3 +2917,38 @@ arcade physics).
   quo the review flagged). The field is dependency metadata only: the lock
   root entry mirrors name/devDependencies, so `npm ci` still satisfies the
   committed lockfile unchanged.
+
+## 2026-11-21 — Ticket #118: wire fishtank into hub, packager, Dockerfile, gates and CI
+
+- **Third cabinet card gets a 3-column layout at ≥960px (hub width bumped
+  720px → 1000px at that breakpoint).** Two cards in a 2-col grid looked
+  intentional; a third would strand a single card left-aligned. Alternatives:
+  keep 2 columns and leave the orphan (rejected — asymmetric), or go 3-up at
+  the existing 640px breakpoint (rejected — ~210px cards are too cramped for
+  the 1.35rem titles).
+- **The fishtank back link reuses the exact `#hub-back` markup block from
+  bricks/asteroids, injected by the build template in
+  `scripts/build-fishtank.mjs`, not hand-edited into `fishtank.html`.** The
+  artifact is generated; a direct edit would flip `--check` stale on the next
+  build. Alternatives: a shared static snippet file included by the builder
+  (rejected — breaks the builder's self-containment for one five-line block).
+- **The gate's Dockerfile grep now pins the FULL COPY line including `/srv/`.**
+  The old pin (`COPY index.html bricks.html asteroids.html`) would have stayed
+  green if the files were copied elsewhere. Alternatives: keep the weaker
+  pin (rejected — a misdirected copy is a silent deploy defect).
+- **Cross-wiring checks live in a new `tests/oneshot-wiring.test.mjs`, not in
+  `tests/oneshot-pack.test.mjs`.** The pack suite owns the zip contract
+  (members, byte-equality, determinism); the wiring suite owns repo-level
+  agreement between Dockerfile ↔ gate ↔ packager ↔ hub ↔ CI. The CI ordering
+  criterion (npm ci → typecheck → `--check` → suite loop) is not expressible
+  as a single `.devloop.json` grep, so it belongs in a node suite. Alternatives:
+  grow the pack suite (rejected — two contracts in one file), or gate greps
+  only (rejected — cannot express ordering).
+- **CI runs `npm ci`, `npm run typecheck` and
+  `node scripts/build-fishtank.mjs --check` before the suite loop on Node 24.**
+  Mirrors the gate's ordering (lockfile-enforced toolchain first); Node 24
+  matches the `engines` floor so the clean runner can `import()` the
+  erasable-TS sources the fishtank suites walk. Alternative: `node-version-file`
+  or `engine-strict` npm (rejected — a pinned literal in the workflow is the
+  pattern the repo already used, and `engine-strict` adds an npm flag the
+  local gate would also have to adopt).
