@@ -208,8 +208,10 @@ function runIn(cwd, argv) {
   }
 }
 
-// A pristine sibling copy of everything the builder reads, sharing
-// the real node_modules (symlink) so no npm ci is needed in-tests.
+// A pristine sibling copy of everything the builder reads — including
+// package.json and tsconfig.json, both of which influence esbuild's
+// output bytes (module classification, strict-mode injection) —
+// sharing the real node_modules (symlink) so no npm ci is needed in-tests.
 function pristineCopy() {
   const tmp = mkdtempSync(path.join(os.tmpdir(), "fishtank-117-"));
   try {
@@ -217,6 +219,8 @@ function pristineCopy() {
     cpSync(path.join(root, "src"), path.join(tmp, "src"), { recursive: true });
     copyFileSync(path.join(root, "scripts", "build-fishtank.mjs"), path.join(tmp, "scripts", "build-fishtank.mjs"));
     copyFileSync(htmlPath, path.join(tmp, "fishtank.html"));
+    copyFileSync(path.join(root, "package.json"), path.join(tmp, "package.json"));
+    copyFileSync(path.join(root, "tsconfig.json"), path.join(tmp, "tsconfig.json"));
     symlinkSync(path.join(root, "node_modules"), path.join(tmp, "node_modules"), "dir");
   } catch (err) {
     rmSync(tmp, { recursive: true, force: true });
