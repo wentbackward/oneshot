@@ -121,6 +121,7 @@ check("step() rejects a NaN dt: the world is byte-identical and remains drivable
   assert(fullSnapshot(a) === before, "a NaN dt must leave the whole world (tail state included) byte-identical");
   const steps = a.advance(FIXED_DT * 2);
   assert(steps === 2, `two whole steps must still be taken after a NaN dt, got ${steps}`);
+  b.advance(FIXED_DT * 2);
   assert(fullSnapshot(a) === fullSnapshot(b), "a rejected dt must not shift the trajectory: same seed ⇒ identical world");
 });
 
@@ -136,6 +137,7 @@ check("step() rejects zero, negative and -Infinity dts: the world is byte-identi
     a.step(badDt);
     assert(fullSnapshot(a) === before, `dt=${badDt} must leave the whole world (tail state included) byte-identical`);
     a.advance(FIXED_DT * 2);
+    b.advance(FIXED_DT * 2);
     assert(fullSnapshot(a) === fullSnapshot(b), `dt=${badDt} must not shift the trajectory: same seed ⇒ identical world`);
   }
 });
