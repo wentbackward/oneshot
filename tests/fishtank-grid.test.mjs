@@ -217,9 +217,9 @@ check("update() relocates a moved item into the correct cell", () => {
   grid.update(p);
   assert(grid.query(480, 480, 5).includes(p), "updated item must be found at its new position");
   assert(!grid.query(10, 10, 5).includes(p), "updated item must no longer be found at its old position");
-  assert(grid.query(10, 10, 500).filter((q) => q === p).length === 1, "an updated item must appear exactly once, not in two cells");
-  assertSameNeighborSet(grid.query(480, 480, 5), bruteNeighbors([p, far], 480, 480, 5), "update + full brute");
+  assert(grid.query(10, 10, 700).filter((q) => q === p).length === 1, "an updated item must appear exactly once, not in two cells");
   grid.insert(far);
+  assertSameNeighborSet(grid.query(480, 480, 5), bruteNeighbors([p, far], 480, 480, 5), "update + full brute");
 });
 
 check("an updated item still matches brute force at both radii", () => {
