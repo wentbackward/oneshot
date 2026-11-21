@@ -145,7 +145,14 @@ export function cohesion(self: MovingBody, neighbours: MovingBody[]): Vec2 {
  *  inward, linearly harder the closer the body gets — a body AT the
  *  wall gets the full push. Inward means: +x from the left wall,
  *  −x from the right, +y from the top (y grows downward), −y from
- *  the bottom. */
+ *  the bottom.
+ *
+ *  Assumption (caller-guaranteed, nondegenerate domain): width and
+ *  height each exceed 2 × BOUNDARY_MARGIN, so the four margin bands
+ *  are disjoint and every active wall pushes strictly inward without
+ *  opposing-wall cancellation. The app's domain (1600 × 1000 vs.
+ *  BOUNDARY_MARGIN 120) satisfies this by a wide margin; a degenerate
+ *  tank smaller than ~2× margin in any axis is not supported. */
 export function boundaryAvoidance(pos: Vec2, width: number, height: number): Vec2 {
   const f = zero();
   if (pos.x < BOUNDARY_MARGIN) f.x += ((BOUNDARY_MARGIN - pos.x) / BOUNDARY_MARGIN) * MAX_BOUNDARY_AVOIDANCE_FORCE;
@@ -158,15 +165,17 @@ export function boundaryAvoidance(pos: Vec2, width: number, height: number): Vec
 /** Obstacle avoidance: steer AROUND circular rocks. Each rock whose
  *  surface comes within OBSTACLE_AVOID_DISTANCE of the body pushes
  *  straight away from its centre, harder the closer it gets; a rock
- *  the body is already inside pushes straight out. */
+ *  the body is already inside pushes straight out.
+ *
+ *  (Note: OBSTACLE_AVOID_DISTANCE is a positive constant, so the
+ *  sensing test below — weight > 0 — is also the domain guard:
+ *  there is no separate reach check.) */
 export function obstacleAvoidance(self: MovingBody, obstacles: Obstacle[]): Vec2 {
   const sum = zero();
   for (const o of obstacles) {
     const dx = self.x - o.x;
     const dy = self.y - o.y;
     const d = Math.hypot(dx, dy);
-    const reach = d + OBSTACLE_AVOID_DISTANCE;
-    if (reach <= 0) continue;
     const w = 1 - (d - o.r) / OBSTACLE_AVOID_DISTANCE;
     if (w <= 0) continue; // rock surface beyond sensing distance
     const dir = d === 0 ? { x: 1, y: 0 } : { x: dx / d, y: dy / d }; // centre-on-body: deterministic push out

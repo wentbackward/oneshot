@@ -38,11 +38,6 @@ export class SpatialGrid<T extends Positioned> {
     this.cells = Array.from({ length: this.cols * this.rows }, () => []);
   }
 
-  /** Number of items currently in the grid. */
-  get size(): number {
-    return this.indexOf.size;
-  }
-
   /** Drop every item (cell arrays themselves are reused: no
    *  per-step allocation). */
   clear(): void {
@@ -52,13 +47,17 @@ export class SpatialGrid<T extends Positioned> {
 
   /** Place an item in the cell holding its current position.
    *  Re-inserting a present item moves it (idempotent count: an
-   *  item never occupies two cells). */
+   *  item never occupies two cells). The old-cell eviction splices
+   *  ONLY at the item's verified own slot — if the bookkeeping ever
+   *  goes stale the item is simply absent and nothing is removed:
+   *  an implicit splice position (splice(-1)) would evict an
+   *  innocent neighbour. */
   insert(item: T): void {
     const cellIndex = this.indexOf.get(item);
     if (cellIndex !== undefined) {
-      // Already indexed: pull it out of its old cell first so the
-      // item can never be reported twice by a query.
-      this.cells[cellIndex]?.splice(this.cells[cellIndex]?.indexOf(item) ?? -1, 1);
+      const cell = this.cells[cellIndex];
+      const at = cell ? cell.indexOf(item) : -1;
+      if (cell && at >= 0) cell.splice(at, 1);
     }
     const index = this.rowOf(item.y) * this.cols + this.colOf(item.x);
     this.cells[index]?.push(item);
@@ -73,7 +72,10 @@ export class SpatialGrid<T extends Positioned> {
     this.insert(item);
   }
 
-  /** Remove an item. Returns true if it was present. */
+  /** Remove an item. Returns true if it was present. Removing an
+   *  absent item is a pure no-op: it splices nothing, so a healthy
+   *  neighbour (even the last occupant of the same cell) can never
+   *  be disturbed. */
   remove(item: T): boolean {
     const cellIndex = this.indexOf.get(item);
     if (cellIndex === undefined) return false;
@@ -82,11 +84,6 @@ export class SpatialGrid<T extends Positioned> {
     if (cell && at >= 0) cell.splice(at, 1);
     this.indexOf.delete(item);
     return true;
-  }
-
-  /** True iff the item is currently in the grid. */
-  contains(item: T): boolean {
-    return this.indexOf.has(item);
   }
 
   /** All items within Euclidean distance <= radius of (x, y), as a

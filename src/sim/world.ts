@@ -50,7 +50,9 @@ export class World {
   time = 0;
   /** Seconds carried over between frames from an incomplete step. */
   acc = 0;
-  /** The PRNG stream this world draws from (never Math.random). */
+  /** Numeric PRNG seed this world was built from: a plain number,
+   *  not a stateful stream — the mulberry32 stream is (re)created
+   *  from it at construction, and same seed ⇒ identical tank. */
   readonly seed: number;
   /** Every simulated swimmer, in fixed iteration order. */
   agents: Agent[] = [];
