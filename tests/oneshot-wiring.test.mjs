@@ -36,7 +36,6 @@ const read = (p) => readFileSync(path.join(root, p), "utf8");
 const ARTIFACTS = ["index.html", "bricks.html", "asteroids.html", "fishtank.html"];
 const GAMES = ["bricks.html", "asteroids.html", "fishtank.html"];
 const COPY_LINE = `COPY ${ARTIFACTS.join(" ")} /srv/`;
-const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 let passed = 0;
 let failed = 0;
