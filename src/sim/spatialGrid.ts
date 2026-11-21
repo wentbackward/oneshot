@@ -60,7 +60,9 @@ export class SpatialGrid<T extends Positioned> {
       if (cell && at >= 0) cell.splice(at, 1);
     }
     const index = this.rowOf(item.y) * this.cols + this.colOf(item.x);
-    this.cells[index]?.push(item);
+    // index is provably in range: colOf/rowOf clamp to [0, cols) and
+    // [0, rows) respectively, so no defensive null handling is needed.
+    this.cells[index]!.push(item);
     this.indexOf.set(item, index);
   }
 
@@ -110,23 +112,6 @@ export class SpatialGrid<T extends Positioned> {
       }
     }
     return found;
-  }
-
-  /** Call cb for every item stored in the 3×3 block of cells
-   *  around (x, y) — the allocation-free variant of the constant
-   *  neighborhood probe for callers that filter on the fly. */
-  queryNeighbors(x: number, y: number, cb: (item: T) => void): void {
-    const cx = this.colOf(x);
-    const cy = this.rowOf(y);
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        const row = cy + dy;
-        const col = cx + dx;
-        if (row < 0 || row >= this.rows || col < 0 || col >= this.cols) continue;
-        const cell = this.cells[row * this.cols + col];
-        if (cell) for (const item of cell) cb(item);
-      }
-    }
   }
 
   private colOf(x: number): number {

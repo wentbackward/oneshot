@@ -3029,8 +3029,10 @@ arcade physics).
   `MAX_FRAME_DELTA` in `fishtank-main.ts`, so one enforcement site plus
   a documented precondition on `advance()` is the simplest contract
   that keeps fixed-step semantics pure.
-- **Review follow-up: `SpatialGrid`'s unused `size`/`contains` surface
-  is dropped until a consumer lands (review should-fix, 2026-11-21).**
+- **Review follow-up: `SpatialGrid`'s unused `size`/`contains`
+  surface is dropped until a consumer lands (review should-fix,
+  2026-11-21; extended to `queryNeighbors` in the 2026-11-21 third
+  review, same rationale).**
   YAGNI: no src/ or tests/ caller exists, and a public query surface
   that nothing exercises invites stale guarantees. Alternatives:
   keep it (dead surface, review objection stands) or inline a count

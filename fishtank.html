@@ -75,7 +75,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
         if (cell && at >= 0) cell.splice(at, 1);
       }
       const index = this.rowOf(item.y) * this.cols + this.colOf(item.x);
-      this.cells[index]?.push(item);
+      this.cells[index].push(item);
       this.indexOf.set(item, index);
     }
     /** Express intent at the call site that an already-inserted item
@@ -122,22 +122,6 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
         }
       }
       return found;
-    }
-    /** Call cb for every item stored in the 3×3 block of cells
-     *  around (x, y) — the allocation-free variant of the constant
-     *  neighborhood probe for callers that filter on the fly. */
-    queryNeighbors(x, y, cb) {
-      const cx = this.colOf(x);
-      const cy = this.rowOf(y);
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          const row = cy + dy;
-          const col = cx + dx;
-          if (row < 0 || row >= this.rows || col < 0 || col >= this.cols) continue;
-          const cell = this.cells[row * this.cols + col];
-          if (cell) for (const item of cell) cb(item);
-        }
-      }
     }
     colOf(x) {
       return Math.min(this.cols - 1, Math.max(0, Math.floor(x / this.cellSize)));

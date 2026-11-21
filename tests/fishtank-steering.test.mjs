@@ -288,7 +288,10 @@ check("seek aims at the target: zero velocity yields a force toward it", () => {
 
 check("seek is the zero vector when already at the target", () => {
   const f = S.seek(body(7, 9, 12, -5), { x: 7, y: 9 });
-  assert(f.x === 0 && f.y === 0, "at the target, desired==velocity leaves nothing to steer");
+  // The d === 0 early return yields the zero vector: a body sitting
+  // at the target gets no deceleration steer by design — it simply
+  // keeps moving until it drifts off-target again.
+  assert(f.x === 0 && f.y === 0, "at the target, the zero-distance early return gives zero force");
 });
 
 // ================================================================
