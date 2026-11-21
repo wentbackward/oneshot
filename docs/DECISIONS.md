@@ -3029,6 +3029,20 @@ arcade physics).
   `MAX_FRAME_DELTA` in `fishtank-main.ts`, so one enforcement site plus
   a documented precondition on `advance()` is the simplest contract
   that keeps fixed-step semantics pure.
+- **Review follow-up (2026-11-21, fourth round): `World.advance`
+  rejects NON-FINITE deltas with a `Number.isFinite` guard that
+  returns 0, touching neither accumulator nor state.** A NaN would
+  poison the accumulator permanently (`acc += NaN` ⇒ every later
+  `acc >= FIXED_DT` compares false — the sim freezes silently with a
+  corrupt acc) and +∞ would spin the step loop forever (subtracting
+  FIXED_DT from ∞ stays ∞). Return-0 accounts the rejected frame as
+  "no progress": the next well-formed frame drives the world as
+  usual. Alternatives: throw (a new runtime failure mode for a
+  defensive concern — a buggy or hostile clock would take down the
+  render loop) or sanitize into a large finite delta (silently
+  invents accounted time). This guard bounds WELL-FORMEDNESS;
+  the caller-side `clampDelta` precondition (entry above) bounds
+  MAGNITUDE — different duties, so both stay.
 - **Review follow-up: `SpatialGrid`'s unused `size`/`contains`
   surface is dropped until a consumer lands (review should-fix,
   2026-11-21; extended to `queryNeighbors` in the 2026-11-21 third
