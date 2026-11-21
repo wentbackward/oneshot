@@ -291,6 +291,32 @@ check("seek is the zero vector when already at the target", () => {
   assert(f.x === 0 && f.y === 0, "at the target, desired==velocity leaves nothing to steer");
 });
 
+// ================================================================
+// Criterion 6: the clamps must ACTUALLY engage — degenerate inputs
+// whose raw force far exceeds the limit come out at the limit
+// ================================================================
+check("separation clamps to exactly MAX_SEPARATION_FORCE when a neighbour is near-coincident", () => {
+  const f = S.separation(body(0, 0, 0, 0), [body(0.01, 0, 0, 0)]); // raw ~100 >> limit
+  assert(Math.abs(mag(f) - S.MAX_SEPARATION_FORCE) <= 1e-9,
+    `near-coincident neighbour must saturate the clamp, got ${mag(f)} vs ${S.MAX_SEPARATION_FORCE}`);
+  assert(f.x < 0, "the saturated force must still point away");
+});
+
+check("boundary avoidance clamps to exactly MAX_BOUNDARY_AVOIDANCE_FORCE in a corner", () => {
+  const f = S.boundaryAvoidance({ x: 5, y: 5 }, TANK_WIDTH, TANK_HEIGHT);
+  // Two walls pushing at ~full strength: raw magnitude ~ limit*sqrt(2).
+  assert(f.x > 0 && f.y > 0, "corner force must push diagonally inward");
+  assert(Math.abs(mag(f) - S.MAX_BOUNDARY_AVOIDANCE_FORCE) <= 1e-9,
+    `corner force must saturate the clamp, got ${mag(f)} vs ${S.MAX_BOUNDARY_AVOIDANCE_FORCE}`);
+});
+
+check("seek clamps to exactly MAX_SEEK_FORCE against an absurd opposite velocity", () => {
+  const f = S.seek(body(0, 0, 0, 1e6), { x: 0, y: 100 }); // raw ~1e6 opposite the target
+  assert(Math.abs(mag(f) - S.MAX_SEEK_FORCE) <= 1e-9,
+    `absurd velocity must saturate the clamp, got ${mag(f)} vs ${S.MAX_SEEK_FORCE}`);
+  assert(f.y < 0, "the saturated force must steer back toward the target");
+});
+
 // ---------- summary ----------
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);
