@@ -16,9 +16,9 @@
 // Coordinate contract: all coordinates — item positions at
 // insert/update time and query points — MUST be finite. By
 // construction non-finite input is unreachable (World spawn puts
-// agents in bounds, wrap keeps them bounded, and the steering
-// contract guarantees finite vectors), so the hot paths deliberately
-// carry no per-call Number.isFinite guards.
+// tetras in bounds, wall reflection and clamping keep them bounded,
+// and the steering contract guarantees finite vectors), so the hot
+// paths deliberately carry no per-call Number.isFinite guards.
 // ================================================================
 
 /** Anything placeable in the grid: a position in logical tank units. */
