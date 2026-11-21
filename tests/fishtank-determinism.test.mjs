@@ -5,6 +5,10 @@
 // constructed worlds given the same seed must hash identically
 // after 100 fixed steps, proving the sim carries no hidden
 // non-determinism (Math.random, unordered iteration, ...).
+// Also covers the well-formedness policy on the public surface
+// (#120 review): advance() and step() both refuse non-finite /
+// non-positive deltas, leaving the world byte-identical and
+// drivable.
 //
 // Harness: stock node with flag-free .ts type-stripping imports the
 // real src/sim sources; the state hash is node:crypto sha256 over
@@ -38,6 +42,18 @@ function assert(cond, msg) {
 }
 
 const stateHash = (w) => createHash("sha256").update(w.serializeState()).digest("hex");
+
+/** Full raw snapshot INCLUDING the tail state (phase, torque,
+ *  heading), which serializeState() deliberately omits: the dt-
+ *  refusal tests must prove even the tail scalars survive an
+ *  illegal step untouched. */
+const fullSnapshot = (w) => JSON.stringify({
+  time: w.time,
+  acc: w.acc,
+  agents: w.agents.map((t) => ({
+    x: t.x, y: t.y, vx: t.vx, vy: t.vy, phase: t.phase, torque: t.torque, heading: t.heading,
+  })),
+});
 
 /** Run a world for exactly STEPS fixed steps and return its hash. */
 function hashAfterSteps(seed) {
@@ -90,6 +106,38 @@ check("advance() rejects an infinite delta: 0 steps, no step-loop spin, state un
   assert(stepsNeg === 0, `-Infinity delta must yield 0 steps, got ${stepsNeg}`);
   assert(Number.isFinite(w.acc) && w.time === 0, `rejected deltas must not touch the sim, got time=${w.time}, acc=${w.acc}`);
   assert(w.serializeState() === pos, "state must be byte-identical after rejected deltas");
+});
+
+check("step() rejects a NaN dt: the world is byte-identical and remains drivable", () => {
+  // Without the guard, NaN divides through wrapPi(heading − heading)/dt
+  // and permanently poisons every tetra's torque/phase (silently:
+  // positions/velocities stay finite, so serializeState() misses it).
+  const a = new World({ seed: 21 });
+  a.advance(FIXED_DT * 3 + 0.001); // non-trivial state, incl. an in-flight fraction
+  const b = new World({ seed: 21 }); // untouched twin for the replay check
+  b.advance(FIXED_DT * 3 + 0.001);
+  const before = fullSnapshot(a);
+  a.step(Number.NaN);
+  assert(fullSnapshot(a) === before, "a NaN dt must leave the whole world (tail state included) byte-identical");
+  const steps = a.advance(FIXED_DT * 2);
+  assert(steps === 2, `two whole steps must still be taken after a NaN dt, got ${steps}`);
+  assert(fullSnapshot(a) === fullSnapshot(b), "a rejected dt must not shift the trajectory: same seed ⇒ identical world");
+});
+
+check("step() rejects zero, negative and -Infinity dts: the world is byte-identical and remains drivable", () => {
+  // dt = 0 divides a zero heading delta into NaN; a negative dt would
+  // integrate the tank backwards. Both must be flat refusals.
+  for (const badDt of [0, -FIXED_DT, Number.NEGATIVE_INFINITY]) {
+    const a = new World({ seed: 22 });
+    a.advance(FIXED_DT * 3 + 0.001);
+    const b = new World({ seed: 22 });
+    b.advance(FIXED_DT * 3 + 0.001);
+    const before = fullSnapshot(a);
+    a.step(badDt);
+    assert(fullSnapshot(a) === before, `dt=${badDt} must leave the whole world (tail state included) byte-identical`);
+    a.advance(FIXED_DT * 2);
+    assert(fullSnapshot(a) === fullSnapshot(b), `dt=${badDt} must not shift the trajectory: same seed ⇒ identical world`);
+  }
 });
 
 check("the same seed builds the same initial population", () => {
