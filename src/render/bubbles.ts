@@ -2,11 +2,11 @@
 // Bubble column (render, PRD §3 "rising bubble emitters with
 // sinusoidal wobble"): a POOL of BUBBLE_POOL_SIZE preallocated
 // slots — allocated ONCE at construction, never again. Every frame
-// the pool recomputes each slot's state IN PLACE from the world
-// clock (pure: same t repaints identically) and strokes the arc,
-// in fixed slot order, so a bubble "emits" at the bottom, rises
-// with a sinusoidal x-wobble, exits at the top and is recycled at
-// the bottom: zero allocation, zero spawning, ever.
+// the pool computes each slot's arc position from the world clock
+// (a pure function: same t repaints identically) and strokes the
+// arc, in fixed slot order, so a bubble "emits" at the bottom,
+// rises with a sinusoidal x-wobble, exits at the top and is
+// recycled at the bottom: zero allocation, zero spawning, ever.
 //
 // The wobble runs BUBBLE_RISE_PERIODS full cycles per FULL RISE
 // (its frequency scales with the bubble's rise speed), so EVERY
@@ -50,9 +50,10 @@ function hash(unit: number, salt: number): number {
   return v - Math.floor(v);
 }
 
-/** One pooled bubble: seeded per-slot parameters plus the
- *  per-frame state the painter writes in place (x, y) — the fields
- *  exist so `paint` allocates nothing. */
+/** One pooled bubble: its SEEDED per-slot parameters, fixed for the
+ *  life of the tank. The arc position at time t is a pure function
+ *  of these fields (the painter computes it as local values, so
+ *  painting allocates nothing). */
 interface BubbleSlot {
   /** Lane center, fraction of tank width. */
   lane: number;
@@ -63,9 +64,6 @@ interface BubbleSlot {
   offset: number;
   /** Initial wobble phase (rad). */
   phase0: number;
-  /** Latest recorded arc position (written in place by paint). */
-  x: number;
-  y: number;
 }
 
 /** The pool. Construct once per Renderer (no module-level state). */
@@ -80,8 +78,6 @@ export class BubbleColumn {
         speed: BUBBLE_RISE_MIN + (BUBBLE_RISE_MAX - BUBBLE_RISE_MIN) * hash(i, 2),
         offset: hash(i, 4),
         phase0: hash(i, 5) * TAU,
-        x: 0,
-        y: 0,
       });
     }
   }
@@ -89,7 +85,7 @@ export class BubbleColumn {
   /** Release (paint) the whole pool at world time t: every slot,
    *  in fixed slot order — the draw-recording test tracks slot i
    *  as the i-th bubble arc of each frame. Allocation-free: the
-   *  loop only reads and writes preallocated fields. */
+   *  loop only reads preallocated fields. */
   paint(ctx: CanvasRenderingContext2D, width: number, height: number, t: number): void {
     const column = height + BUBBLE_MARGIN * 2;
     ctx.lineWidth = 1;
@@ -100,10 +96,10 @@ export class BubbleColumn {
       // column / speed seconds; the wobble completes
       // BUBBLE_RISE_PERIODS cycles over exactly that span.
       const rise = column / s.speed;
-      s.x = s.lane * width + Math.sin((t / rise) * TAU * BUBBLE_RISE_PERIODS + s.phase0) * BUBBLE_WOBBLE_AMP;
-      s.y = height + BUBBLE_MARGIN - ((t * s.speed + s.offset * column) % column);
+      const x = s.lane * width + Math.sin((t / rise) * TAU * BUBBLE_RISE_PERIODS + s.phase0) * BUBBLE_WOBBLE_AMP;
+      const y = height + BUBBLE_MARGIN - ((t * s.speed + s.offset * column) % column);
       ctx.beginPath();
-      ctx.arc(s.x, s.y, s.radius, 0, TAU);
+      ctx.arc(x, y, s.radius, 0, TAU);
       ctx.stroke();
     }
   }

@@ -1,0 +1,159 @@
+// ================================================================
+// Parallax substrate (render, PRD §3 "layered parallax
+// substrate/gravel"): two PROCEDURAL bedrock layers painted every
+// frame — a far gravel bed and a nearer top-decor band (rocks +
+// kelp tufts). Each element's position/size is drawn once from a
+// SEEDED stream (src/sim/rng.ts), so identical boots paint
+// identical beds.
+//
+// Parallax: both layers drift sideways with the world clock, the
+// NEAR one at SUBSTRATE_NEAR_DRIFT and the far one at
+// SUBSTRATE_FAR_DRIFT (slower) — depth from differential motion.
+// Each layer's pattern is a seamless tile of width = viewport:
+// every element is painted twice (once at x, once at x - tile),
+// so the tile-doubled counts are what the draw-recording test
+// audits. Tile wrap is invisible: an element leaving one edge is
+// the tiled twin of one entering the other.
+// ================================================================
+
+import { mulberry32 } from "../sim/rng.ts";
+
+/** Seed for the substrate streams (named like every other
+ *  deterministic source in this repo). */
+export const SUBSTRATE_SEED = 4091;
+
+/** Gravel stones in the far layer. */
+export const SUBSTRATE_GRAVEL_COUNT = 44;
+
+/** Rocks in the near (top decor) layer. */
+export const SUBSTRATE_DECOR_ROCKS = 6;
+
+/** Kelp tufts in the near (top decor) layer. */
+export const SUBSTRATE_KELP_TUFTS = 4;
+
+/** Far-layer drift, px per SIMULATION second. */
+export const SUBSTRATE_FAR_DRIFT = 1.2;
+
+/** Near-layer drift, px per SIMULATION second — faster than the
+ *  far layer, which IS the parallax. */
+export const SUBSTRATE_NEAR_DRIFT = 3.0;
+
+/** Gravel band height above the floor, fraction of tank height. */
+const GRAVEL_BAND = 0.06;
+
+/** Named stone colours (blue-grey far, charcoal near). */
+const GRAVEL_FILLS = ["#31506b", "#3c5f7d", "#466a8c", "#2b455c"];
+const ROCK_FILL = "#22384c";
+const KELP_STROKE = "rgba(38, 104, 74, 0.85)";
+
+const TAU = 2 * Math.PI;
+
+interface GravelStone {
+  /** Position within the tile, fraction of tile width. */
+  u: number;
+  /** Distance above the floor, fraction of the gravel band. */
+  v: number;
+  rx: number;
+  ry: number;
+  fill: string;
+}
+
+interface Rock {
+  u: number;
+  rx: number;
+  ry: number;
+}
+
+interface KelpTuft {
+  u: number;
+  /** Blade height, fraction of tank height. */
+  h: number;
+  /** Phase offset for the idle sway. */
+  phase: number;
+}
+
+/** The substrate. Constructed once per Renderer; the element
+ *  arrays are generated in the constructor and reused forever
+ *  (per-frame painting is allocation-free: no new objects, the
+ *  loops only write transform state and stroke/fill). */
+export class Substrate {
+  private readonly gravel: GravelStone[] = [];
+  private readonly rocks: Rock[] = [];
+  private readonly kelp: KelpTuft[] = [];
+
+  constructor() {
+    const rng = mulberry32(SUBSTRATE_SEED);
+    for (let i = 0; i < SUBSTRATE_GRAVEL_COUNT; i++) {
+      this.gravel.push({
+        u: rng(),
+        v: rng(),
+        rx: 3 + 5 * rng(),
+        ry: 2 + 3.5 * rng(),
+        fill: GRAVEL_FILLS[Math.floor(rng() * GRAVEL_FILLS.length) % GRAVEL_FILLS.length] ?? "#31506b",
+      });
+    }
+    for (let i = 0; i < SUBSTRATE_DECOR_ROCKS; i++) {
+      this.rocks.push({ u: rng(), rx: 18 + 24 * rng(), ry: 8 + 12 * rng() });
+    }
+    for (let i = 0; i < SUBSTRATE_KELP_TUFTS; i++) {
+      this.kelp.push({ u: rng(), h: 0.06 + 0.07 * rng(), phase: rng() * TAU });
+    }
+  }
+
+  /** Paint the FAR gravel layer (drawn first, i.e. behind the
+   *  near layer): one save/translate/restore group for the layer
+   *  drift, two tiles per element. */
+  paintFar(ctx: CanvasRenderingContext2D, width: number, height: number, t: number): void {
+    const tile = width;
+    const off = (t * SUBSTRATE_FAR_DRIFT) % tile;
+    const band = height * GRAVEL_BAND;
+    ctx.save();
+    ctx.translate(off, 0);
+    for (const s of this.gravel) {
+      const y = height - band * s.v;
+      for (const dx of [0, -tile]) {
+        const x = s.u * tile + dx;
+        ctx.beginPath();
+        ctx.ellipse(x, y, s.rx, s.ry, 0, 0, TAU);
+        ctx.fillStyle = s.fill;
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  /** Paint the NEAR top-decor band (rocks resting on the bed,
+   *  kelp tufts idling with a slow sway): one save/translate/
+   *  restore group per LAYER (the drift), two tiles per element. */
+  paintNear(ctx: CanvasRenderingContext2D, width: number, height: number, t: number): void {
+    const tile = width;
+    const off = (t * SUBSTRATE_NEAR_DRIFT) % tile;
+    ctx.save();
+    ctx.translate(off, 0);
+    for (const r of this.rocks) {
+      const y = height - r.ry * 0.5;
+      for (const dx of [0, -tile]) {
+        const x = r.u * tile + dx;
+        ctx.beginPath();
+        ctx.ellipse(x, y, r.rx, r.ry, 0, 0, TAU);
+        ctx.fillStyle = ROCK_FILL;
+        ctx.fill();
+      }
+    }
+    ctx.strokeStyle = KELP_STROKE;
+    ctx.lineWidth = 3;
+    for (const k of this.kelp) {
+      const baseX = k.u * tile;
+      const topY = height - height * k.h;
+      for (const dx of [0, -tile]) {
+        const x = baseX + dx;
+        const sway = Math.sin(t * 0.8 + k.phase) * 6;
+        ctx.beginPath();
+        ctx.moveTo(x, height);
+        ctx.quadraticCurveTo(x + sway, (height + topY) / 2, x + sway * 1.6, topY);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+}

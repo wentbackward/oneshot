@@ -818,16 +818,14 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
           radius: BUBBLE_RADIUS_MIN + (BUBBLE_RADIUS_MAX - BUBBLE_RADIUS_MIN) * hash(i, 3),
           speed: BUBBLE_RISE_MIN + (BUBBLE_RISE_MAX - BUBBLE_RISE_MIN) * hash(i, 2),
           offset: hash(i, 4),
-          phase0: hash(i, 5) * TAU3,
-          x: 0,
-          y: 0
+          phase0: hash(i, 5) * TAU3
         });
       }
     }
     /** Release (paint) the whole pool at world time t: every slot,
      *  in fixed slot order — the draw-recording test tracks slot i
      *  as the i-th bubble arc of each frame. Allocation-free: the
-     *  loop only reads and writes preallocated fields. */
+     *  loop only reads preallocated fields. */
     paint(ctx, width, height, t) {
       const column = height + BUBBLE_MARGIN * 2;
       ctx.lineWidth = 1;
@@ -835,12 +833,103 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       for (let i = 0; i < this.slots.length; i++) {
         const s = this.slots[i];
         const rise = column / s.speed;
-        s.x = s.lane * width + Math.sin(t / rise * TAU3 * BUBBLE_RISE_PERIODS + s.phase0) * BUBBLE_WOBBLE_AMP;
-        s.y = height + BUBBLE_MARGIN - (t * s.speed + s.offset * column) % column;
+        const x = s.lane * width + Math.sin(t / rise * TAU3 * BUBBLE_RISE_PERIODS + s.phase0) * BUBBLE_WOBBLE_AMP;
+        const y = height + BUBBLE_MARGIN - (t * s.speed + s.offset * column) % column;
         ctx.beginPath();
-        ctx.arc(s.x, s.y, s.radius, 0, TAU3);
+        ctx.arc(x, y, s.radius, 0, TAU3);
         ctx.stroke();
       }
+    }
+  };
+
+  // src/render/substrate.ts
+  var SUBSTRATE_SEED = 4091;
+  var SUBSTRATE_GRAVEL_COUNT = 44;
+  var SUBSTRATE_DECOR_ROCKS = 6;
+  var SUBSTRATE_KELP_TUFTS = 4;
+  var SUBSTRATE_FAR_DRIFT = 1.2;
+  var SUBSTRATE_NEAR_DRIFT = 3;
+  var GRAVEL_BAND = 0.06;
+  var GRAVEL_FILLS = ["#31506b", "#3c5f7d", "#466a8c", "#2b455c"];
+  var ROCK_FILL = "#22384c";
+  var KELP_STROKE = "rgba(38, 104, 74, 0.85)";
+  var TAU4 = 2 * Math.PI;
+  var Substrate = class {
+    gravel = [];
+    rocks = [];
+    kelp = [];
+    constructor() {
+      const rng = mulberry32(SUBSTRATE_SEED);
+      for (let i = 0; i < SUBSTRATE_GRAVEL_COUNT; i++) {
+        this.gravel.push({
+          u: rng(),
+          v: rng(),
+          rx: 3 + 5 * rng(),
+          ry: 2 + 3.5 * rng(),
+          fill: GRAVEL_FILLS[Math.floor(rng() * GRAVEL_FILLS.length) % GRAVEL_FILLS.length] ?? "#31506b"
+        });
+      }
+      for (let i = 0; i < SUBSTRATE_DECOR_ROCKS; i++) {
+        this.rocks.push({ u: rng(), rx: 18 + 24 * rng(), ry: 8 + 12 * rng() });
+      }
+      for (let i = 0; i < SUBSTRATE_KELP_TUFTS; i++) {
+        this.kelp.push({ u: rng(), h: 0.06 + 0.07 * rng(), phase: rng() * TAU4 });
+      }
+    }
+    /** Paint the FAR gravel layer (drawn first, i.e. behind the
+     *  near layer): one save/translate/restore group for the layer
+     *  drift, two tiles per element. */
+    paintFar(ctx, width, height, t) {
+      const tile = width;
+      const off = t * SUBSTRATE_FAR_DRIFT % tile;
+      const band = height * GRAVEL_BAND;
+      ctx.save();
+      ctx.translate(off, 0);
+      for (const s of this.gravel) {
+        const y = height - band * s.v;
+        for (const dx of [0, -tile]) {
+          const x = s.u * tile + dx;
+          ctx.beginPath();
+          ctx.ellipse(x, y, s.rx, s.ry, 0, 0, TAU4);
+          ctx.fillStyle = s.fill;
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+    }
+    /** Paint the NEAR top-decor band (rocks resting on the bed,
+     *  kelp tufts idling with a slow sway): one save/translate/
+     *  restore group per LAYER (the drift), two tiles per element. */
+    paintNear(ctx, width, height, t) {
+      const tile = width;
+      const off = t * SUBSTRATE_NEAR_DRIFT % tile;
+      ctx.save();
+      ctx.translate(off, 0);
+      for (const r of this.rocks) {
+        const y = height - r.ry * 0.5;
+        for (const dx of [0, -tile]) {
+          const x = r.u * tile + dx;
+          ctx.beginPath();
+          ctx.ellipse(x, y, r.rx, r.ry, 0, 0, TAU4);
+          ctx.fillStyle = ROCK_FILL;
+          ctx.fill();
+        }
+      }
+      ctx.strokeStyle = KELP_STROKE;
+      ctx.lineWidth = 3;
+      for (const k of this.kelp) {
+        const baseX = k.u * tile;
+        const topY = height - height * k.h;
+        for (const dx of [0, -tile]) {
+          const x = baseX + dx;
+          const sway = Math.sin(t * 0.8 + k.phase) * 6;
+          ctx.beginPath();
+          ctx.moveTo(x, height);
+          ctx.quadraticCurveTo(x + sway, (height + topY) / 2, x + sway * 1.6, topY);
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
     }
   };
 
@@ -853,12 +942,17 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
     /** The pooled bubble emitter (src/render/bubbles.ts): built once
      *  per Renderer, recycled in place every frame. */
     bubbles = new BubbleColumn();
+    /** The two parallax substrate layers (src/render/substrate.ts):
+     *  built once per Renderer, seeded, reused forever. */
+    substrate = new Substrate();
     /** Paint one frame of the given world state. The scene ambient is
      *  resolved from world.time (a paused sim freezes it); the rest
      *  of the frame is painted in the documented order above. */
     render(ctx, width, height, world) {
       const light = lightPhaseAt(world.time);
       drawBackdrop(ctx, width, height, light.palette);
+      this.substrate.paintFar(ctx, width, height, world.time);
+      this.substrate.paintNear(ctx, width, height, world.time);
       drawCausticShafts(ctx, width, height, world.time, light.palette);
       drawSurfaceRipples(ctx, width, world.time);
       drawTetras(ctx, width, height, world.agents, this.tetraColours);

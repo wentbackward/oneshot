@@ -46,6 +46,13 @@ import {
   CAUSTIC_SWEEP_SPEED,
 } from "../src/render/caustics.ts";
 import { BUBBLE_POOL_SIZE, BUBBLE_WOBBLE_AMP } from "../src/render/bubbles.ts";
+import {
+  SUBSTRATE_GRAVEL_COUNT,
+  SUBSTRATE_DECOR_ROCKS,
+  SUBSTRATE_KELP_TUFTS,
+  SUBSTRATE_FAR_DRIFT,
+  SUBSTRATE_NEAR_DRIFT,
+} from "../src/render/substrate.ts";
 import { TETRA_COUNT } from "../src/sim/constants.ts";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -571,6 +578,93 @@ check("AC3: rising bubbles wobble sinusoidally in x — >= 1 full wobble period 
         `bubble ${i}: x = ${x} drifted ${Math.abs(x - center)}px from its lane — beyond BUBBLE_WOBBLE_AMP`);
     }
   }
+});
+
+// ================================================================
+// AC4: substrate — >= 2 procedurally drawn PARALLAX layers
+// (gravel + top decor) render EVERY frame, at DIFFERENT drift
+// rates (the near layer slides measurably faster), and the whole
+// scene references no external assets (no drawImage, no
+// createImageBitmap, anywhere in the recording)
+// ================================================================
+
+check("AC4: gravel and top-decor parallax layers render every frame with their named draw counts, and the near layer drifts faster than the far layer", () => {
+  assert(Number.isInteger(SUBSTRATE_GRAVEL_COUNT) && SUBSTRATE_GRAVEL_COUNT > 0, "gravel count must be a named positive constant");
+  assert(
+    SUBSTRATE_DECOR_ROCKS + SUBSTRATE_KELP_TUFTS >= 2 && SUBSTRATE_GRAVEL_COUNT >= 2,
+    "at least two procedurally drawn substrate layers are required (gravel + decor)"
+  );
+  assert(SUBSTRATE_NEAR_DRIFT > SUBSTRATE_FAR_DRIFT > 0,
+    `parallax requires the NEAR layer to drift faster (near ${SUBSTRATE_NEAR_DRIFT} <= far ${SUBSTRATE_FAR_DRIFT})`);
+  const g = boot(800, 600, ["translate", "ellipse", "beginPath", "fill", "stroke"]);
+  const FRAMES = 120;
+  const frames = [];
+  for (let f = 0; f < FRAMES; f++) {
+    const from = g.state.events.length;
+    if (f === 0) g.frameAt(0);
+    else g.tick(1, (f - 1) * FRAME_MS);
+    frames.push(g.state.events.slice(from));
+  }
+  const EPS = 1e-9;
+  for (const [f, slice] of frames.entries()) {
+    // Draw order (renderer.ts): the TWO substrate translates come
+    // before the caustic shaft translates. Everything between
+    // translate #1 and #2 is the far (gravel) layer; between #2
+    // and #3 the near (decor) layer. Each element is painted twice
+    // (tile-doubled, tile width = viewport) for a seamless wrap.
+    const trans = slice.filter((ev) => ev.kind === "translate");
+    assert(trans.length >= 3, `frame ${f}: expected the 2 substrate translates + 5 caustic translates, got ${trans.length}`);
+    const farIdx = slice.indexOf(trans[0]);
+    const nearIdx = slice.indexOf(trans[1]);
+    const causticIdx = slice.indexOf(trans[2]);
+    assert(farIdx < nearIdx && nearIdx < causticIdx, `frame ${f}: substrate layers are not drawn before the caustics`);
+    const farSlice = slice.slice(farIdx, nearIdx);
+    const nearSlice = slice.slice(nearIdx, causticIdx);
+    const count = (arr, kind) => arr.filter((ev) => ev.kind === kind).length;
+    assert(count(farSlice, "ellipse") === 2 * SUBSTRATE_GRAVEL_COUNT && count(farSlice, "beginPath") === 2 * SUBSTRATE_GRAVEL_COUNT && count(farSlice, "fill") === 2 * SUBSTRATE_GRAVEL_COUNT,
+      `frame ${f}: far layer must draw ${2 * SUBSTRATE_GRAVEL_COUNT} tile-doubled gravel ellipses, got ${count(farSlice, "ellipse")}`);
+    const nearBegin = 2 * (SUBSTRATE_DECOR_ROCKS + SUBSTRATE_KELP_TUFTS);
+    assert(count(nearSlice, "ellipse") === 2 * SUBSTRATE_DECOR_ROCKS && count(nearSlice, "fill") === 2 * SUBSTRATE_DECOR_ROCKS,
+      `frame ${f}: near layer must draw ${2 * SUBSTRATE_DECOR_ROCKS} tile-doubled decor rocks, got ${count(nearSlice, "ellipse")}`);
+    assert(count(nearSlice, "beginPath") === nearBegin && count(nearSlice, "stroke") === 2 * SUBSTRATE_KELP_TUFTS,
+      `frame ${f}: near layer must draw ${SUBSTRATE_KELP_TUFTS} tiled kelp tufts, got ${count(nearSlice, "stroke")} kelp strokes`);
+  }
+  // Parallax rates: audit the drifts on a fresh boot so the sim-
+  // time bookkeeping stays local.
+  const h = boot(800, 600, ["translate"]);
+  const drift = [];
+  const collect = (fromIdx) => {
+    const pair = h.state.events.slice(fromIdx).filter((ev) => ev.kind === "translate");
+    drift.push({ t: h.q("FISH_TANK_WORLD.time"), far: pair[0]?.args[0] ?? NaN, near: pair[1]?.args[0] ?? NaN });
+  };
+  h.frameAt(0);
+  collect(0);
+  for (let f = 1; f < FRAMES; f++) {
+    const start = h.state.events.length;
+    h.tick(1, (f - 1) * FRAME_MS);
+    collect(start);
+  }
+  const ratio = SUBSTRATE_NEAR_DRIFT / SUBSTRATE_FAR_DRIFT;
+  for (let f = 1; f < drift.length; f++) {
+    const dt = drift[f].t - drift[f - 1].t;
+    const df = drift[f].far - drift[f - 1].far;
+    const dn = drift[f].near - drift[f - 1].near;
+    assert(Math.abs(df - SUBSTRATE_FAR_DRIFT * dt) <= EPS,
+      `frame ${f}: far layer drifted ${df}px over ${dt}s — not SUBSTRATE_FAR_DRIFT x dt`);
+    assert(Math.abs(dn - SUBSTRATE_NEAR_DRIFT * dt) <= EPS,
+      `frame ${f}: near layer drifted ${dn}px over ${dt}s — not SUBSTRATE_NEAR_DRIFT x dt`);
+    assert(Math.abs(dn - ratio * df) <= EPS,
+      `frame ${f}: parallax ratio broke — near drift ${dn}px vs ${ratio} x far drift ${df}px`);
+  }
+});
+
+check("AC4: the atmosphere references no external assets — no drawImage or createImageBitmap anywhere in the recording", () => {
+  const g = boot(800, 600, ["drawImage", "imageBitmap"]);
+  g.frameAt(0);
+  g.tick(120, 0);
+  const bad = g.state.events.filter((ev) => ev.kind === "drawImage" || ev.kind === "imageBitmap");
+  assert(bad.length === 0,
+    `the scene must be 100% procedural (no external assets), recorded ${bad.length} image loads`);
 });
 
 // ---------- summary ----------

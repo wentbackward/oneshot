@@ -3198,3 +3198,61 @@ arcade physics).
   determinism fingerprint covers the predator; the pinned serializer
   contract test (fishtank-determinism) now validates that line's
   fixed-decimal/integer shape.
+## 2026-11-21 — Ticket #125: caustics, bubbles, parallax substrate, lighting cycle
+- **Lighting cycle hard-cuts between three named palettes (no
+  crossfade).** The AC requires the ambient to pass through EXACTLY
+  three distinct named palettes, each for its named duration — a
+  blended transition would manufacture in-between colours that fail
+  "exactly three". Durations (45/15/20 s) are exact multiples of
+  FIXED_DT so boundaries land on step boundaries; the cycle resolves
+  from `world.time` only, so pause/speed-control behaviour is
+  inherited for free. Alternatives: interpolated phases (rejected —
+  breaks the criterion), or a palette chosen per FRAME from wall
+  clock (rejected — pauses and 2x speed would desync the mood from
+  the sim).
+- **The caustic sweep phase is a sawtooth carried by each shaft's
+  translate.** AC2 measures the phase from RECORDED DRAW PARAMETERS
+  and demands a 2 x FIXED_DT gap advance it by exactly twice one
+  step's increment — a sinusoidal sway cannot show a linear phase in
+  its coordinates. Phase = (t x CAUSTIC_SWEEP_SPEED) mod
+  CAUSTIC_SWEEP_SPAN, applied as translate(x, 0), so the recorded
+  offset IS the phase, linear in sim time between wraps. Alternatives:
+  exposing the phase only via a test seam (rejected — the criterion
+  says "measured via recorded draw parameters"), or sinusoidal sway
+  with no measurable phase (rejected — unverifiable).
+- **Bubble wobble runs BUBBLE_RISE_PERIODS (3) full cycles per full
+  RISE, i.e. its frequency scales with the bubble's rise speed.**
+  ">= 1 full wobble period per rise" must hold for every bubble at
+  every viewport height; tying the period to the rise duration makes
+  it constructional instead of tuned. Side effect: fast risers
+  chatter more, which reads as buoyancy. Alternatives: fixed wobble
+  frequency (rejected — breaks at small viewports: a fast bubble's
+  4 s rise could span less than one period), or per-bubble period
+  counts (rejected — extra degrees of freedom, same guarantee).
+- **The bubble "pool" is a preallocated slot array filled in place;
+  emission/recycling is a pure function of world time.** The render
+  layer stays deterministic (fixed-step tests replay identical
+  frames), so bubbles are stateless per frame; the pool satisfies the
+  allocation criterion by allocating its BUBBLE_POOL_SIZE slots ONCE
+  and only writing their x/y fields per frame. Alternatives: a
+  step-updated particle pool owned by the sim (rejected — cosmetics
+  would pollute sim state and the determinism hash), or per-frame
+  object creation (rejected — violates the AC and the 60 fps rule).
+- **Substrate parallax = two drift rates (near faster than far)
+  over a seamless tile of width = viewport, each element painted
+  twice (at x and x - tile).** A static tank has no camera, so the
+  depth cue is differential lateral drift; the tile doubling makes
+  the wrap invisible (an element leaving one edge is the tiled twin
+  entering the other) without per-element modulo churn beyond the
+  one layer offset. Alternatives: parallax tied to pointer/camera
+  motion (rejected — no camera exists and the AC only requires
+  layered procedural draws rendered each frame), or single-copy
+  elements with modulo x (rejected — pops at the tile seam).
+- **The scene ambient is the backdrop gradient pair (surface,
+  depth) of the active palette — no full-screen darkening overlay.**
+  The AC defines the ambient by the named palettes' fills/stops; a
+  multiplied overlay would add a fourth, unnamed colour to the
+  recording. The NIGHT palette's cold teal caustic tint carries the
+  "bioluminescent" read on its own. Alternatives: additive
+  overlay tints (rejected — pollutes the "exactly three palettes"
+  audit), or per-entity recolouring (out of scope for this ticket).
