@@ -237,7 +237,10 @@ export class World {
       if (x < 0) x = 0; else if (x > TANK_WIDTH) x = TANK_WIDTH;
       if (y < 0) y = 0; else if (y > TANK_HEIGHT) y = TANK_HEIGHT;
       const nx = Math.hypot(vx, vy);
-      const heading = nx > 0 ? Math.atan2(vy, vx) : t.heading;
+      // Velocity is clamped into [TETRA_MIN_SPEED, TETRA_MAX_SPEED]
+      // above, so it is never (0, 0) and the heading is simply the
+      // direction of travel.
+      const heading = Math.atan2(vy, vx);
       const instantTorque = wrapPi(heading - t.heading) / dt;
       t.torque += TORQUE_SMOOTHING * (instantTorque - t.torque);
       t.x = x;
