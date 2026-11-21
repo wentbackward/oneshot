@@ -3271,3 +3271,12 @@ arcade physics).
   pop (rejected — a visible 120 px snap per shaft), or wrapping the
   position symmetrically about the centre (rejected — would break
   the "linear in sim time between wraps" phase the AC measures).
+- **The substrate's tile-doubled paint iterates a module-level
+  TILE_OFFSETS table ([0, -1] x tile), not a per-element
+  `[0, -tile]` literal** (review should-fix: the literal minted a
+  fresh 2-slot array per element per frame — ~54 allocations/frame
+  — contradicting the module's allocation-free claim; the hoisted
+  table makes the claim true). The dead `?? "#31506b"` fallback on
+  GRAVEL_FILLS was deleted (the index is provably in-range, so it
+  could never fire; a non-null assertion satisfies
+  noUncheckedIndexedAccess without reviving the dead branch).

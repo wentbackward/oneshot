@@ -46,6 +46,13 @@ const GRAVEL_FILLS = ["#31506b", "#3c5f7d", "#466a8c", "#2b455c"];
 const ROCK_FILL = "#22384c";
 const KELP_STROKE = "rgba(38, 104, 74, 0.85)";
 
+/** Horizontal tile copies for the seamless double: every element
+ *  is painted at x and x - tile (multiply the table entry by the
+ *  tile width). Module-level on purpose — the per-frame paint must
+ *  allocate nothing, so a literal [0, -tile] in the hot loop is
+ *  not allowed (it would mint an array per element, per frame). */
+const TILE_OFFSETS = [0, -1];
+
 const TAU = 2 * Math.PI;
 
 interface GravelStone {
@@ -89,7 +96,7 @@ export class Substrate {
         v: rng(),
         rx: 3 + 5 * rng(),
         ry: 2 + 3.5 * rng(),
-        fill: GRAVEL_FILLS[Math.floor(rng() * GRAVEL_FILLS.length) % GRAVEL_FILLS.length] ?? "#31506b",
+        fill: GRAVEL_FILLS[Math.floor(rng() * GRAVEL_FILLS.length) % GRAVEL_FILLS.length]!,
       });
     }
     for (let i = 0; i < SUBSTRATE_DECOR_ROCKS; i++) {
@@ -111,8 +118,8 @@ export class Substrate {
     ctx.translate(off, 0);
     for (const s of this.gravel) {
       const y = height - band * s.v;
-      for (const dx of [0, -tile]) {
-        const x = s.u * tile + dx;
+      for (const copy of TILE_OFFSETS) {
+        const x = s.u * tile + copy * tile;
         ctx.beginPath();
         ctx.ellipse(x, y, s.rx, s.ry, 0, 0, TAU);
         ctx.fillStyle = s.fill;
@@ -132,8 +139,8 @@ export class Substrate {
     ctx.translate(off, 0);
     for (const r of this.rocks) {
       const y = height - r.ry * 0.5;
-      for (const dx of [0, -tile]) {
-        const x = r.u * tile + dx;
+      for (const copy of TILE_OFFSETS) {
+        const x = r.u * tile + copy * tile;
         ctx.beginPath();
         ctx.ellipse(x, y, r.rx, r.ry, 0, 0, TAU);
         ctx.fillStyle = ROCK_FILL;
@@ -145,8 +152,8 @@ export class Substrate {
     for (const k of this.kelp) {
       const baseX = k.u * tile;
       const topY = height - height * k.h;
-      for (const dx of [0, -tile]) {
-        const x = baseX + dx;
+      for (const copy of TILE_OFFSETS) {
+        const x = baseX + copy * tile;
         const sway = Math.sin(t * 0.8 + k.phase) * 6;
         ctx.beginPath();
         ctx.moveTo(x, height);
