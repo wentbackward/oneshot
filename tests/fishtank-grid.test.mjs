@@ -207,6 +207,53 @@ check("remove() drops the item from every subsequent query", () => {
   assert(grid.remove(makePoint(999, 999)) === false, "removing a never-inserted item must report false");
 });
 
+check("remove() of an ABSENT item never disturbs healthy neighbours", () => {
+  const grid = new SpatialGrid(500, 500, 64);
+  // a and b share one cell, with b inserted LAST into its cell array.
+  const a = makePoint(10, 10);
+  const b = makePoint(20, 20);
+  grid.insert(a);
+  grid.insert(b);
+  // Absent item co-located with b: a buggy implicit splice (e.g.
+  // splice(-1)) in the cell holding it would silently evict b, the
+  // trailing element. It must not — the removal is a pure no-op.
+  assert(grid.remove(makePoint(20, 20)) === false, "absent item must report false");
+  assert(grid.query(20, 20, 1).includes(b), "co-located neighbour b must survive a no-op remove");
+  assert(grid.query(10, 10, 1).includes(a), "other cell-occupant a must survive a no-op remove");
+  // Absent item pointing at an entirely empty cell: also a no-op.
+  assert(grid.remove(makePoint(300, 300)) === false, "absent item in an empty cell must report false");
+  const got = grid.query(15, 15, 30); // closed ball holding BOTH a and b
+  assert(
+    got.length === 2 && got.includes(a) && got.includes(b),
+    "both cell occupants must still be present after no-op removals"
+  );
+});
+
+check("duplicate insert() of the same item keeps it stored exactly once", () => {
+  const grid = new SpatialGrid(500, 500, 64);
+  const p = makePoint(100, 100);
+  grid.insert(p);
+  grid.insert(p); // duplicate: must not double-store
+  assert(grid.query(100, 100, 5).filter((q) => q === p).length === 1, "duplicate insert must not report the item twice");
+  assert(grid.remove(p) === true, "one remove must drop the duplicated item");
+  assert(grid.query(0, 0, 600).filter((q) => q === p).length === 0, "item must be fully gone after a single remove");
+  assert(grid.remove(p) === false, "removing an already-removed item must report false");
+});
+
+check("remove() then re-insert() restores the item and queries stay honest", () => {
+  const p = makePoint(30, 30);
+  const q = makePoint(40, 40);
+  const grid = new SpatialGrid(500, 500, 64);
+  grid.insert(p);
+  grid.insert(q);
+  assert(grid.remove(p) === true, "setup: first remove reports true");
+  p.x = 400;
+  p.y = 400; // the item moves before coming back into the grid
+  grid.insert(p);
+  assert(grid.query(400, 400, 5).filter((x) => x === p).length === 1, "re-inserted item is found exactly once at its new spot");
+  assertSameNeighborSet(grid.query(400, 400, 480), bruteNeighbors([p, q], 400, 400, 480), "post re-insert vs brute force");
+});
+
 check("update() relocates a moved item into the correct cell", () => {
   const p = makePoint(10, 10);
   const far = makePoint(480, 480);
