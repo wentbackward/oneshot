@@ -25,12 +25,24 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
 (() => {
   // src/sim/constants.ts
   var FIXED_DT = 1 / 60;
+  var TANK_WIDTH = 1600;
+  var TANK_HEIGHT = 1e3;
   var MAX_FRAME_DELTA = 0.25;
   var TETRA_COUNT = 80;
   var STARTLE_RADIUS = 140;
   var STARTLE_IMPULSE = 200;
   var TETRA_MIN_SPEED = 30;
   var TETRA_MAX_SPEED = 220;
+  var PREDATOR_PATROL_SPEED = 340;
+  var PREDATOR_STALK_SPEED = 380;
+  var PREDATOR_REST_SPEED = 30;
+  var PREDATOR_HUNGER_RATE = 0.06;
+  var PREDATOR_STALK_THRESHOLD = 0.7;
+  var PREDATOR_SIGHT_RANGE = 400;
+  var PREDATOR_ISOLATION_RADIUS = 160;
+  var PREDATOR_CAPTURE_RADIUS = 28;
+  var PREDATOR_REST_STEPS = 240;
+  var PREDATOR_WAYPOINT_TOLERANCE = 48;
 
   // src/sim/rng.ts
   function mulberry32(seed) {
@@ -215,9 +227,172 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
     }
   };
 
+  // src/sim/predator.ts
+  var PREDATOR_PATROL_ROUTE = [
+    { name: "north-west", x: 400, y: 300 },
+    { name: "north-east", x: 1200, y: 300 },
+    { name: "south-east", x: 1200, y: 700 },
+    { name: "south-west", x: 400, y: 700 }
+  ];
+  var PREDATOR_SPAWN_X = 100;
+  var PREDATOR_SPAWN_Y = 500;
+  var ApexPredator = class {
+    x = PREDATOR_SPAWN_X;
+    y = PREDATOR_SPAWN_Y;
+    /** Velocity (direction AND speed) in tank units/s — direct
+     *  kinematics: the step re-sets this from the state every time. */
+    vx;
+    vy;
+    state = "patrol";
+    /** Hunger in [0, 1]: rises at PREDATOR_HUNGER_RATE (even during
+     *  rest), resets to 0 on a feed. */
+    hunger = 0;
+    /** Index into PREDATOR_PATROL_ROUTE of the stop currently being
+     *  sought; advances on each arrival (cyclically). */
+    waypointIndex = 0;
+    /** The locked prey (a live reference into world.agents) or null.
+     *  A non-null lock is always live: the only removal path is a
+     *  capture, which nulls the lock in the same step. */
+    prey = null;
+    /** Rest steps remaining: armed to PREDATOR_REST_STEPS on a feed,
+     *  counts down during rest, hits 0 at the boundary step. */
+    restRemaining = 0;
+    /** How many tetras this predator has eaten (telemetry). */
+    fedCount = 0;
+    constructor() {
+      const wp = PREDATOR_PATROL_ROUTE[0];
+      const dx = wp.x - this.x;
+      const dy = wp.y - this.y;
+      const d = Math.hypot(dx, dy);
+      this.vx = d > 0 ? dx / d * PREDATOR_PATROL_SPEED : PREDATOR_PATROL_SPEED;
+      this.vy = d > 0 ? dy / d * PREDATOR_PATROL_SPEED : 0;
+    }
+    /** Advance the predator by exactly dt seconds against the world.
+     *  Called by World.step AFTER the tetras have moved, so prey
+     *  positions are current (the neighbor grid is rebuilt at the
+     *  start of each step — the same one-step-stale view the tetras'
+     *  own steering uses). May mutate world.agents: a capture splices
+     *  the victim out. */
+    step(dt, world) {
+      this.hunger = Math.min(1, this.hunger + PREDATOR_HUNGER_RATE * dt);
+      let dirX;
+      let dirY;
+      let speed;
+      let drifting = false;
+      if (this.state === "rest") {
+        this.restRemaining -= 1;
+        if (this.restRemaining <= 0) {
+          this.state = "patrol";
+        } else {
+          drifting = true;
+        }
+      }
+      if (drifting) {
+        const m = Math.hypot(this.vx, this.vy);
+        dirX = m > 0 ? this.vx / m : 1;
+        dirY = m > 0 ? this.vy / m : 0;
+        speed = PREDATOR_REST_SPEED;
+      } else {
+        if (this.state === "patrol" && this.hunger >= PREDATOR_STALK_THRESHOLD) {
+          const target = this.findPrey(world);
+          if (target) {
+            this.state = "stalk";
+            this.prey = target;
+          }
+        }
+        let prey = this.state === "stalk" ? this.prey : null;
+        if (prey && !this.isIsolated(prey, world)) {
+          this.prey = null;
+          prey = null;
+        }
+        if (prey) {
+          const dx = prey.x - this.x;
+          const dy = prey.y - this.y;
+          const d = Math.hypot(dx, dy);
+          dirX = d > 0 ? dx / d : 1;
+          dirY = d > 0 ? dy / d : 0;
+          speed = PREDATOR_STALK_SPEED;
+        } else {
+          this.prey = null;
+          this.state = "patrol";
+          let i = this.waypointIndex;
+          const wp = PREDATOR_PATROL_ROUTE[i];
+          if (Math.hypot(wp.x - this.x, wp.y - this.y) <= PREDATOR_WAYPOINT_TOLERANCE) {
+            i = (i + 1) % PREDATOR_PATROL_ROUTE.length;
+            this.waypointIndex = i;
+          }
+          const next = PREDATOR_PATROL_ROUTE[i];
+          const dx = next.x - this.x;
+          const dy = next.y - this.y;
+          const d = Math.hypot(dx, dy);
+          dirX = d > 0 ? dx / d : 1;
+          dirY = d > 0 ? dy / d : 0;
+          speed = PREDATOR_PATROL_SPEED;
+        }
+      }
+      const victim = this.state === "stalk" ? this.prey : null;
+      if (victim && Math.hypot(victim.x - this.x, victim.y - this.y) <= PREDATOR_CAPTURE_RADIUS) {
+        const at = world.agents.indexOf(victim);
+        if (at >= 0) world.agents.splice(at, 1);
+        this.prey = null;
+        this.hunger = 0;
+        this.fedCount += 1;
+        this.state = "rest";
+        this.restRemaining = PREDATOR_REST_STEPS;
+        speed = PREDATOR_REST_SPEED;
+      }
+      this.vx = dirX * speed;
+      this.vy = dirY * speed;
+      let x = this.x + this.vx * dt;
+      let y = this.y + this.vy * dt;
+      if (x < 0) {
+        x = -x;
+        this.vx = -this.vx;
+      } else if (x > TANK_WIDTH) {
+        x = 2 * TANK_WIDTH - x;
+        this.vx = -this.vx;
+      }
+      if (y < 0) {
+        y = -y;
+        this.vy = -this.vy;
+      } else if (y > TANK_HEIGHT) {
+        y = 2 * TANK_HEIGHT - y;
+        this.vy = -this.vy;
+      }
+      if (x < 0) x = 0;
+      else if (x > TANK_WIDTH) x = TANK_WIDTH;
+      if (y < 0) y = 0;
+      else if (y > TANK_HEIGHT) y = TANK_HEIGHT;
+      this.x = x;
+      this.y = y;
+    }
+    /** The nearest ISOLATED tetra within PREDATOR_SIGHT_RANGE, or
+     *  null: fixed agents order with a strict best-distance scan, so
+     *  the choice is deterministic (ties keep the earliest swimmer). */
+    findPrey(world) {
+      let best = null;
+      let bestDist = PREDATOR_SIGHT_RANGE;
+      for (const t of world.agents) {
+        const d = Math.hypot(t.x - this.x, t.y - this.y);
+        if (d >= bestDist) continue;
+        if (!this.isIsolated(t, world)) continue;
+        best = t;
+        bestDist = d;
+      }
+      return best;
+    }
+    /** A tetra is prey-eligible ("isolated") only when no other
+     *  tetra lies within PREDATOR_ISOLATION_RADIUS. Neighbourhood is
+     *  answered by the world's spatial grid (PRD §1). */
+    isIsolated(t, world) {
+      for (const n of world.grid.query(t.x, t.y, PREDATOR_ISOLATION_RADIUS)) {
+        if (n !== t && Math.hypot(n.x - t.x, n.y - t.y) <= PREDATOR_ISOLATION_RADIUS) return false;
+      }
+      return true;
+    }
+  };
+
   // src/sim/world.ts
-  var TANK_WIDTH = 1600;
-  var TANK_HEIGHT = 1e3;
   var GRID_CELL_SIZE = 64;
   var SPAWN_CLUSTER_RADIUS = 120;
   var SPAWN_HEADING_JITTER = 0.5;
@@ -243,8 +418,11 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
     agents = [];
     /** Neighbor grid (typed Tetra so queries hand back moving bodies
      *  straight into the steering forces), rebuilt every fixed step
-     *  (PRD §1). */
+     *  (PRD §1). The predator's isolation checks reuse it. */
     grid;
+    /** The apex predator (PRD §2, ticket #124): owned by the world,
+     *  stepped after the tetras each fixed step. */
+    predator;
     /** Reused neighbour scratch per step (allocation-free hot path):
      *  steering forces only READ the list, so one shared buffer is
      *  safe across the fixed-order iteration. */
@@ -253,6 +431,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       this.seed = options.seed ?? 1;
       this.grid = new SpatialGrid(TANK_WIDTH, TANK_HEIGHT, GRID_CELL_SIZE);
       this.spawn(options.population ?? TETRA_COUNT);
+      this.predator = new ApexPredator();
     }
     /** Spawn n tetras as one loose cluster at the tank centre: a
      *  shared base heading (jittered ±SPAWN_HEADING_JITTER) so the
@@ -381,6 +560,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
         t.heading = heading;
         t.phase += TAU * tailFrequency(nx, t.torque) * dt;
       }
+      this.predator.step(dt, this);
     }
     /** Startle event (PRD §2: the school scatters when the user taps
      *  the glass): every tetra within STARTLE_RADIUS of (x, y)
@@ -416,17 +596,23 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       return startled;
     }
     /** Fixed-precision snapshot of the whole sim state: clock first,
-     *  then one `x,y,vx,vy` line per tetra at 6 decimals. The tail
-     *  state (phase, torque) is excluded deliberately: heading is a
-     *  pure function of (vx, vy) and the tail scalars are deterministic
-     *  functions of the full history, so this fingerprint already
-     *  proves replay identity. Two same-seed worlds hash this
+     *  then one `x,y,vx,vy` line per tetra at 6 decimals, then one
+     *  `P:` line for the predator (state, pose, hunger, route
+     *  progress, rest window, feed count). The tail state (phase,
+     *  torque) is excluded deliberately: heading is a pure function
+     *  of (vx, vy) and the tail scalars are deterministic functions
+     *  of the full history, so this fingerprint already proves replay
+     *  identity — predator included. Two same-seed worlds hash this
      *  byte-identically (determinism proof). */
     serializeState() {
       const lines = [this.time.toFixed(6)];
       for (const t of this.agents) {
         lines.push(`${t.x.toFixed(6)},${t.y.toFixed(6)},${t.vx.toFixed(6)},${t.vy.toFixed(6)}`);
       }
+      const p = this.predator;
+      lines.push(
+        `P:${p.state}:${p.x.toFixed(6)},${p.y.toFixed(6)},${p.vx.toFixed(6)},${p.vy.toFixed(6)},${p.hunger.toFixed(6)},${p.waypointIndex},${p.restRemaining},${p.fedCount}`
+      );
       return lines.join("\n");
     }
     /** Clear + re-insert every tetra: the O(1)-average neighbor
