@@ -11,13 +11,13 @@
 // Criteria covered:
 //  1. The hub is a self-contained page: valid doctype, no <script>,
 //     no external references (the repo-wide "one file, no deps"
-//     rule), and it links BOTH games by bare relative hrefs.
+//     rule), and it links ALL games by bare relative hrefs.
 //  2. Every game links back to the hub (relative `index.html`), and
 //     the back link is inert: plain markup, no boot-time JS queries
 //     (the vm suites boot the game files — a queried id would need
 //     a stub, which is what keeps this a two-line addition).
 //  3. The packager runs green: it emits dist/oneshot.zip whose
-//     members are EXACTLY oneshot/{index,bricks,asteroids}.html,
+//     members are EXACTLY oneshot/{index,bricks,asteroids,fishtank}.html,
 //     each byte-identical to the repo copy (sha256 compared).
 //  4. The archive is deterministic: two consecutive builds produce
 //     byte-identical zips (pinned ZipInfo timestamps).
@@ -67,7 +67,7 @@ for i in sorted(zf.infolist(), key=lambda i: i.filename):
   });
 }
 
-const GAMES = ["bricks.html", "asteroids.html"];
+const GAMES = ["bricks.html", "asteroids.html", "fishtank.html"];
 
 // ================================================================
 // 1. The hub: self-contained, links both games relatively
@@ -86,7 +86,7 @@ check("hub: doctype, pure-CSS (no <script>), zero external references", () => {
   }
 });
 
-check("hub: links BOTH games by bare relative hrefs (works at any mount depth)", () => {
+check("hub: links ALL games by bare relative hrefs (works at any mount depth)", () => {
   const idx = read("index.html");
   for (const game of GAMES) {
     assert(new RegExp(`href=["']${game.replace(".", "\\.")}["']`).test(idx),
@@ -115,10 +115,10 @@ function buildZip() {
   return zipPath;
 }
 
-check("packager: zip members are EXACTLY oneshot/{index,bricks,asteroids}.html, byte-identical to the repo", () => {
+check("packager: zip members are EXACTLY oneshot/{index,bricks,asteroids,fishtank}.html, byte-identical to the repo", () => {
   const zipPath = buildZip();
   const manifest = zipManifest(zipPath);
-  const expected = ["asteroids.html", "bricks.html", "index.html"].map((g) => "oneshot/" + g);
+  const expected = ["asteroids.html", "bricks.html", "fishtank.html", "index.html"].map((g) => "oneshot/" + g);
   const got = manifest.map((m) => m.name);
   assert(JSON.stringify(got) === JSON.stringify(expected),
     `zip members must be exactly ${expected.join(", ")} in that order, got [${got.join(", ")}]`);

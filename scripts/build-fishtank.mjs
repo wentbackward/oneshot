@@ -61,6 +61,14 @@ ${STYLE}
 </head>
 <body>
 <canvas id="game"></canvas>
+<!-- One-shot hub back link: static markup only, no JS (the vm suites
+     boot this file — anything queried at boot needs a stub, so keep
+     it inert, matching the other cabinets). -->
+<style>
+  #hub-back { position: fixed; right: 10px; bottom: 10px; z-index: 10; font: 10px/1 monospace; letter-spacing: .15em; color: #5a6b7d; text-decoration: none; padding: 4px 7px; border: 1px solid #1c2430; border-radius: 6px; background: rgba(5, 7, 15, .72); }
+  #hub-back:hover { color: #e8f2fb; border-color: #5a6b7d; }
+</style>
+<a id="hub-back" href="index.html">&larr; ONE-SHOT</a>
 <script>
 ${js}
 </script>

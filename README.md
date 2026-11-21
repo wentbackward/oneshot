@@ -23,6 +23,7 @@ dependencies — open the file and it runs):
 |---|---------|------|
 | 01 | **Brick Breaker** — a brick-breaker with three play modes, eight timed powerups, persistent hi-score, full screen, and a hold-right-mouse time warp | [`bricks.html`](bricks.html) |
 | 02 | **Asteroids** — a vector asteroid shooter with splitting rocks, drone raids, waves, and a score attack | [`asteroids.html`](asteroids.html) |
+| 03 | **Fish Tank** — a living aquarium: caustic light shafts, drifting surface ripples, and endless rising bubbles on a fixed-step sim | [`fishtank.html`](fishtank.html) |
 | — | **Hub** — the index page linking the products | [`index.html`](index.html) |
 
 Every product ships with hermetic test suites that boot the real code in a

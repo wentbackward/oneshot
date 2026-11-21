@@ -17,14 +17,32 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Setup Node.js
+        # Node 24 (matching package.json's engines floor): the fishtank
+        # suites import src/**/*.ts directly under stock node's type
+        # stripping, which Node 20 cannot do.
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
+
+      - name: Install the pinned toolchain
+        # package.json + package-lock.json pin esbuild/typescript, the
+        # exact set the fishtank build and typecheck contracts depend
+        # on; npm ci resolves it lockfile-exact on the clean runner.
+        run: npm ci
+
+      - name: Typecheck the TypeScript sources
+        run: npm run typecheck
+
+      - name: Verify the committed fishtank.html is a fresh build
+        run: node scripts/build-fishtank.mjs --check
 
       - name: Run the full suite loop
-        # No package.json on purpose: every suite is a standalone node
-        # script that boots the real game <script> in a vm sandbox
-        # (hermetic, no dependencies). Same loop as the local dev-loop gate.
+        # Every suite is a standalone node script that boots the real
+        # game <script> in a vm sandbox (hermetic, no external services).
+        # The fishtank suites additionally shell out to the pinned
+        # esbuild/tsc from node_modules and import() the .ts sources,
+        # hence the toolchain steps above. Same loop as the local
+        # dev-loop gate.
         run: |
           for f in tests/*.test.mjs; do
             echo "::group::$f"
