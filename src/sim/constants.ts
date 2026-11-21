@@ -7,6 +7,13 @@
  *  exact multiples of this (60 Hz), independent of frame pacing. */
 export const FIXED_DT = 1 / 60;
 
+/** Logical tank extent in tank units (rendering maps it to the
+ *  viewport). Defined HERE (not in world.ts) so leaf sim modules
+ *  like predator.ts can depend on the arena without an import
+ *  cycle; world.ts re-exports both for existing importers. */
+export const TANK_WIDTH = 1600;
+export const TANK_HEIGHT = 1000;
+
 /** Largest wall-clock gap (seconds) a single frame may feed the
  *  world. Tab switches and long pauses stop advancing the sim after
  *  this instead of bursting thousands of steps. */
@@ -31,3 +38,53 @@ export const STARTLE_IMPULSE = 200;
  *  units/s: never stalled, never explosive. */
 export const TETRA_MIN_SPEED = 30;
 export const TETRA_MAX_SPEED = 220;
+
+// ---------- apex predator (PRD §2's third behaviour, #124) ----------
+
+/** Speed of the predator's waypoint patrol, tank units/s — patrol
+ *  speed never exceeds this. A full 2400-unit lap (plus the 360-
+ *  unit walk-in from the spawn) fits inside the 600-step patrol
+ *  test window at this speed. */
+export const PREDATOR_PATROL_SPEED = 340;
+
+/** Stalk speed, tank units/s: deliberately ABOVE TETRA_MAX_SPEED,
+ *  so every chase closes on any prey (minimum closure
+ *  PREDATOR_STALK_SPEED − TETRA_MAX_SPEED = 160 u/s). */
+export const PREDATOR_STALK_SPEED = 380;
+
+/** Rest drift speed, tank units/s: a slow, purposeless glide.
+ *  Above TETRA_MIN_SPEED so the resting animal never reads as
+ *  dead. */
+export const PREDATOR_REST_SPEED = 30;
+
+/** Hunger gain per second; hunger lives in [0, 1] and rises even
+ *  during rest (a feed resets it to 0). At this rate a fresh belly
+ *  reaches the stalk threshold in ≈ 11.7 s of sim time. */
+export const PREDATOR_HUNGER_RATE = 0.06;
+
+/** The hunger level at which the predator will stalk an isolated
+ *  tetra in sight. The rest window (PREDATOR_REST_STEPS steps =
+ *  4 s) only recovers ≈ 0.24 of hunger, so a recently-fed
+ *  predator provably cannot re-stalk during it. */
+export const PREDATOR_STALK_THRESHOLD = 0.7;
+
+/** How far the predator detects prey, tank units. */
+export const PREDATOR_SIGHT_RANGE = 400;
+
+/** A tetra is prey-eligible ("isolated") only when no other tetra
+ *  lies within this radius: schools are safe, stragglers are not.
+ *  Wider than the tetras' personal NEIGHBOUR_RADIUS (64) so the
+ *  rule reads at swimming scale. */
+export const PREDATOR_ISOLATION_RADIUS = 160;
+
+/** Prey within this distance is captured, tank units. */
+export const PREDATOR_CAPTURE_RADIUS = 28;
+
+/** Fixed steps the predator rests after a feed; patrol resumes on
+ *  the boundary step that counts the window down to zero. */
+export const PREDATOR_REST_STEPS = 240;
+
+/** Closed-ball arrival radius around a patrol waypoint, tank
+ *  units — generous against the 340 u/s × 1/60 s ≈ 5.7-unit step,
+ *  tight enough to make each stop individually attributable. */
+export const PREDATOR_WAYPOINT_TOLERANCE = 48;

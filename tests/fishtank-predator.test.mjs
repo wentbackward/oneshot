@@ -304,11 +304,11 @@ check("isolation: a tight (non-isolated) cluster in sight never triggers stalk; 
 // ================================================================
 check("determinism: two same-seed worlds replay byte-identical predator trajectories through a feed + rest cycle", () => {
   const setup = (seed) => setupLonePrey(seed, 460, 500, 500, 500, 0, 30, 0.99);
-  const a = setup(99);
-  const b = setup(99);
-  for (let i = 0; i < 600; i++) { a.step(FIXED_DT); b.step(FIXED_DT); }
-  assert(a[1].fedCount === 1, "test setup: the 600-step soak must include a feed");
-  assert(a.serializeState() === b.serializeState(),
+  const [wa, pa] = setup(99);
+  const [wb, pb] = setup(99);
+  for (let i = 0; i < 600; i++) { wa.step(FIXED_DT); wb.step(FIXED_DT); }
+  assert(pa.fedCount === 1 && pb.fedCount === 1, "test setup: the 600-step soak must include a feed");
+  assert(wa.serializeState() === wb.serializeState(),
     "same seed + same predator setup must replay byte-identical state (predator included)");
 });
 
