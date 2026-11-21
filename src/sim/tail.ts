@@ -9,10 +9,13 @@
 // Contract (pinned by tests/fishtank-tail.test.mjs):
 //  - pure: no inputs mutated, no hidden state, deterministic;
 //  - zero (within 1e-9) for (speed 0, torque 0);
-//  - non-decreasing (monotonic) in BOTH inputs over their whole
-//    ranges;
-//  - sign-symmetric in torque (turning either way is the same
-//    effort) and finite for absurd magnitudes.
+//  - magnitude contract: non-decreasing in |speed| and in
+//    |torque| (sign-symmetric in torque — turning either way is
+//    the same effort). The speed monotonicity is pinned over the
+//    contracted domain speed >= 0, where |speed| is the identity;
+//    signed negative speeds fold through Math.abs, so no signed-
+//    monotonicity claim is made across the negative-to-zero range;
+//  - finite for absurd magnitudes.
 // ================================================================
 
 /** Contribution of swimming speed to tail frequency, Hz per tank
