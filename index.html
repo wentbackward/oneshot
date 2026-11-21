@@ -13,6 +13,7 @@
     --dim: #5a6b7d;
     --accent-bricks: #5cf2b0;
     --accent-asteroids: #5eead4;
+    --accent-fishtank: #7dd3fc;
   }
   html, body {
     margin: 0;
@@ -77,6 +78,9 @@
   @media (min-width: 640px) {
     .cabinets { grid-template-columns: 1fr 1fr; }
   }
+  @media (min-width: 960px) {
+    .cabinets { width: min(1000px, 100%); grid-template-columns: repeat(3, 1fr); }
+  }
   a.card {
     display: flex;
     flex-direction: column;
@@ -102,6 +106,10 @@
     border-color: var(--accent-asteroids);
     box-shadow: 0 8px 30px -12px rgba(94, 234, 212, 0.55);
   }
+  a.card.fishtank:hover, a.card.fishtank:focus-visible {
+    border-color: var(--accent-fishtank);
+    box-shadow: 0 8px 30px -12px rgba(125, 211, 252, 0.55);
+  }
   .card .num {
     font-size: 0.68rem;
     letter-spacing: 0.3em;
@@ -114,6 +122,7 @@
   }
   a.card.bricks h2 { color: var(--accent-bricks); }
   a.card.asteroids h2 { color: var(--accent-asteroids); }
+  a.card.fishtank h2 { color: var(--accent-fishtank); }
   .card p {
     margin: 0;
     flex: 1;
@@ -129,6 +138,7 @@
   a.card:hover .launch { color: inherit; }
   a.card.bricks:hover .launch { color: var(--accent-bricks); }
   a.card.asteroids:hover .launch { color: var(--accent-asteroids); }
+  a.card.fishtank:hover .launch { color: var(--accent-fishtank); }
 
   /* ============ Footer ticker ============ */
   .footer {
@@ -166,6 +176,12 @@
         <span class="num">02</span>
         <h2>ASTEROIDS</h2>
         <p>Clear the void &mdash; split the rocks, burn off the drones, and hold your line wave after wave.</p>
+        <span class="launch">LAUNCH &#9658;</span>
+      </a>
+      <a class="card fishtank" href="fishtank.html">
+        <span class="num">03</span>
+        <h2>FISH TANK</h2>
+        <p>Breathe with the water &mdash; caustic light shafts, drifting ripples, and bubbles that never quite repeat.</p>
         <span class="launch">LAUNCH &#9658;</span>
       </a>
     </nav>
