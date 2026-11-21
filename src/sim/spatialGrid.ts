@@ -12,6 +12,13 @@
 // query circle overlaps, so it stays correct for any radius vs.
 // cell-size ratio; with radius <= cellSize that span is the cheap
 // constant 3×3 block.
+//
+// Coordinate contract: all coordinates — item positions at
+// insert/update time and query points — MUST be finite. By
+// construction non-finite input is unreachable (World spawn puts
+// agents in bounds, wrap keeps them bounded, and the steering
+// contract guarantees finite vectors), so the hot paths deliberately
+// carry no per-call Number.isFinite guards.
 // ================================================================
 
 /** Anything placeable in the grid: a position in logical tank units. */
@@ -35,12 +42,12 @@ export class SpatialGrid<T extends Positioned> {
     this.cellSize = cellSize;
     this.cols = Math.max(1, Math.ceil(width / cellSize));
     this.rows = Math.max(1, Math.ceil(height / cellSize));
-    this.cells = Array.from({ length: this.cols * this.rows }, () => []);
     // Every cell exists from construction and is never nulled
     // afterwards: the `!` assertions in insert/remove/query tell the
     // type checker what this guarantees (noUncheckedIndexedAccess).
     // They are compile-time advice only — there is no runtime null
     // handling anywhere in this class.
+    this.cells = Array.from({ length: this.cols * this.rows }, () => []);
   }
 
   /** Drop every item (cell arrays themselves are reused: no

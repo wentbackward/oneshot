@@ -24,8 +24,10 @@ export const TANK_HEIGHT = 1000;
 const GRID_CELL_SIZE = 64;
 
 /** Default seeded population (per-species variety arrives in a
- *  later ticket; every agent follows the same cruise law for now). */
-export const DEFAULT_POPULATION = 40;
+ *  later ticket; every agent follows the same cruise law for now).
+ *  Module-local: callers pass an explicit population or accept the
+ *  default opaquely. */
+const DEFAULT_POPULATION = 40;
 
 /** Cruise-speed band for freshly spawned agents, tank units/s. */
 const SPAWN_SPEED_MIN = 20;
