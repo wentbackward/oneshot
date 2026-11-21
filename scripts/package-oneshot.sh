@@ -10,6 +10,7 @@
 # Output: dist/oneshot.zip  ->  oneshot/index.html
 #                                oneshot/bricks.html
 #                                oneshot/asteroids.html
+#                                oneshot/fishtank.html
 #
 # Extract the zip on the host and the `oneshot/` folder is ready to serve;
 # visitors land on oneshot/index.html (the hub) and the games are linked
@@ -21,7 +22,7 @@ ROOT="$(cd "$HERE/.." && pwd)"
 OUT_DIR="$ROOT/dist"
 OUT="$OUT_DIR/oneshot.zip"
 
-FILES=("index.html" "bricks.html" "asteroids.html")
+FILES=("index.html" "bricks.html" "asteroids.html" "fishtank.html")
 
 # Fail loudly on a missing source — a partial package is worse than none.
 missing=0
