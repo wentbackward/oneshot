@@ -36,6 +36,11 @@ export class SpatialGrid<T extends Positioned> {
     this.cols = Math.max(1, Math.ceil(width / cellSize));
     this.rows = Math.max(1, Math.ceil(height / cellSize));
     this.cells = Array.from({ length: this.cols * this.rows }, () => []);
+    // Every cell exists from construction and is never nulled
+    // afterwards: the `!` assertions in insert/remove/query tell the
+    // type checker what this guarantees (noUncheckedIndexedAccess).
+    // They are compile-time advice only — there is no runtime null
+    // handling anywhere in this class.
   }
 
   /** Drop every item (cell arrays themselves are reused: no
@@ -55,13 +60,13 @@ export class SpatialGrid<T extends Positioned> {
   insert(item: T): void {
     const cellIndex = this.indexOf.get(item);
     if (cellIndex !== undefined) {
-      const cell = this.cells[cellIndex];
-      const at = cell ? cell.indexOf(item) : -1;
-      if (cell && at >= 0) cell.splice(at, 1);
+      const cell = this.cells[cellIndex]!;
+      const at = cell.indexOf(item);
+      if (at >= 0) cell.splice(at, 1);
     }
     const index = this.rowOf(item.y) * this.cols + this.colOf(item.x);
     // index is provably in range: colOf/rowOf clamp to [0, cols) and
-    // [0, rows) respectively, so no defensive null handling is needed.
+    // [0, rows) respectively, so the `!` is pure type advice.
     this.cells[index]!.push(item);
     this.indexOf.set(item, index);
   }
@@ -81,9 +86,9 @@ export class SpatialGrid<T extends Positioned> {
   remove(item: T): boolean {
     const cellIndex = this.indexOf.get(item);
     if (cellIndex === undefined) return false;
-    const cell = this.cells[cellIndex];
-    const at = cell ? cell.indexOf(item) : -1;
-    if (cell && at >= 0) cell.splice(at, 1);
+    const cell = this.cells[cellIndex]!;
+    const at = cell.indexOf(item);
+    if (at >= 0) cell.splice(at, 1);
     this.indexOf.delete(item);
     return true;
   }
@@ -102,8 +107,7 @@ export class SpatialGrid<T extends Positioned> {
     const r1 = this.rowOf(y + radius);
     for (let row = r0; row <= r1; row++) {
       for (let col = c0; col <= c1; col++) {
-        const cell = this.cells[row * this.cols + col];
-        if (!cell) continue;
+        const cell = this.cells[row * this.cols + col]!;
         for (const item of cell) {
           const dx = item.x - x;
           const dy = item.y - y;
