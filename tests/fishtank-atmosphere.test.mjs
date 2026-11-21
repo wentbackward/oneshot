@@ -10,9 +10,11 @@
 // events (kind + selected arguments) into a flat per-boot log,
 // opt-in per event kind so each check pays only for what it
 // audits. Frames are driven through the captured requestAnimation-
-// Frame callback at a fixed 17 ms interval (just above 60 fps), so
-// every frame consumes exactly one FIXED_DT sim step (world.time is
-// the ground truth).
+// Frame callback at a fixed 17 ms interval (a hair SLOWER than 60
+// fps), so most frames consume one FIXED_DT sim step and an
+// occasional frame consumes two (the app's accumulator catching
+// up) — those 2-step frames are what the AC1/AC2 pins rely on, and
+// world.time is the ground truth everywhere below.
 // No network, no browser.
 //
 // Draw order per frame (src/render/renderer.ts owns it, the parsers
@@ -45,7 +47,7 @@ import {
   CAUSTIC_SHAFTS,
   CAUSTIC_SWEEP_SPEED,
 } from "../src/render/caustics.ts";
-import { BUBBLE_POOL_SIZE, BUBBLE_WOBBLE_AMP } from "../src/render/bubbles.ts";
+import { BUBBLE_MARGIN, BUBBLE_POOL_SIZE, BUBBLE_WOBBLE_AMP } from "../src/render/bubbles.ts";
 import {
   SUBSTRATE_GRAVEL_COUNT,
   SUBSTRATE_DECOR_ROCKS,
@@ -61,11 +63,12 @@ const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/);
 if (!scriptMatch) throw new Error("no <script> block found in fishtank.html");
 const gameSource = scriptMatch[1];
 
-/** Wall-clock interval between driven frames in ms. Deliberately
- *  a touch FASTER than 60 fps (17 ms > 1/60 s): every frame
- *  consumes EXACTLY one FIXED_DT sim step and the leftover acc
- *  stays constant, so frame k renders at exactly k fixed steps of
- *  sim time — no floating-point drift from 1000/60 ms arithmetic. */
+/** Wall-clock interval between driven frames in ms. Deliberately a
+ *  touch SLOWER than 60 fps (17 ms > 16.67 ms = 1/60 s): each frame
+ *  takes at least one FIXED_DT step, and the leftover ~0.33 ms
+ *  accumulates until an occasional frame takes two steps — the
+ *  fixed-step accumulator working as designed. Sim time (not frame
+ *  count) is the ground truth in every audit below. */
 const FRAME_MS = 17;
 
 // ---------- tiny test harness (house style) ----------
@@ -477,6 +480,9 @@ check("AC2: the shaft phase advances proportionally to sim time — a 2 x FIXED_
     for (let k = 0; k < CAUSTIC_SHAFTS; k++) xs.push(shaftTranslate(g.state.events, k));
     frames.push({ t: 0, xs });
   }
+  // Pinned inside a wrap interval: the ~3.4 s window ends ~0.6 s
+  // before the first shaft's sweep wrap (shaft 4's, at t = 4 s), so
+  // no recorded gap can straddle the sawtooth reset.
   for (let f = 0; f < 200; f++) drive();
 
   // Every adjacent frame pair moved an integral number of fixed
@@ -563,7 +569,8 @@ check("AC3: the bubble pool recycles without spawning — every one of 1001 fram
 });
 
 check("AC3: rising bubbles wobble sinusoidally in x — >= 1 full wobble period per rise, amplitude within BUBBLE_WOBBLE_AMP", () => {
-  const g = boot(800, 600, ["arc"]);
+  const H = 600;
+  const g = boot(800, H, ["arc"]);
   const FRAMES = 2000; // ~34 s of sim: every pool slot completes >= 2 full rises
   const lanes = new Array(BUBBLE_POOL_SIZE).fill(null).map(() => []);
   for (let f = 0; f < FRAMES; f++) {
@@ -574,7 +581,7 @@ check("AC3: rising bubbles wobble sinusoidally in x — >= 1 full wobble period 
     assert(arcs.length === TETRA_COUNT + BUBBLE_POOL_SIZE, `frame ${f}: pool released ${arcs.length - TETRA_COUNT} bubbles`);
     for (let i = 0; i < BUBBLE_POOL_SIZE; i++) lanes[i].push(arcs[TETRA_COUNT + i].args); // [x, y, r]
   }
-  const column = 600 + 24; // the arc's y travel: from +12 below to -12 above the tank
+  const column = H + BUBBLE_MARGIN * 2; // the arc's y travel: from +BUBBLE_MARGIN below to -BUBBLE_MARGIN above the tank
   for (let i = 0; i < BUBBLE_POOL_SIZE; i++) {
     const samples = lanes[i];
     // Longest monotone-rising run = one (near-)full ascent: y only

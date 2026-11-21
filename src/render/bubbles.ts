@@ -27,8 +27,9 @@ export const BUBBLE_WOBBLE_AMP = 8;
 export const BUBBLE_RISE_PERIODS = 3;
 
 /** How far (px) above the top / below the bottom a bubble travels
- *  before recycling. */
-const BUBBLE_MARGIN = 12;
+ *  before recycling. Exported so the draw-recording test derives its
+ *  pinned column height from the same named constant. */
+export const BUBBLE_MARGIN = 12;
 
 /** Rise-speed band, px/s (per slot, seeded). */
 const BUBBLE_RISE_MIN = 40;
