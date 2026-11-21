@@ -297,9 +297,10 @@ export class World {
   }
 }
 
-/** Wrap a heading delta into (−π, π]: the shortest angular
+/** Wrap a heading delta into [−π, π]: the shortest angular
  *  difference, so the torque measurement sees a U-turn as π, not
- *  2π. */
+ *  2π. (Both endpoints can occur: ±π modulo 2π survives the
+ *  branch cuts as-is.) */
 function wrapPi(angle: number): number {
   let a = angle % TAU;
   if (a > Math.PI) a -= TAU;
