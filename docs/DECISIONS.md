@@ -2902,3 +2902,18 @@ arcade physics).
   before it feeds the fixed-step accumulator (same rationale as the bricks
   `MAX_FRAME_SECONDS` clamp: timestamp rewinds must not go backwards, tab
   switches must not burst thousands of steps).
+- **Gate runs lockfile-enforced `npm ci` as the FIRST `.devloop.json`
+  check (2026-11-21, gate-red train-check-22).** A clean gate worktree has
+  no shared `node_modules`, so the fishtank test loop (which shells out to
+  esbuild and tsc) failed 3 of 16 checks when `npm ci` sat mid-array; the
+  scaffold test now pins the position, not just the presence. Alternatives:
+  per-test lazy install (slow, non-lockfile) or making the tests skip when
+  node_modules is absent (weakened the criteria — rejected).
+- **`package.json` declares an explicit Node floor: `"engines": {"node":
+  ">=24.0.0"}` (2026-11-21, review should-fix).** The gate runs Node 24 LTS
+  (flag-free `import()` of `.ts` sources needs >= 23.6; a non-LTS floor buys
+  nothing). Alternatives: `>=23.6.0` (earliest technically-working, but an
+  un-LTS'd minor as a support pledge) or leaving it undeclared (the status
+  quo the review flagged). The field is dependency metadata only: the lock
+  root entry mirrors name/devDependencies, so `npm ci` still satisfies the
+  committed lockfile unchanged.

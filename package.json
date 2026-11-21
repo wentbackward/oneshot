@@ -3,6 +3,9 @@
   "private": true,
   "type": "module",
   "description": "Build toolchain for the oneshot collection (repo root is the deployable; only the fishtank product builds from TypeScript today)",
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "scripts": {
     "build:fishtank": "node scripts/build-fishtank.mjs",
     "check:fishtank": "node scripts/build-fishtank.mjs --check",
