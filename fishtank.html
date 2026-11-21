@@ -682,52 +682,17 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
   }
 
   // src/render/water.ts
-  var WATER_SURFACE = "#8fd8ea";
-  var WATER_DEPTH = "#0a2c45";
-  var CAUSTIC_SHAFTS = 5;
-  var CAUSTIC_BASE_ALPHA = 0.055;
-  var CAUSTIC_PULSE_ALPHA = 0.03;
-  var CAUSTIC_DRIFT = 0.06;
-  var CAUSTIC_SPEED = 0.35;
   var SURFACE_RIPPLES = 3;
   var RIPPLE_AMPLITUDE = 6;
   var RIPPLE_SPEED = 1.4;
   var RIPPLE_STEP = 16;
-  var BUBBLES = 12;
-  var BUBBLE_MARGIN = 12;
-  function hash(unit2, salt) {
-    const v = Math.sin(unit2 * 127.1 + salt * 311.7) * 43758.5453;
-    return v - Math.floor(v);
-  }
-  function drawWater(ctx, width, height, t) {
-    drawBackdrop(ctx, width, height);
-    drawCausticShafts(ctx, width, height, t);
-    drawSurfaceRipples(ctx, width, t);
-    drawBubbles(ctx, width, height, t);
-  }
-  function drawBackdrop(ctx, width, height) {
+  var RIPPLE_COLOR = "230, 250, 255";
+  function drawBackdrop(ctx, width, height, palette) {
     const grad = ctx.createLinearGradient(0, 0, 0, height);
-    grad.addColorStop(0, WATER_SURFACE);
-    grad.addColorStop(1, WATER_DEPTH);
+    grad.addColorStop(0, palette.surface);
+    grad.addColorStop(1, palette.depth);
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, width, height);
-  }
-  function drawCausticShafts(ctx, width, height, t) {
-    for (let i = 0; i < CAUSTIC_SHAFTS; i++) {
-      const sway = Math.sin(t * CAUSTIC_SPEED + i * 1.9) * CAUSTIC_DRIFT * width;
-      const alpha = CAUSTIC_BASE_ALPHA + CAUSTIC_PULSE_ALPHA * Math.sin(t * CAUSTIC_SPEED * 1.7 + i * 2.6);
-      const centerX = width * ((i + 0.5) / CAUSTIC_SHAFTS);
-      const topX = centerX + sway * 0.4;
-      const botX = centerX + sway + width * 0.1;
-      ctx.beginPath();
-      ctx.moveTo(topX - width * 0.03, 0);
-      ctx.lineTo(topX + width * 0.03, 0);
-      ctx.lineTo(botX + width * 0.09, height);
-      ctx.lineTo(botX - width * 0.09, height);
-      ctx.closePath();
-      ctx.fillStyle = `rgba(220, 245, 255, ${alpha.toFixed(4)})`;
-      ctx.fill();
-    }
   }
   function drawSurfaceRipples(ctx, width, t) {
     ctx.lineWidth = 1.5;
@@ -740,25 +705,60 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
         if (x === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
       }
-      ctx.strokeStyle = `rgba(230, 250, 255, ${alpha.toFixed(3)})`;
+      ctx.strokeStyle = `rgba(${RIPPLE_COLOR}, ${alpha.toFixed(3)})`;
       ctx.stroke();
     }
   }
-  function drawBubbles(ctx, width, height, t) {
-    ctx.lineWidth = 1;
-    const column = height + BUBBLE_MARGIN * 2;
-    ctx.strokeStyle = "rgba(230, 250, 255, 0.35)";
-    for (let i = 0; i < BUBBLES; i++) {
-      const xBase = width * (0.04 + 0.92 * hash(i, 1));
-      const speed = 36 + 64 * hash(i, 2);
-      const radius = 1.5 + 3.5 * hash(i, 3);
-      const lag = hash(i, 4) * column;
-      const wobble = Math.sin(t * (1.2 + hash(i, 5) * 1.6) + i * 2.1) * 5;
-      const y = height + BUBBLE_MARGIN - (t * speed + lag) % column;
-      ctx.beginPath();
-      ctx.arc(xBase + wobble, y, radius, 0, Math.PI * 2);
-      ctx.stroke();
+
+  // src/render/lighting.ts
+  var LIGHT_DAY = {
+    name: "LIGHT_DAY",
+    surface: "#8fd8ea",
+    depth: "#0a2c45",
+    causticRgb: "220, 245, 255",
+    causticBaseAlpha: 0.055,
+    causticPulseAlpha: 0.03
+  };
+  var LIGHT_DUSK = {
+    name: "LIGHT_DUSK",
+    surface: "#e89a5e",
+    depth: "#2a1638",
+    causticRgb: "255, 216, 160",
+    causticBaseAlpha: 0.065,
+    causticPulseAlpha: 0.035
+  };
+  var LIGHT_NIGHT = {
+    name: "LIGHT_NIGHT",
+    surface: "#123650",
+    depth: "#030e18",
+    causticRgb: "130, 240, 255",
+    causticBaseAlpha: 0.085,
+    causticPulseAlpha: 0.05
+  };
+  var DAY_DURATION = 45;
+  var DUSK_DURATION = 15;
+  var NIGHT_DURATION = 20;
+  var CYCLE_DURATION = DAY_DURATION + DUSK_DURATION + NIGHT_DURATION;
+  var LIGHT_PHASES = [
+    { palette: LIGHT_DAY, duration: DAY_DURATION },
+    { palette: LIGHT_DUSK, duration: DUSK_DURATION },
+    { palette: LIGHT_NIGHT, duration: NIGHT_DURATION }
+  ];
+  function lightPhaseAt(t) {
+    const u = (t % CYCLE_DURATION + CYCLE_DURATION) % CYCLE_DURATION;
+    let remaining = u;
+    let resolved;
+    for (const phase of LIGHT_PHASES) {
+      if (remaining < phase.duration) {
+        resolved = phase;
+        break;
+      }
+      remaining -= phase.duration;
     }
+    if (resolved === void 0) {
+      throw new Error("lighting: phase table does not cover CYCLE_DURATION");
+    }
+    return resolved;
   }
 
   // src/render/renderer.ts
@@ -767,10 +767,13 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
      *  the render layer with NO module-level state — the only mutable
      *  render state a Renderer owns). */
     tetraColours = [];
-    /** Paint one frame of the given world state: the water backdrop,
-     *  then the tetra school (PRD §2). */
+    /** Paint one frame of the given world state. The scene ambient is
+     *  resolved from world.time (a paused sim freezes it); the rest
+     *  of the frame is painted in the documented order above. */
     render(ctx, width, height, world) {
-      drawWater(ctx, width, height, world.time);
+      const light = lightPhaseAt(world.time);
+      drawBackdrop(ctx, width, height, light.palette);
+      drawSurfaceRipples(ctx, width, world.time);
       drawTetras(ctx, width, height, world.agents, this.tetraColours);
     }
   };
