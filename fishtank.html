@@ -314,8 +314,17 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
      *  compose the steering forces, clamp the speed, integrate and
      *  keep the body INSIDE the tank (elastic reflection plus a hard
      *  clamp), and advance its articulated tail at
-     *  tailFrequency(speed, torque). */
+     *  tailFrequency(speed, torque).
+     *
+     *  WELL-FORMEDNESS (enforced here, same policy as advance()): a
+     *  non-finite dt (NaN, ±∞) or a dt <= 0 is refused — step() is a
+     *  no-op that touches nothing. A NaN/±∞ would divide through the
+     *  torque measurement and permanently poison every tetra's
+     *  torque/phase; a negative dt would integrate the tank
+     *  backwards. Pinned by tests/fishtank-determinism.test.mjs:
+     *  a refused step leaves the world byte-identical and drivable. */
     step(dt) {
+      if (!Number.isFinite(dt) || dt <= 0) return;
       this.time += dt;
       this.rebuildGrid();
       for (const t of this.agents) {
