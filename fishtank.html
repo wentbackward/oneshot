@@ -54,10 +54,6 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       this.rows = Math.max(1, Math.ceil(height / cellSize));
       this.cells = Array.from({ length: this.cols * this.rows }, () => []);
     }
-    /** Number of items currently in the grid. */
-    get size() {
-      return this.indexOf.size;
-    }
     /** Drop every item (cell arrays themselves are reused: no
      *  per-step allocation). */
     clear() {
@@ -66,11 +62,17 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
     }
     /** Place an item in the cell holding its current position.
      *  Re-inserting a present item moves it (idempotent count: an
-     *  item never occupies two cells). */
+     *  item never occupies two cells). The old-cell eviction splices
+     *  ONLY at the item's verified own slot — if the bookkeeping ever
+     *  goes stale the item is simply absent and nothing is removed:
+     *  an implicit splice position (splice(-1)) would evict an
+     *  innocent neighbour. */
     insert(item) {
       const cellIndex = this.indexOf.get(item);
       if (cellIndex !== void 0) {
-        this.cells[cellIndex]?.splice(this.cells[cellIndex]?.indexOf(item) ?? -1, 1);
+        const cell = this.cells[cellIndex];
+        const at = cell ? cell.indexOf(item) : -1;
+        if (cell && at >= 0) cell.splice(at, 1);
       }
       const index = this.rowOf(item.y) * this.cols + this.colOf(item.x);
       this.cells[index]?.push(item);
@@ -83,7 +85,10 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
     update(item) {
       this.insert(item);
     }
-    /** Remove an item. Returns true if it was present. */
+    /** Remove an item. Returns true if it was present. Removing an
+     *  absent item is a pure no-op: it splices nothing, so a healthy
+     *  neighbour (even the last occupant of the same cell) can never
+     *  be disturbed. */
     remove(item) {
       const cellIndex = this.indexOf.get(item);
       if (cellIndex === void 0) return false;
@@ -92,10 +97,6 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       if (cell && at >= 0) cell.splice(at, 1);
       this.indexOf.delete(item);
       return true;
-    }
-    /** True iff the item is currently in the grid. */
-    contains(item) {
-      return this.indexOf.has(item);
     }
     /** All items within Euclidean distance <= radius of (x, y), as a
      *  fresh array (callers own it). Exact set semantics: the probe
@@ -158,7 +159,9 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
     time = 0;
     /** Seconds carried over between frames from an incomplete step. */
     acc = 0;
-    /** The PRNG stream this world draws from (never Math.random). */
+    /** Numeric PRNG seed this world was built from: a plain number,
+     *  not a stateful stream — the mulberry32 stream is (re)created
+     *  from it at construction, and same seed ⇒ identical tank. */
     seed;
     /** Every simulated swimmer, in fixed iteration order. */
     agents = [];

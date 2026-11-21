@@ -3029,3 +3029,13 @@ arcade physics).
   `MAX_FRAME_DELTA` in `fishtank-main.ts`, so one enforcement site plus
   a documented precondition on `advance()` is the simplest contract
   that keeps fixed-step semantics pure.
+- **Review follow-up: `SpatialGrid`'s unused `size`/`contains` surface
+  is dropped until a consumer lands (review should-fix, 2026-11-21).**
+  YAGNI: no src/ or tests/ caller exists, and a public query surface
+  that nothing exercises invites stale guarantees. Alternatives:
+  keep it (dead surface, review objection stands) or inline a count
+  loop wherever a future ticket needs one — trivial to re-add with a
+  real consumer. Removal-safety is now structural, not incidental:
+  both insert-eviction and remove splice ONLY at an index verified to
+  hold the target item, so an absent item can never evict a healthy
+  neighbour via an implicit splice position.
