@@ -45,6 +45,8 @@ import {
   CAUSTIC_SHAFTS,
   CAUSTIC_SWEEP_SPEED,
 } from "../src/render/caustics.ts";
+import { BUBBLE_POOL_SIZE, BUBBLE_WOBBLE_AMP } from "../src/render/bubbles.ts";
+import { TETRA_COUNT } from "../src/sim/constants.ts";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const html = readFileSync(path.join(root, "fishtank.html"), "utf8");
@@ -469,6 +471,106 @@ check("AC2: pausing the sim freezes the shaft phase (the sweep is sim-time drive
     }
   }
   assert(g.q("FISH_TANK_WORLD.time") === tBefore, "a paused sim must take zero steps");
+});
+
+// ================================================================
+// AC3: bubbles — a POOL-BASED emitter (pool size named) recycles
+// its slots without allocation, every frame releases exactly
+// BUBBLE_POOL_SIZE bubbles with stable per-slot identity across
+// 1000 frames, and each rising bubble wobbles SINUSOIDALLY in x:
+// >= 1 full wobble period per rise, amplitude within the named
+// BUBBLE_WOBBLE_AMP (all from recorded arc positions)
+// ================================================================
+
+check("AC3: the bubble pool recycles without spawning — every one of 1001 frames releases exactly BUBBLE_POOL_SIZE bubbles with stable per-slot identity", () => {
+  assert(Number.isInteger(BUBBLE_POOL_SIZE) && BUBBLE_POOL_SIZE > 0,
+    `BUBBLE_POOL_SIZE must be a named positive integer, got ${BUBBLE_POOL_SIZE}`);
+  const g = boot(800, 600, ["arc"]);
+  const radii = new Array(BUBBLE_POOL_SIZE).fill(null);
+  for (let f = 0; f <= 1000; f++) {
+    const from = g.state.events.length;
+    if (f === 0) g.frameAt(0);
+    else g.tick(1, (f - 1) * FRAME_MS);
+    const arcs = g.state.events.slice(from).filter((ev) => ev.kind === "arc");
+    // Each tetra paints exactly one head arc (drawTetras), bubbles
+    // are painted last, in slot order — so the frame's arc count
+    // pins the pool size and its last BUBBLE_POOL_SIZE entries are
+    // the recycled slots.
+    assert(arcs.length === TETRA_COUNT + BUBBLE_POOL_SIZE,
+      `frame ${f}: expected ${TETRA_COUNT} tetra heads + ${BUBBLE_POOL_SIZE} pooled bubbles arcs, got ${arcs.length}`);
+    for (let i = 0; i < BUBBLE_POOL_SIZE; i++) {
+      const [x, y, r] = arcs[TETRA_COUNT + i].args;
+      assert(Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(r),
+        `frame ${f} bubble ${i}: arc went non-finite (${x}, ${y}, ${r})`);
+      if (radii[i] === null) radii[i] = r;
+      else if (r !== radii[i]) {
+        throw new Error(`frame ${f} bubble ${i}: radius changed ${radii[i]} -> ${r} — the pool spawned new bubbles instead of recycling slots`);
+      }
+    }
+  }
+});
+
+check("AC3: rising bubbles wobble sinusoidally in x — >= 1 full wobble period per rise, amplitude within BUBBLE_WOBBLE_AMP", () => {
+  const g = boot(800, 600, ["arc"]);
+  const FRAMES = 2000; // ~34 s of sim: every pool slot completes >= 2 full rises
+  const lanes = new Array(BUBBLE_POOL_SIZE).fill(null).map(() => []);
+  for (let f = 0; f < FRAMES; f++) {
+    const from = g.state.events.length;
+    if (f === 0) g.frameAt(0);
+    else g.tick(1, (f - 1) * FRAME_MS);
+    const arcs = g.state.events.slice(from).filter((ev) => ev.kind === "arc");
+    assert(arcs.length === TETRA_COUNT + BUBBLE_POOL_SIZE, `frame ${f}: pool released ${arcs.length - TETRA_COUNT} bubbles`);
+    for (let i = 0; i < BUBBLE_POOL_SIZE; i++) lanes[i].push(arcs[TETRA_COUNT + i].args); // [x, y, r]
+  }
+  const column = 600 + 24; // the arc's y travel: from +12 below to -12 above the tank
+  for (let i = 0; i < BUBBLE_POOL_SIZE; i++) {
+    const samples = lanes[i];
+    // Longest monotone-rising run = one (near-)full ascent: y only
+    // decreases while a bubble climbs; its wrap back to the bottom
+    // breaks monotonicity.
+    let best = { start: 0, end: 0 };
+    let s = 0;
+    for (let k = 1; k < samples.length; k++) {
+      if (samples[k][1] <= samples[k - 1][1] + 1e-6) {
+        if (k - s > best.end - best.start) best = { start: s, end: k };
+      } else {
+        s = k;
+      }
+    }
+    const run = samples.slice(best.start, best.end + 1);
+    const risen = run[0][1] - run[run.length - 1][1];
+    assert(risen >= column * 0.9,
+      `bubble ${i}: longest rising run only climbed ${risen}px of the ${column}px column — no full ascent was recorded`);
+    const xs = run.map((a) => a[0]);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const center = (minX + maxX) / 2;
+    const halfRange = (maxX - minX) / 2;
+    // Amplitude: the recorded excursion around the lane center is
+    // the named wobble amplitude, neither larger nor meaningfully
+    // smaller (60 fps samples >= 3 full periods per ascent).
+    assert(halfRange <= BUBBLE_WOBBLE_AMP * 1.02 + 1e-6,
+      `bubble ${i}: wobble amplitude ${halfRange}px exceeds BUBBLE_WOBBLE_AMP (${BUBBLE_WOBBLE_AMP}px)`);
+    assert(halfRange >= BUBBLE_WOBBLE_AMP * 0.97,
+      `bubble ${i}: recorded wobble only reached ${halfRange}px of BUBBLE_WOBBLE_AMP (${BUBBLE_WOBBLE_AMP}px) — no full period sampled`);
+    // A full sinusoidal period crosses the lane center at least
+    // twice; the three-period design lands on six.
+    let crossings = 0;
+    let prev = Math.sign(xs[0] - center);
+    for (let k = 1; k < xs.length; k++) {
+      const cur = Math.sign(xs[k] - center);
+      if (prev !== 0 && cur !== 0 && cur !== prev) crossings += 1;
+      if (cur !== 0) prev = cur;
+    }
+    assert(crossings >= 2,
+      `bubble ${i}: only ${crossings} lane-center crossings in a full ascent — fewer than one wobble period per rise`);
+    // And over the ENTIRE recording the bubble never leaves the
+    // named amplitude band around its lane center.
+    for (const [x] of samples) {
+      assert(Math.abs(x - center) <= BUBBLE_WOBBLE_AMP * 1.05,
+        `bubble ${i}: x = ${x} drifted ${Math.abs(x - center)}px from its lane — beyond BUBBLE_WOBBLE_AMP`);
+    }
+  }
 });
 
 // ---------- summary ----------

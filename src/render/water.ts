@@ -3,9 +3,9 @@
 // PURE function of the lighting palette and the world clock — an
 // ambient depth gradient (whose stops ARE the scene ambient, lit
 // by the current phase of the lighting cycle) and drifting surface
-// ripples. The caustic shafts, bubble column and substrate will
-// live in their own modules (composed by the renderer in a
-// documented order).
+// ripples. The caustic shafts (caustics.ts), bubble column
+// (bubbles.ts) and substrate (substrate.ts) live in their own
+// modules; the renderer composes the frame in a documented order.
 //
 // Stateless and allocation-free: an identical palette and world
 // time paint an identical frame, which is what makes fixed-step

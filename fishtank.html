@@ -794,12 +794,65 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
     }
   }
 
+  // src/render/bubbles.ts
+  var BUBBLE_POOL_SIZE = 24;
+  var BUBBLE_WOBBLE_AMP = 8;
+  var BUBBLE_RISE_PERIODS = 3;
+  var BUBBLE_MARGIN = 12;
+  var BUBBLE_RISE_MIN = 40;
+  var BUBBLE_RISE_MAX = 100;
+  var BUBBLE_RADIUS_MIN = 1.5;
+  var BUBBLE_RADIUS_MAX = 5;
+  var BUBBLE_STROKE = "rgba(230, 250, 255, 0.35)";
+  var TAU3 = 2 * Math.PI;
+  function hash(unit2, salt) {
+    const v = Math.sin(unit2 * 127.1 + salt * 311.7) * 43758.5453;
+    return v - Math.floor(v);
+  }
+  var BubbleColumn = class {
+    slots = [];
+    constructor() {
+      for (let i = 0; i < BUBBLE_POOL_SIZE; i++) {
+        this.slots.push({
+          lane: 0.04 + 0.92 * hash(i, 1),
+          radius: BUBBLE_RADIUS_MIN + (BUBBLE_RADIUS_MAX - BUBBLE_RADIUS_MIN) * hash(i, 3),
+          speed: BUBBLE_RISE_MIN + (BUBBLE_RISE_MAX - BUBBLE_RISE_MIN) * hash(i, 2),
+          offset: hash(i, 4),
+          phase0: hash(i, 5) * TAU3,
+          x: 0,
+          y: 0
+        });
+      }
+    }
+    /** Release (paint) the whole pool at world time t: every slot,
+     *  in fixed slot order — the draw-recording test tracks slot i
+     *  as the i-th bubble arc of each frame. Allocation-free: the
+     *  loop only reads and writes preallocated fields. */
+    paint(ctx, width, height, t) {
+      const column = height + BUBBLE_MARGIN * 2;
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = BUBBLE_STROKE;
+      for (let i = 0; i < this.slots.length; i++) {
+        const s = this.slots[i];
+        const rise = column / s.speed;
+        s.x = s.lane * width + Math.sin(t / rise * TAU3 * BUBBLE_RISE_PERIODS + s.phase0) * BUBBLE_WOBBLE_AMP;
+        s.y = height + BUBBLE_MARGIN - (t * s.speed + s.offset * column) % column;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.radius, 0, TAU3);
+        ctx.stroke();
+      }
+    }
+  };
+
   // src/render/renderer.ts
   var Renderer = class {
     /** Per-instance tetra colour cache (src/render/tetras.ts builds
      *  the render layer with NO module-level state — the only mutable
      *  render state a Renderer owns). */
     tetraColours = [];
+    /** The pooled bubble emitter (src/render/bubbles.ts): built once
+     *  per Renderer, recycled in place every frame. */
+    bubbles = new BubbleColumn();
     /** Paint one frame of the given world state. The scene ambient is
      *  resolved from world.time (a paused sim freezes it); the rest
      *  of the frame is painted in the documented order above. */
@@ -809,6 +862,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       drawCausticShafts(ctx, width, height, world.time, light.palette);
       drawSurfaceRipples(ctx, width, world.time);
       drawTetras(ctx, width, height, world.agents, this.tetraColours);
+      this.bubbles.paint(ctx, width, height, world.time);
     }
   };
 
