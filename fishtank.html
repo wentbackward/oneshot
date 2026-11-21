@@ -71,8 +71,8 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       const cellIndex = this.indexOf.get(item);
       if (cellIndex !== void 0) {
         const cell = this.cells[cellIndex];
-        const at = cell ? cell.indexOf(item) : -1;
-        if (cell && at >= 0) cell.splice(at, 1);
+        const at = cell.indexOf(item);
+        if (at >= 0) cell.splice(at, 1);
       }
       const index = this.rowOf(item.y) * this.cols + this.colOf(item.x);
       this.cells[index].push(item);
@@ -93,8 +93,8 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       const cellIndex = this.indexOf.get(item);
       if (cellIndex === void 0) return false;
       const cell = this.cells[cellIndex];
-      const at = cell ? cell.indexOf(item) : -1;
-      if (cell && at >= 0) cell.splice(at, 1);
+      const at = cell.indexOf(item);
+      if (at >= 0) cell.splice(at, 1);
       this.indexOf.delete(item);
       return true;
     }
@@ -113,7 +113,6 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       for (let row = r0; row <= r1; row++) {
         for (let col = c0; col <= c1; col++) {
           const cell = this.cells[row * this.cols + col];
-          if (!cell) continue;
           for (const item of cell) {
             const dx = item.x - x;
             const dy = item.y - y;
@@ -181,8 +180,17 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
      *  or long pause cannot burst thousands of fixed steps in one
      *  frame. advance() deliberately does not clamp itself: silently
      *  dropping the excess would change the accumulator's accounting
-     *  semantics. */
+     *  semantics.
+     *
+     *  WELL-FORMEDNESS (enforced here): a non-finite delta (NaN, ±∞)
+     *  is rejected — returns 0, touches nothing. A NaN would poison
+     *  the accumulator permanently (every later `acc >= FIXED_DT`
+     *  compares false and the sim freezes silently); +∞ would spin
+     *  the step loop forever. The rejected frame simply accounts as
+     *  no progress; the next well-formed frame drives normally.
+     */
     advance(deltaSeconds) {
+      if (!Number.isFinite(deltaSeconds)) return 0;
       this.acc += Math.max(0, deltaSeconds);
       let steps = 0;
       while (this.acc >= FIXED_DT) {
