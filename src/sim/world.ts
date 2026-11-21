@@ -91,8 +91,17 @@ export class World {
    *  or long pause cannot burst thousands of fixed steps in one
    *  frame. advance() deliberately does not clamp itself: silently
    *  dropping the excess would change the accumulator's accounting
-   *  semantics. */
+   *  semantics.
+   *
+   *  WELL-FORMEDNESS (enforced here): a non-finite delta (NaN, ±∞)
+   *  is rejected — returns 0, touches nothing. A NaN would poison
+   *  the accumulator permanently (every later `acc >= FIXED_DT`
+   *  compares false and the sim freezes silently); +∞ would spin
+   *  the step loop forever. The rejected frame simply accounts as
+   *  no progress; the next well-formed frame drives normally.
+   */
   advance(deltaSeconds: number): number {
+    if (!Number.isFinite(deltaSeconds)) return 0;
     this.acc += Math.max(0, deltaSeconds);
     let steps = 0;
     while (this.acc >= FIXED_DT) {
