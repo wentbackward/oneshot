@@ -118,7 +118,7 @@ check("ci: npm ci, typecheck and build --check run in order BEFORE the suite loo
     "npm ci": at("run: npm ci"),
     "npm run typecheck": at("run: npm run typecheck"),
     "build --check": at("run: node scripts/build-fishtank.mjs --check"),
-    "suite loop": lines.findIndex((l) => l === "for f in tests/*.test.mjs"),
+    "suite loop": lines.findIndex((l) => l.startsWith("for f in tests/*.test.mjs")),
   };
   for (const [step, i] of Object.entries(positions)) {
     assert(i > -1, `deploy.yml is missing the "${step}" step (looked for an exact \`run:\` line)`);
