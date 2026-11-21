@@ -2952,3 +2952,70 @@ arcade physics).
   or `engine-strict` npm (rejected — a pinned literal in the workflow is the
   pattern the repo already used, and `engine-strict` adds an npm flag the
   local gate would also have to adopt).
+
+## 2026-11-21 — Ticket #119: fixed timestep, spatial hash grid, steering forces
+
+- **`query(x, y, radius)` probes the exact cell span the closed ball
+  overlaps, not a fixed 3×3 block.** The 3×3 probe is only correct
+  when radius ≤ cellSize; PRD §5 demands set-equality vs brute force
+  for arbitrary radii, so the probe widens to `[floor((x−r)/c) ..
+  floor((x+r)/c)]` (clamped to the domain). With the app's actual
+  radius (= cellSize, `NEIGHBOUR_RADIUS = 64 = GRID_CELL_SIZE`) the
+  span IS the cheap 3×3 block, so the O(1) average claim survives;
+  larger radii pay only their geometric cost. Alternatives rejected:
+  forcing callers to radius ≤ cellSize (breaks the criterion's wide-
+  radius layouts), or a second grid hierarchy (complexity with no
+  demonstrated 60 fps need at 250 entities).
+- **Membership tracked in a `Map<T, cellIndex>` so `update`/`remove`
+  are O(1) lookups, and re-inserting a present item MOVES it.** An
+  item in two cells would double-report in queries; a Map costs
+  nothing per step (the World rebuilds via clear+insert anyway, and
+  Map.clear keeps entries pooled-ish). Alternatives: scan-3×3 to find
+  the item (O(cell) remove, and ambiguous for stacked items) or a
+  WeakMap with per-item cell lists (allocation churn for a grid that
+  is rebuilt every step).
+- **`alignment` averages UNIT headings, not raw velocities.** "Mean
+  neighbour-heading direction" (the ticket's ±1e-9 pin) is a
+  direction average: a 3×-fast neighbour must not vote 3× heavier in
+  the school's consensus. Still neighbours cast no vote (no defined
+  heading). Clamp `MAX_ALIGNMENT_FORCE = 1` is inert by construction
+  (a mean of unit vectors has magnitude ≤ 1) and documents the
+  heading-scale. Alternatives: velocity-weighted averaging (fails
+  the equality criterion by design), or normalising the mean velocity
+  (changes the law: collinear-opposite neighbours cancel to zero
+  instead of averaging to the bisector).
+- **`seek` is Reynolds "desired − velocity" with `FISH_MAX_SPEED =
+  80`, and returns (0, 0) when already AT the target.** Arrive-at-
+  zero semantics suit a fish reaching a pellet (no orbiting the
+  target); the `d === 0` guard also makes the unit-vector step
+  total. Alternatives: a deceleration cone (needed for smooth
+  arrive, but PRD §2 only asks for target seeking — added by a later
+  ticket alongside species behaviours), or a direction-only force
+  (loses the velocity correction that prevents overshoot).
+- **The world spawns a seeded population and wraps the tank TORUS-
+  style in `step(dt)`.** The determinism test hashes 100 steps of a
+  seeded world, so the world must be both seedable (`{ seed, 
+  population }` ctor options, every draw through `mulberry32`) and
+  non-escaping: torus wrap is the smallest total, order-independent
+  containment rule (no reflection state, no clamped velocity to
+  desync). Real fish stay inside via `boundaryAvoidance` once the
+  species behaviours land; the wrap is the universe boundary, not a
+  behaviour. Per-step integration is fixed-array-order + explicit
+  `dt` (app feeds `FIXED_DT` via `advance()`), which is the whole
+  determinism story: same seed, same dt sequence ⇒ same bits.
+- **Steering clamps are named per-force constants bounded by a master
+  `MAX_STEERING_FORCE = 120`.** The ticket's example names
+  `MAX_STEERING_FORCE`; a master bound keeps the six per-force knobs
+  auditable against one ceiling (a test pins `clamp ≤ master`). Each
+  force is pure (fresh output vector, no input mutation, no hidden
+  state) so the later species layer composes forces linearly with no
+  aliasing surprises.
+- **The determinism test hashes `serializeState()` (6-decimal
+  `toFixed`, fixed field order) with sha256.** Fixed precision is the
+  contract: a hash over raw doubles would couple the guarantee to
+  libm/IEEE edge behaviour across engines, while 6 decimals are far
+  finer than one tank-unit pixel and still exact across V8/SpiderMonkey/
+  JSC for these magnitudes. Clock exactness is asserted to fp-
+  accumulation tolerance (100 additions of 1/60 differ from one
+  multiply by ~1 ulp — that is accumulation error, not drift; the
+  hash already pins bit-exact replay between twins).

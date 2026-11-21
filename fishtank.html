@@ -27,12 +27,26 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
   var FIXED_DT = 1 / 60;
   var MAX_FRAME_DELTA = 0.25;
 
+  // src/sim/rng.ts
+  function mulberry32(seed) {
+    let a = seed >>> 0;
+    return () => {
+      a = a + 1831565813 | 0;
+      let t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+
   // src/sim/spatialGrid.ts
   var SpatialGrid = class {
     cellSize;
     cols;
     rows;
     cells;
+    /** Cell index per inserted item: makes update()/remove() O(1)
+     *  lookups without scanning cells. */
+    indexOf = /* @__PURE__ */ new Map();
     constructor(width, height, cellSize) {
       if (!(cellSize > 0)) throw new RangeError("SpatialGrid: cellSize must be positive");
       this.cellSize = cellSize;
@@ -40,17 +54,76 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       this.rows = Math.max(1, Math.ceil(height / cellSize));
       this.cells = Array.from({ length: this.cols * this.rows }, () => []);
     }
-    /** Drop every item (kept between cells: no per-step allocation). */
+    /** Number of items currently in the grid. */
+    get size() {
+      return this.indexOf.size;
+    }
+    /** Drop every item (cell arrays themselves are reused: no
+     *  per-step allocation). */
     clear() {
       for (const cell of this.cells) cell.length = 0;
+      this.indexOf.clear();
     }
-    /** Place an item into the cell holding its position. */
+    /** Place an item in the cell holding its current position.
+     *  Re-inserting a present item moves it (idempotent count: an
+     *  item never occupies two cells). */
     insert(item) {
-      const cell = this.cells[this.rowOf(item.y) * this.cols + this.colOf(item.x)];
-      if (cell) cell.push(item);
+      const cellIndex = this.indexOf.get(item);
+      if (cellIndex !== void 0) {
+        this.cells[cellIndex]?.splice(this.cells[cellIndex]?.indexOf(item) ?? -1, 1);
+      }
+      const index = this.rowOf(item.y) * this.cols + this.colOf(item.x);
+      this.cells[index]?.push(item);
+      this.indexOf.set(item, index);
     }
-    /** Call cb for every item stored in the 3×3 block of cells around
-     *  (x, y) — the uniform grid's constant-cost neighborhood probe. */
+    /** Tell the grid that an already-inserted item moved. Cheaper to
+     *  express intent than re-inserting; behaves like insert for
+     *  items that are not tracked yet. */
+    update(item) {
+      this.insert(item);
+    }
+    /** Remove an item. Returns true if it was present. */
+    remove(item) {
+      const cellIndex = this.indexOf.get(item);
+      if (cellIndex === void 0) return false;
+      const cell = this.cells[cellIndex];
+      const at = cell ? cell.indexOf(item) : -1;
+      if (cell && at >= 0) cell.splice(at, 1);
+      this.indexOf.delete(item);
+      return true;
+    }
+    /** True iff the item is currently in the grid. */
+    contains(item) {
+      return this.indexOf.has(item);
+    }
+    /** All items within Euclidean distance <= radius of (x, y), as a
+     *  fresh array (callers own it). Exact set semantics: the probe
+     *  visits precisely the cells the closed ball overlaps and then
+     *  filters by squared distance, so the result matches brute-force
+     *  distance filtering over the same items bit-for-bit. */
+    query(x, y, radius) {
+      const found = [];
+      const r2 = radius * radius;
+      const c0 = this.colOf(x - radius);
+      const c1 = this.colOf(x + radius);
+      const r0 = this.rowOf(y - radius);
+      const r1 = this.rowOf(y + radius);
+      for (let row = r0; row <= r1; row++) {
+        for (let col = c0; col <= c1; col++) {
+          const cell = this.cells[row * this.cols + col];
+          if (!cell) continue;
+          for (const item of cell) {
+            const dx = item.x - x;
+            const dy = item.y - y;
+            if (dx * dx + dy * dy <= r2) found.push(item);
+          }
+        }
+      }
+      return found;
+    }
+    /** Call cb for every item stored in the 3×3 block of cells
+     *  around (x, y) — the allocation-free variant of the constant
+     *  neighborhood probe for callers that filter on the fly. */
     queryNeighbors(x, y, cb) {
       const cx = this.colOf(x);
       const cy = this.rowOf(y);
@@ -76,38 +149,83 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
   var TANK_WIDTH = 1600;
   var TANK_HEIGHT = 1e3;
   var GRID_CELL_SIZE = 64;
+  var DEFAULT_POPULATION = 40;
+  var SPAWN_SPEED_MIN = 20;
+  var SPAWN_SPEED_MAX = 60;
   var World = class {
-    /** World clock in seconds: advances in exact FIXED_DT multiples. */
+    /** World clock in seconds: advances in exact step-size multiples. */
     time = 0;
     /** Seconds carried over between frames from an incomplete step. */
     acc = 0;
-    /** Every simulated entity (fish, pellets, obstacles) lives here. */
-    entities = [];
+    /** The PRNG stream this world draws from (never Math.random). */
+    seed;
+    /** Every simulated swimmer, in fixed iteration order. */
+    agents = [];
     /** Neighbor grid, rebuilt every fixed step (PRD §1). */
     grid;
-    constructor() {
+    constructor(options = {}) {
+      this.seed = options.seed ?? 1;
       this.grid = new SpatialGrid(TANK_WIDTH, TANK_HEIGHT, GRID_CELL_SIZE);
+      this.spawn(options.population ?? DEFAULT_POPULATION);
+    }
+    /** Spawn n agents at seeded random positions/headings. */
+    spawn(count) {
+      const rng = mulberry32(this.seed);
+      for (let i = 0; i < count; i++) {
+        const heading = rng() * 2 * Math.PI;
+        const speed = SPAWN_SPEED_MIN + rng() * (SPAWN_SPEED_MAX - SPAWN_SPEED_MIN);
+        this.agents.push({
+          x: rng() * TANK_WIDTH,
+          y: rng() * TANK_HEIGHT,
+          vx: Math.cos(heading) * speed,
+          vy: Math.sin(heading) * speed
+        });
+      }
     }
     /** Feed up to deltaSeconds of wall time to the sim: consume it in
      *  exact FIXED_DT steps, carry the leftover. Returns the number of
-     *  steps taken. */
+     *  steps taken. The app's only entry point — tests drive step(dt)
+     *  directly. */
     advance(deltaSeconds) {
       this.acc += Math.max(0, deltaSeconds);
       let steps = 0;
       while (this.acc >= FIXED_DT) {
         this.acc -= FIXED_DT;
-        this.step();
+        this.step(FIXED_DT);
         steps += 1;
       }
       return steps;
     }
-    /** One fixed step: advance the clock and rebuild the neighbor
-     *  grid. Per-entity behaviours (steering, PRD §2) plug into this
-     *  method in a later ticket. */
-    step() {
-      this.time += FIXED_DT;
+    /** One deterministic step of EXACTLY dt seconds: rebuild the
+     *  neighbor grid, integrate every agent in fixed order, wrap the
+     *  swarm torus-style so the domain stays a closed universe. */
+    step(dt) {
+      this.time += dt;
+      this.rebuildGrid();
+      for (const agent of this.agents) {
+        let x = agent.x + agent.vx * dt;
+        let y = agent.y + agent.vy * dt;
+        x = (x % TANK_WIDTH + TANK_WIDTH) % TANK_WIDTH;
+        y = (y % TANK_HEIGHT + TANK_HEIGHT) % TANK_HEIGHT;
+        agent.x = x;
+        agent.y = y;
+      }
+    }
+    /** Fixed-precision snapshot of the whole sim state: clock first,
+     *  then one `x,y,vx,vy` line per agent at 6 decimals. Two same-
+     *  seed worlds hash this byte-identically (determinism proof). */
+    serializeState() {
+      const lines = [this.time.toFixed(6)];
+      for (const agent of this.agents) {
+        lines.push(`${agent.x.toFixed(6)},${agent.y.toFixed(6)},${agent.vx.toFixed(6)},${agent.vy.toFixed(6)}`);
+      }
+      return lines.join("\n");
+    }
+    /** Clear + re-insert every agent: the O(1)-average neighbor
+     *  lookup the steering forces (PRD §2) will consume. */
+    rebuildGrid() {
       this.grid.clear();
-      for (const entity of this.entities) this.grid.insert(entity);
+      for (const agent of this.agents) this.grid.insert(agent);
     }
   };
 
