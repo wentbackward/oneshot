@@ -47,17 +47,17 @@ function stepN(world, n) {
 /** Mean distance of the school from its own centroid (compactness). */
 function meanRadius(world) {
   let cx = 0, cy = 0;
-  for (const t of world.tetras) { cx += t.x; cy += t.y; }
-  cx /= world.tetras.length;
-  cy /= world.tetras.length;
+  for (const t of world.agents) { cx += t.x; cy += t.y; }
+  cx /= world.agents.length;
+  cy /= world.agents.length;
   let r = 0;
-  for (const t of world.tetras) r += Math.hypot(t.x - cx, t.y - cy);
-  return r / world.tetras.length;
+  for (const t of world.agents) r += Math.hypot(t.x - cx, t.y - cy);
+  return r / world.agents.length;
 }
 
 /** Assert every tetra is finite and inside the tank bounds (closed). */
 function assertAllInBounds(world, label) {
-  for (const [i, t] of world.tetras.entries()) {
+  for (const [i, t] of world.agents.entries()) {
     assert(Number.isFinite(t.x) && Number.isFinite(t.y) && Number.isFinite(t.vx) && Number.isFinite(t.vy),
       `${label}: tetra ${i} went non-finite at (${t.x}, ${t.y})`);
     assert(t.x >= 0 && t.x <= TANK_WIDTH && t.y >= 0 && t.y <= TANK_HEIGHT,
@@ -69,7 +69,7 @@ function assertAllInBounds(world, label) {
 function meanRadialVelocity(world, x, y) {
   let sum = 0;
   let counted = 0;
-  for (const t of world.tetras) {
+  for (const t of world.agents) {
     const dx = t.x - x;
     const dy = t.y - y;
     const d = Math.hypot(dx, dy);
@@ -89,11 +89,11 @@ check("a default World spawns TETRA_COUNT schooling tetras, all inside the tank"
   const world = new World();
   assert(typeof TETRA_COUNT === "number" && Number.isInteger(TETRA_COUNT) && TETRA_COUNT > 0,
     `TETRA_COUNT must be a positive integer, got ${TETRA_COUNT}`);
-  assert(world.tetras.length === TETRA_COUNT,
-    `the default population must be TETRA_COUNT (${TETRA_COUNT}), got ${world.tetras.length}`);
+  assert(world.agents.length === TETRA_COUNT,
+    `the default population must be TETRA_COUNT (${TETRA_COUNT}), got ${world.agents.length}`);
   assertAllInBounds(world, "at spawn");
   // Every tetra is a real swimmer with a positive cruise speed.
-  for (const t of world.tetras) {
+  for (const t of world.agents) {
     assert(Math.hypot(t.vx, t.vy) > 0, "a spawned tetra must already be swimming");
   }
 });
@@ -157,7 +157,7 @@ check("startleAt: the number of startled tetras equals the count independently m
   const x = TANK_WIDTH / 2;
   const y = TANK_HEIGHT / 2;
   let expected = 0;
-  for (const t of world.tetras) {
+  for (const t of world.agents) {
     if (Math.hypot(t.x - x, t.y - y) <= STARTLE_RADIUS) expected += 1;
   }
   assert(expected > 0, "test setup: the epicentre must catch at least one tetra");
@@ -165,8 +165,8 @@ check("startleAt: the number of startled tetras equals the count independently m
   assert(startled === expected,
     `startleAt must report exactly the tetras within STARTLE_RADIUS (${STARTLE_RADIUS}), got ${startled}, expected ${expected}`);
   // The outward impulse must actually show up in velocity.
-  const cx = world.tetras.reduce((s, t) => s + t.vx, 0) / world.tetras.length;
-  const cy2 = world.tetras.reduce((s, t) => s + t.vy, 0) / world.tetras.length;
+  const cx = world.agents.reduce((s, t) => s + t.vx, 0) / world.agents.length;
+  const cy2 = world.agents.reduce((s, t) => s + t.vy, 0) / world.agents.length;
   assert(Math.hypot(cx, cy2) < 260, "the impulse must stay a sane speed kick, not an explosion");
 });
 
@@ -176,7 +176,7 @@ check("startleAt outside the school: no tetra is within STARTLE_RADIUS → zero 
   // Hunt a corner where nothing swims: scan corners until one is quiet.
   const corners = [[0, 0], [TANK_WIDTH, 0], [0, TANK_HEIGHT], [TANK_WIDTH, TANK_HEIGHT]];
   const spot = corners.find(([x, y]) =>
-    world.tetras.every((t) => Math.hypot(t.x - x, t.y - y) > STARTLE_RADIUS));
+    world.agents.every((t) => Math.hypot(t.x - x, t.y - y) > STARTLE_RADIUS));
   assert(spot, "test setup: at least one tank corner must be free of the spawn cluster");
   assert(world.startleAt(spot[0], spot[1]) === 0, "a startle that catches nothing must report 0");
   assert(world.serializeState() === before, "a startle that catches nothing must not touch any state");

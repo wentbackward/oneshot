@@ -154,7 +154,7 @@ check("the vm seam exposes TETRA_COUNT and the live world holds exactly that man
   const tetraCount = g.q("typeof TETRA_COUNT === 'undefined' ? NaN : TETRA_COUNT");
   assert(Number.isInteger(tetraCount) && tetraCount > 0,
     `TETRA_COUNT must be exposed as a positive integer, got ${tetraCount}`);
-  const length = g.q("typeof FISH_TANK_WORLD === 'undefined' ? NaN : FISH_TANK_WORLD.tetras.length");
+  const length = g.q("typeof FISH_TANK_WORLD === 'undefined' ? NaN : FISH_TANK_WORLD.agents.length");
   assert(length === tetraCount,
     `the default world must hold exactly TETRA_COUNT tetras (${tetraCount}), got ${length}`);
 });
@@ -198,9 +198,9 @@ check("the spine animates: every tetra's tail phase advances monotonically while
   const g = boot(800, 600);
   g.frameAt(0);
   g.tick(10, 0);
-  const phasesBefore = g.q("JSON.stringify(FISH_TANK_WORLD.tetras.slice(0, 8).map((t) => t.phase))");
+  const phasesBefore = g.q("JSON.stringify(FISH_TANK_WORLD.agents.slice(0, 8).map((t) => t.phase))");
   g.tick(20, 10 * (1000 / 60));
-  const phasesAfter = JSON.parse(g.q("JSON.stringify(FISH_TANK_WORLD.tetras.slice(0, 8).map((t) => t.phase))"));
+  const phasesAfter = JSON.parse(g.q("JSON.stringify(FISH_TANK_WORLD.agents.slice(0, 8).map((t) => t.phase))"));
   const before = JSON.parse(phasesBefore);
   assert(before.length === phasesAfter.length && before.length === 8, "test setup: need 8 observable tetras");
   for (let i = 0; i < before.length; i++) {

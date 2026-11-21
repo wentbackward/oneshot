@@ -54,7 +54,7 @@ function runBench(population, seed) {
   for (let step = 1; step <= STEPS; step++) {
     world.step(FIXED_DT);
     if (step % SAMPLE_EVERY === 0 || step === STEPS) {
-      for (const [i, t] of world.tetras.entries()) {
+      for (const [i, t] of world.agents.entries()) {
         assert(Number.isFinite(t.x) && Number.isFinite(t.y),
           `population ${population}: tetra ${i} position went non-finite at step ${step} (${t.x}, ${t.y})`);
         assert(t.x >= 0 && t.x <= TANK_WIDTH && t.y >= 0 && t.y <= TANK_HEIGHT,

@@ -3055,3 +3055,68 @@ arcade physics).
   both insert-eviction and remove splice ONLY at an index verified to
   hold the target item, so an absent item can never evict a healthy
   neighbour via an implicit splice position.
+
+## 2026-11-21 — Ticket #120: schooling tetras, spine animation, performance benchmark
+
+- **The species lives on the existing `World.agents` surface (now typed
+  `Tetra`), and `serializeState()` keeps its 4-field `x,y,vx,vy`
+  lines.** The #119 determinism test pins both the property name and
+  the exact serialization shape; the tail scalars (`phase`, `torque`)
+  are excluded because heading is a pure function of `(vx, vy)` and
+  both scalars are deterministic functions of the full step history —
+  the position/velocity fingerprint already proves replay identity.
+  Alternatives: rename to `tetras` (breaks the pinned #119 contract)
+  or widen the snapshot (same, and no extra replay coverage).
+- **One wide neighbour query drives all four forces.**
+  `SCHOOL_PERCEPTION_RADIUS` (180) is the query radius; alignment and
+  cohesion act on the whole shoal, while separation stays a personal
+  force because `separation()` filters each candidate against its own
+  `NEIGHBOUR_RADIUS` internally (unchanged from #119). A 64-unity
+  perception cannot make a loose school cohesive — a tetra with no
+  neighbours in sight feels no school at all. Alternative: two grid
+  queries per tetra (more probes, no behavioural difference).
+- **`COHESION_GAIN` raised 0.05 → 0.35 and alignment is applied at
+  cruise speed.** The #119 values are steering-force tuning, not
+  contract (its tests pin clamps and direction, never the gains):
+  at 0.05 the pull toward the shoal centroid (≤ ~9 u/s² at typical
+  distances) lost to personal repulsion and the school smeared into
+  the tank within seconds; alignment's unit-scale average (clamp 1)
+  is meaningless as a raw acceleration unless interpreted as
+  Reynolds' "desired heading" at cruise speed, hence the
+  `ALIGNMENT_CRUISE_SPEED = FISH_MAX_SPEED` scaling in the world
+  composition.
+- **Boundary policy: elastic wall reflection plus a hard clamp, with
+  speed re-clamped into `[TETRA_MIN_SPEED, TETRA_MAX_SPEED]` (30–220
+  u/s) every step.** The #119 torus wrap is incompatible with a tank
+  that has walls (§2 schooling stays INSIDE; the bench criterion
+  forbids out-of-bounds fish). Max displacement per step
+  (220 u/s × 1/60 s ≈ 3.7 u) can never double-cross a wall in one
+  reflection, so the clamp is belt-and-braces, not the primary
+  mechanism. A startled fish may exceed the max for one step; the
+  next step's clamp normalizes it. Alternatives: velocity-only
+  steering with no reflection (slow leaks at corners) or a physics
+  solver (overkill for a tank).
+- **`torque` is an exponential moving average (blend 0.25/step) of
+  the wrapped heading change divided by `dt` (rad/s); `phase` is a
+  monotonically accumulating scalar (radians), never wrapped.** The
+  EMA removes per-step force jitter so the tail cadence breathes
+  instead of strobing; the unwrapped phase keeps the renderer's
+  `sin(phase − k·seg)` exact and lets the vm test observe monotonic
+  animation progress. Alternatives: raw per-step delta (visibly
+  jumpy frequency) or wrapping phase at 2π (unobservable progress,
+  no numerical benefit at these magnitudes).
+- **Spawning: one cluster at the tank centre (radius 120, squashed
+  to the tank aspect) with a SHARED base heading jittered ±0.5 rad,
+  and an INDEPENDENT radial offset angle per tetra.** Random
+  per-fish headings turned the fresh "school" into an outward fan
+  that cohesion could not reassemble; reusing the travel heading as
+  the offset angle biases every fish away from the centre, so the
+  two must be drawn independently from the seeded stream.
+- **Named tuning defaults: `TETRA_COUNT = 80` (app default),
+  `STARTLE_RADIUS = 140`, `STARTLE_IMPULSE = 200` u/s.** The impulse
+  ≈ 100% of max cruise: the school visibly explodes outward for the
+  full 60-frame observation window of the startle criterion while
+  staying one body-length behind the wall margins (worst case:
+  cluster edge ~620 u from the nearest margin × 220 u/s < margin
+  reach). Alternatives: bigger impulses (wall slapping inside the
+  window) or smaller (radial mean decays below noise before frame 60).

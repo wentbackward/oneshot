@@ -26,6 +26,11 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
   // src/sim/constants.ts
   var FIXED_DT = 1 / 60;
   var MAX_FRAME_DELTA = 0.25;
+  var TETRA_COUNT = 80;
+  var STARTLE_RADIUS = 140;
+  var STARTLE_IMPULSE = 200;
+  var TETRA_MIN_SPEED = 30;
+  var TETRA_MAX_SPEED = 220;
 
   // src/sim/rng.ts
   function mulberry32(seed) {
@@ -36,6 +41,86 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
       return ((t ^ t >>> 14) >>> 0) / 4294967296;
     };
+  }
+
+  // src/sim/tail.ts
+  var TAIL_FREQ_SPEED_GAIN = 0.04;
+  var TAIL_FREQ_TORQUE_GAIN = 0.25;
+  function tailFrequency(speed, torque) {
+    return TAIL_FREQ_SPEED_GAIN * Math.abs(speed) + TAIL_FREQ_TORQUE_GAIN * Math.abs(torque);
+  }
+
+  // src/sim/steering.ts
+  var MAX_STEERING_FORCE = 120;
+  var MAX_SEPARATION_FORCE = 90;
+  var MAX_ALIGNMENT_FORCE = 1;
+  var MAX_COHESION_FORCE = 60;
+  var MAX_BOUNDARY_AVOIDANCE_FORCE = MAX_STEERING_FORCE;
+  var NEIGHBOUR_RADIUS = 64;
+  var COHESION_GAIN = 0.35;
+  var BOUNDARY_MARGIN = 120;
+  var FISH_MAX_SPEED = 80;
+  function zero() {
+    return { x: 0, y: 0 };
+  }
+  function clampLength(v, maxLength) {
+    const len = Math.hypot(v.x, v.y);
+    if (len === 0) return v;
+    if (len <= maxLength) return v;
+    const s = maxLength / len;
+    return { x: v.x * s, y: v.y * s };
+  }
+  function unit(x, y) {
+    const len = Math.hypot(x, y);
+    return len === 0 ? zero() : { x: x / len, y: y / len };
+  }
+  function separation(self, neighbours) {
+    const sum = zero();
+    const r2 = NEIGHBOUR_RADIUS * NEIGHBOUR_RADIUS;
+    for (const n of neighbours) {
+      const dx = self.x - n.x;
+      const dy = self.y - n.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 === 0 || d2 > r2) continue;
+      sum.x += dx / d2;
+      sum.y += dy / d2;
+    }
+    return clampLength(sum, MAX_SEPARATION_FORCE);
+  }
+  function alignment(neighbours) {
+    const sum = zero();
+    let votes = 0;
+    for (const n of neighbours) {
+      const h = unit(n.vx, n.vy);
+      if (h.x === 0 && h.y === 0) continue;
+      sum.x += h.x;
+      sum.y += h.y;
+      votes += 1;
+    }
+    if (votes === 0) return zero();
+    return clampLength({ x: sum.x / votes, y: sum.y / votes }, MAX_ALIGNMENT_FORCE);
+  }
+  function cohesion(self, neighbours) {
+    if (neighbours.length === 0) return zero();
+    let cx = 0;
+    let cy = 0;
+    for (const n of neighbours) {
+      cx += n.x;
+      cy += n.y;
+    }
+    const toCentroid = { x: cx / neighbours.length - self.x, y: cy / neighbours.length - self.y };
+    return clampLength(
+      { x: toCentroid.x * COHESION_GAIN, y: toCentroid.y * COHESION_GAIN },
+      MAX_COHESION_FORCE
+    );
+  }
+  function boundaryAvoidance(pos, width, height) {
+    const f = zero();
+    if (pos.x < BOUNDARY_MARGIN) f.x += (BOUNDARY_MARGIN - pos.x) / BOUNDARY_MARGIN * MAX_BOUNDARY_AVOIDANCE_FORCE;
+    if (pos.x > width - BOUNDARY_MARGIN) f.x -= (pos.x - (width - BOUNDARY_MARGIN)) / BOUNDARY_MARGIN * MAX_BOUNDARY_AVOIDANCE_FORCE;
+    if (pos.y < BOUNDARY_MARGIN) f.y += (BOUNDARY_MARGIN - pos.y) / BOUNDARY_MARGIN * MAX_BOUNDARY_AVOIDANCE_FORCE;
+    if (pos.y > height - BOUNDARY_MARGIN) f.y -= (pos.y - (height - BOUNDARY_MARGIN)) / BOUNDARY_MARGIN * MAX_BOUNDARY_AVOIDANCE_FORCE;
+    return clampLength(f, MAX_BOUNDARY_AVOIDANCE_FORCE);
   }
 
   // src/sim/spatialGrid.ts
@@ -134,9 +219,15 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
   var TANK_WIDTH = 1600;
   var TANK_HEIGHT = 1e3;
   var GRID_CELL_SIZE = 64;
-  var DEFAULT_POPULATION = 40;
-  var SPAWN_SPEED_MIN = 20;
-  var SPAWN_SPEED_MAX = 60;
+  var SPAWN_CLUSTER_RADIUS = 120;
+  var SPAWN_HEADING_JITTER = 0.5;
+  var SPAWN_CLUSTER_SQUASH = 0.6;
+  var SPAWN_SPEED_MIN = 40;
+  var SPAWN_SPEED_MAX = 80;
+  var ALIGNMENT_CRUISE_SPEED = FISH_MAX_SPEED;
+  var TORQUE_SMOOTHING = 0.25;
+  var SCHOOL_PERCEPTION_RADIUS = 180;
+  var TAU = 2 * Math.PI;
   var World = class {
     /** World clock in seconds: advances in exact step-size multiples. */
     time = 0;
@@ -146,26 +237,44 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
      *  not a stateful stream — the mulberry32 stream is (re)created
      *  from it at construction, and same seed ⇒ identical tank. */
     seed;
-    /** Every simulated swimmer, in fixed iteration order. */
+    /** The tetra school, in fixed iteration order. Named `agents` to
+     *  stay the stable per-world surface (the #119 determinism test
+     *  hashes on it); every entry is a Tetra. */
     agents = [];
-    /** Neighbor grid, rebuilt every fixed step (PRD §1). */
+    /** Neighbor grid (typed Tetra so queries hand back moving bodies
+     *  straight into the steering forces), rebuilt every fixed step
+     *  (PRD §1). */
     grid;
+    /** Reused neighbour scratch per step (allocation-free hot path):
+     *  steering forces only READ the list, so one shared buffer is
+     *  safe across the fixed-order iteration. */
+    neighbours = [];
     constructor(options = {}) {
       this.seed = options.seed ?? 1;
       this.grid = new SpatialGrid(TANK_WIDTH, TANK_HEIGHT, GRID_CELL_SIZE);
-      this.spawn(options.population ?? DEFAULT_POPULATION);
+      this.spawn(options.population ?? TETRA_COUNT);
     }
-    /** Spawn n agents at seeded random positions/headings. */
+    /** Spawn n tetras as one loose cluster at the tank centre: a
+     *  shared base heading (jittered ±SPAWN_HEADING_JITTER) so the
+     *  school is born roughly aligned, with seeded random offsets and
+     *  speeds inside the cluster (uniform disk: the square-root keeps
+     *  the density flat, not rim-heavy). */
     spawn(count) {
       const rng = mulberry32(this.seed);
+      const baseHeading = rng() * TAU;
       for (let i = 0; i < count; i++) {
-        const heading = rng() * 2 * Math.PI;
+        const heading = baseHeading + (rng() * 2 - 1) * SPAWN_HEADING_JITTER;
+        const offAngle = rng() * TAU;
+        const radius = SPAWN_CLUSTER_RADIUS * Math.sqrt(rng());
         const speed = SPAWN_SPEED_MIN + rng() * (SPAWN_SPEED_MAX - SPAWN_SPEED_MIN);
         this.agents.push({
-          x: rng() * TANK_WIDTH,
-          y: rng() * TANK_HEIGHT,
+          x: TANK_WIDTH / 2 + Math.cos(offAngle) * radius,
+          y: TANK_HEIGHT / 2 + Math.sin(offAngle) * radius * SPAWN_CLUSTER_SQUASH,
           vx: Math.cos(heading) * speed,
-          vy: Math.sin(heading) * speed
+          vy: Math.sin(heading) * speed,
+          phase: rng() * TAU,
+          torque: 0,
+          heading
         });
       }
     }
@@ -201,37 +310,182 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       return steps;
     }
     /** One deterministic step of EXACTLY dt seconds: rebuild the
-     *  neighbor grid, integrate every agent in fixed order, wrap the
-     *  swarm torus-style so the domain stays a closed universe. */
+     *  neighbor grid, then for every tetra (fixed array order)
+     *  compose the steering forces, clamp the speed, integrate and
+     *  keep the body INSIDE the tank (elastic reflection plus a hard
+     *  clamp), and advance its articulated tail at
+     *  tailFrequency(speed, torque). */
     step(dt) {
       this.time += dt;
       this.rebuildGrid();
-      for (const agent of this.agents) {
-        let x = agent.x + agent.vx * dt;
-        let y = agent.y + agent.vy * dt;
-        x = (x % TANK_WIDTH + TANK_WIDTH) % TANK_WIDTH;
-        y = (y % TANK_HEIGHT + TANK_HEIGHT) % TANK_HEIGHT;
-        agent.x = x;
-        agent.y = y;
+      for (const t of this.agents) {
+        this.neighbours.length = 0;
+        for (const n of this.grid.query(t.x, t.y, SCHOOL_PERCEPTION_RADIUS)) {
+          if (n !== t) this.neighbours.push(n);
+        }
+        const sep = separation(t, this.neighbours);
+        const ali = alignment(this.neighbours);
+        const coh = cohesion(t, this.neighbours);
+        const bou = boundaryAvoidance(t, TANK_WIDTH, TANK_HEIGHT);
+        const ax = sep.x + ali.x * ALIGNMENT_CRUISE_SPEED + coh.x + bou.x;
+        const ay = sep.y + ali.y * ALIGNMENT_CRUISE_SPEED + coh.y + bou.y;
+        let vx = t.vx + ax * dt;
+        let vy = t.vy + ay * dt;
+        const speed = Math.hypot(vx, vy);
+        if (speed > TETRA_MAX_SPEED) {
+          const s = TETRA_MAX_SPEED / speed;
+          vx *= s;
+          vy *= s;
+        } else if (speed > 0 && speed < TETRA_MIN_SPEED) {
+          const s = TETRA_MIN_SPEED / speed;
+          vx *= s;
+          vy *= s;
+        }
+        let x = t.x + vx * dt;
+        let y = t.y + vy * dt;
+        if (x < 0) {
+          x = -x;
+          vx = -vx;
+        } else if (x > TANK_WIDTH) {
+          x = 2 * TANK_WIDTH - x;
+          vx = -vx;
+        }
+        if (y < 0) {
+          y = -y;
+          vy = -vy;
+        } else if (y > TANK_HEIGHT) {
+          y = 2 * TANK_HEIGHT - y;
+          vy = -vy;
+        }
+        if (x < 0) x = 0;
+        else if (x > TANK_WIDTH) x = TANK_WIDTH;
+        if (y < 0) y = 0;
+        else if (y > TANK_HEIGHT) y = TANK_HEIGHT;
+        const nx = Math.hypot(vx, vy);
+        const heading = nx > 0 ? Math.atan2(vy, vx) : t.heading;
+        const instantTorque = wrapPi(heading - t.heading) / dt;
+        t.torque += TORQUE_SMOOTHING * (instantTorque - t.torque);
+        t.x = x;
+        t.y = y;
+        t.vx = vx;
+        t.vy = vy;
+        t.heading = heading;
+        t.phase += TAU * tailFrequency(nx, t.torque) * dt;
       }
     }
+    /** Startle event (PRD §2: the school scatters when the user taps
+     *  the glass): every tetra within STARTLE_RADIUS of (x, y)
+     *  receives an OUTWARD impulse of STARTLE_IMPULSE straight away
+     *  from the epicentre. A tetra sitting exactly ON the epicentre
+     *  (undefined radial direction) is flung along its own heading,
+     *  or +x if it has none — deterministic. Non-finite coordinates
+     *  are rejected: the event is a no-op reporting 0, touching
+     *  nothing (same well-formedness philosophy as advance()).
+     *  Returns the number of startled tetras. */
+    startleAt(x, y) {
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return 0;
+      let startled = 0;
+      for (const t of this.agents) {
+        const dx = t.x - x;
+        const dy = t.y - y;
+        const d = Math.hypot(dx, dy);
+        if (d > STARTLE_RADIUS) continue;
+        let ux;
+        let uy;
+        if (d > 0) {
+          ux = dx / d;
+          uy = dy / d;
+        } else {
+          const s = Math.hypot(t.vx, t.vy);
+          ux = s > 0 ? t.vx / s : 1;
+          uy = s > 0 ? t.vy / s : 0;
+        }
+        t.vx += ux * STARTLE_IMPULSE;
+        t.vy += uy * STARTLE_IMPULSE;
+        startled += 1;
+      }
+      return startled;
+    }
     /** Fixed-precision snapshot of the whole sim state: clock first,
-     *  then one `x,y,vx,vy` line per agent at 6 decimals. Two same-
-     *  seed worlds hash this byte-identically (determinism proof). */
+     *  then one `x,y,vx,vy` line per tetra at 6 decimals. The tail
+     *  state (phase, torque) is excluded deliberately: heading is a
+     *  pure function of (vx, vy) and the tail scalars are deterministic
+     *  functions of the full history, so this fingerprint already
+     *  proves replay identity. Two same-seed worlds hash this
+     *  byte-identically (determinism proof). */
     serializeState() {
       const lines = [this.time.toFixed(6)];
-      for (const agent of this.agents) {
-        lines.push(`${agent.x.toFixed(6)},${agent.y.toFixed(6)},${agent.vx.toFixed(6)},${agent.vy.toFixed(6)}`);
+      for (const t of this.agents) {
+        lines.push(`${t.x.toFixed(6)},${t.y.toFixed(6)},${t.vx.toFixed(6)},${t.vy.toFixed(6)}`);
       }
       return lines.join("\n");
     }
-    /** Clear + re-insert every agent: the O(1)-average neighbor
-     *  lookup the steering forces (PRD §2) will consume. */
+    /** Clear + re-insert every tetra: the O(1)-average neighbor
+     *  lookup the steering forces (PRD §2) consume each step. */
     rebuildGrid() {
       this.grid.clear();
-      for (const agent of this.agents) this.grid.insert(agent);
+      for (const t of this.agents) this.grid.insert(t);
     }
   };
+  function wrapPi(angle) {
+    let a = angle % TAU;
+    if (a > Math.PI) a -= TAU;
+    if (a < -Math.PI) a += TAU;
+    return a;
+  }
+
+  // src/render/tetras.ts
+  var TETRA_SPINE_SEGMENTS = 7;
+  var TETRA_BODY_LENGTH = 24;
+  var TETRA_TAIL_AMPLITUDE = 5;
+  var TETRA_TAIL_WAVE_NUMBER = 0.9;
+  var TETRA_STROKE_WIDTH = 4;
+  var TETRA_HEAD_RADIUS = 3.5;
+  var TAU2 = 2 * Math.PI;
+  var palette = [];
+  function colour(index) {
+    let c = palette[index];
+    if (c === void 0) {
+      c = `hsl(${index * 47 % 360}, 82%, 66%)`;
+      palette[index] = c;
+    }
+    return c;
+  }
+  function drawTetras(ctx, width, height, tetras) {
+    const sx = width / TANK_WIDTH;
+    const sy = height / TANK_HEIGHT;
+    for (let i = 0; i < tetras.length; i++) {
+      drawTetra(ctx, tetras[i], i, sx, sy);
+    }
+  }
+  function drawTetra(ctx, t, index, sx, sy) {
+    const speed = Math.hypot(t.vx, t.vy);
+    const hx = speed > 0 ? t.vx / speed : 1;
+    const hy = speed > 0 ? t.vy / speed : 0;
+    const px = -hy;
+    const py = hx;
+    const headX = t.x * sx;
+    const headY = t.y * sy;
+    const colourForFish = colour(index);
+    const tailSpan = TETRA_SPINE_SEGMENTS - 1;
+    ctx.beginPath();
+    ctx.moveTo(headX, headY);
+    for (let seg = 1; seg < TETRA_SPINE_SEGMENTS; seg++) {
+      const k = seg / tailSpan;
+      const back = TETRA_BODY_LENGTH * k;
+      const sway = TETRA_TAIL_AMPLITUDE * k * Math.sin(t.phase - seg * TETRA_TAIL_WAVE_NUMBER);
+      ctx.lineTo((t.x - hx * back + px * sway) * sx, (t.y - hy * back + py * sway) * sy);
+    }
+    ctx.strokeStyle = colourForFish;
+    ctx.lineWidth = TETRA_STROKE_WIDTH;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(headX, headY, TETRA_HEAD_RADIUS, 0, TAU2);
+    ctx.fillStyle = colourForFish;
+    ctx.fill();
+  }
 
   // src/render/water.ts
   var WATER_SURFACE = "#8fd8ea";
@@ -247,8 +501,8 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
   var RIPPLE_STEP = 16;
   var BUBBLES = 12;
   var BUBBLE_MARGIN = 12;
-  function hash(unit, salt) {
-    const v = Math.sin(unit * 127.1 + salt * 311.7) * 43758.5453;
+  function hash(unit2, salt) {
+    const v = Math.sin(unit2 * 127.1 + salt * 311.7) * 43758.5453;
     return v - Math.floor(v);
   }
   function drawWater(ctx, width, height, t) {
@@ -315,9 +569,11 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
 
   // src/render/renderer.ts
   var Renderer = class {
-    /** Paint one frame of the given world state. */
+    /** Paint one frame of the given world state: the water backdrop,
+     *  then the tetra school (PRD §2). */
     render(ctx, width, height, world) {
       drawWater(ctx, width, height, world.time);
+      drawTetras(ctx, width, height, world.agents);
     }
   };
 
@@ -383,6 +639,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
   function exposeTestSeam(world) {
     const seam = globalThis;
     seam.FIXED_DT = FIXED_DT;
+    seam.TETRA_COUNT = TETRA_COUNT;
     seam.FISH_TANK_WORLD = world;
   }
   if (typeof window !== "undefined" && typeof document !== "undefined") {
