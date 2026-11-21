@@ -14,7 +14,8 @@
 // under stock node with no flags.
 //
 // Requires `npm ci` first (node_modules hosts esbuild + typescript)
-// — the gate order places npm ci before the test loop.
+// — the gate order makes npm ci the FIRST check so a clean worktree
+// always has the locked toolchain before any test/build/typecheck.
 // No network, no external services.
 //
 // Run: node tests/fishtank-scaffold.test.mjs
@@ -116,7 +117,9 @@ function makeCountingCtx(counts, canvas) {
 
 // A canvas element stub that hands out ONE counting 2d context.
 function makeCanvas(counts) {
-  const ctx = makeCountingCtx(counts, null);
+  // The context is created AFTER the canvas object exists so it is
+  // born with a real `canvas` back-reference (no null-patch-up).
+  let ctx;
   const canvas = {
     width: 0,
     height: 0,
@@ -127,7 +130,7 @@ function makeCanvas(counts) {
       return ctx;
     },
   };
-  ctx.canvas = canvas;
+  ctx = makeCountingCtx(counts, canvas);
   return canvas;
 }
 
@@ -405,6 +408,16 @@ check("tampering src/ by one character makes --check exit non-zero", () => {
   }
 });
 
+check("package.json declares an explicit supported Node engines floor", () => {
+  const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
+  const floor = pkg.engines && pkg.engines.node;
+  const m = typeof floor === "string" && floor.match(/^>=(\d+)\.(\d+)(\.\d+)?$/);
+  assert(m, `package.json must declare an explicit ">=M.m(.p)" node engines floor, got ${JSON.stringify(floor)}`);
+  const [maj, min] = process.versions.node.split(".").map(Number);
+  assert(maj > Number(m[1]) || (maj === Number(m[1]) && min >= Number(m[2])),
+    `this runtime (node ${process.versions.node}) must satisfy the declared floor ${floor}`);
+});
+
 // ================================================================
 // Criterion: npm run typecheck — strict tsc --noEmit over src/
 // ================================================================
@@ -436,8 +449,12 @@ check(".devloop.json pins the fishtank gate (size, doctype, canvas, rAF, self-co
   const tcIdx = checks.findIndex((c) => /npm run typecheck/.test(c));
   assert(tcIdx >= 0, "missing: npm run typecheck gate check");
   const ciIdx = checks.findIndex((c) => /^npm ci\b/.test(c.trim()));
+  assert(ciIdx === 0,
+    `npm ci must be the FIRST .devloop.json check so a clean worktree installs the locked toolchain before any test/build/typecheck command, found at index ${ciIdx}`);
   assert(ciIdx < buildIdx, "npm ci must run BEFORE the build-freshness check");
   assert(ciIdx < tcIdx, "npm ci must run BEFORE the typecheck");
+  const loopIdx = checks.findIndex((c) => /for f in tests\/\*\.test\.mjs/.test(c));
+  assert(loopIdx >= 0 && ciIdx < loopIdx, "npm ci must run BEFORE the test loop");
 });
 
 // ---------- summary ----------
