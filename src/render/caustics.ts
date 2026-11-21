@@ -13,6 +13,14 @@
 // are staggered across the width so the sweep reads as drifting
 // light, not marching.
 //
+// The sawtooth's lateral reset is MASKED, not faked away: over
+// CAUSTIC_WRAP_FADE of the span on each side of the wrap the
+// shaft's alpha fades smoothly to zero, so the 120 px pop happens
+// while the shaft is invisible — light drifting off the tank, not
+// snapping (see docs/DECISIONS.md, ticket #125). The fade only
+// multiplies the alpha: the recorded translates still ARE the
+// phase.
+//
 // Stateless per frame: identical (t, palette) repaints identically.
 // ================================================================
 
@@ -26,6 +34,12 @@ export const CAUSTIC_SWEEP_SPEED = 6;
 
 /** How far a shaft travels before the sweep phase wraps, px. */
 export const CAUSTIC_SWEEP_SPAN = 120;
+
+/** Fraction of the sweep span, on each side of the wrap, over
+ *  which a shaft's alpha fades smoothly to zero — masks the
+ *  sawtooth's lateral reset (pinned by the "sweep wrap is masked"
+ *  check in tests/fishtank-atmosphere.test.mjs). */
+export const CAUSTIC_WRAP_FADE = 0.25;
 
 /** Rad/s of the per-shaft alpha pulse (the breathing of the light). */
 const CAUSTIC_PULSE_SPEED = 1.5;
@@ -56,8 +70,17 @@ export function drawCausticShafts(
     const phase =
       (t * CAUSTIC_SWEEP_SPEED + (i * CAUSTIC_SWEEP_SPAN) / CAUSTIC_SHAFTS) % CAUSTIC_SWEEP_SPAN;
     const sway = phase - CAUSTIC_SWEEP_SPAN / 2;
+    // Sweep-wrap mask (smoothstep): the alpha falls to zero as the
+    // shaft nears its sawtooth reset and recovers over the same
+    // span on the other side, so the lateral pop happens while
+    // invisible. It only multiplies the alpha — never the phase.
+    const distToWrap =
+      Math.min(phase, CAUSTIC_SWEEP_SPAN - phase) / (CAUSTIC_SWEEP_SPAN * CAUSTIC_WRAP_FADE);
+    const wrapFade =
+      distToWrap >= 1 ? 1 : distToWrap <= 0 ? 0 : distToWrap * distToWrap * (3 - 2 * distToWrap);
     const alpha =
-      palette.causticBaseAlpha + palette.causticPulseAlpha * Math.sin(t * CAUSTIC_PULSE_SPEED + i * 2.6);
+      wrapFade *
+      (palette.causticBaseAlpha + palette.causticPulseAlpha * Math.sin(t * CAUSTIC_PULSE_SPEED + i * 2.6));
     // Translate FIRST, then build the gradient: the draw-recording
     // test locates each shaft's phase as the translate sitting
     // immediately before that shaft's gradient.

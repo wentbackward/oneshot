@@ -414,6 +414,51 @@ check("AC2: every frame issues the caustic shaft gradient draws, each placed by 
   }
 });
 
+check("AC2 (review should-fix): the sawtooth sweep wrap is masked — a shaft at the wrap paints at zero alpha, the fade only attenuates, and mid-sweep the shaft reaches its caustic base alpha", () => {
+  const g = boot(800, 600, ["gradient", "stop"]);
+  const parseAlpha = (color) => Number(color.slice(color.lastIndexOf(", ") + 2, -1));
+  const firstShaftStop = (slice, k) => {
+    const grads = [];
+    for (const ev of slice) if (ev.kind === "gradient") grads.push(ev);
+    const stop = slice[slice.indexOf(grads[k + 1]) + 1];
+    assert(stop?.kind === "stop", `shaft ${k}'s gradient carries no first stop`);
+    return stop.args.color;
+  };
+  // 300 frames (~5.1 s of sim, all within LIGHT_DAY): spans shaft 0
+  // from its wrap (t = 0) into its fully-open mid-sweep (the fade
+  // window ends at t = 5 s).
+  const slices = [];
+  g.frameAt(0);
+  slices.push(g.state.events.slice(0));
+  for (let f = 1; f < 300; f++) {
+    const from = g.state.events.length;
+    g.tick(1, (f - 1) * FRAME_MS);
+    slices.push(g.state.events.slice(from));
+  }
+  // (a) At t = 0 shaft 0 sits exactly on its sweep wrap: masked to
+  //     zero alpha (before the fix it painted at full caustic base
+  //     alpha and then snapped 120 px laterally).
+  assert(parseAlpha(firstShaftStop(slices[0], 0)) === 0,
+    `shaft 0 at its sweep wrap must paint at zero alpha, got ${firstShaftStop(slices[0], 0)}`);
+  // (b) The fade only ATTENUATES: no shaft's alpha ever leaves
+  //     [0, base + pulse] over the whole window (slack covers FP
+  //     addition plus the toFixed(4) rounding of the recorded stop).
+  const ceiling = LIGHT_DAY.causticBaseAlpha + LIGHT_DAY.causticPulseAlpha;
+  for (let f = 0; f < slices.length; f++) {
+    for (let k = 0; k < CAUSTIC_SHAFTS; k++) {
+      const a = parseAlpha(firstShaftStop(slices[f], k));
+      assert(a >= -1e-9 && a <= ceiling + 1e-4,
+        `frame ${f} shaft ${k}: alpha ${a} escaped [0, ${ceiling}] — the wrap fade amplified the shaft`);
+    }
+  }
+  // (c) And the mask opens again: past its fade window (t >= 5 s)
+  //     shaft 0 reaches its full caustic base alpha mid-sweep.
+  let peak = 0;
+  for (const sl of slices) peak = Math.max(peak, parseAlpha(firstShaftStop(sl, 0)));
+  assert(peak >= LIGHT_DAY.causticBaseAlpha,
+    `shaft 0 peaked at alpha ${peak} < caustic base ${LIGHT_DAY.causticBaseAlpha} — the fade never fully reopened mid-sweep`);
+});
+
 check("AC2: the shaft phase advances proportionally to sim time — a 2 x FIXED_DT gap advances exactly twice one step's increment", () => {
   const g = boot(800, 600, ["gradient", "translate"]);
   const EPS = 1e-9;

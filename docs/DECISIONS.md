@@ -3256,3 +3256,18 @@ arcade physics).
   "bioluminescent" read on its own. Alternatives: additive
   overlay tints (rejected — pollutes the "exactly three palettes"
   audit), or per-entity recolouring (out of scope for this ticket).
+- **The caustic sweep's 120 px sawtooth reset is MASKED by an alpha
+  fade, not documented as an intentional pop** (review should-fix;
+  the fade is the visually honest choice: at the wrap the light is
+  genuinely leaving the tank, so dimming it to invisibility shows
+  what the scene means, whereas a documented pop leaves a visible
+  snap in an otherwise soft ambient scene). Over CAUSTIC_WRAP_FADE
+  (0.25) of the span on each side of the wrap the shaft's alpha
+  falls smoothly (smoothstep) to zero. The fade multiplies the
+  alpha only — the recorded translate still IS the phase, so AC2's
+  proportionality audit and the palette-tint audit are untouched.
+  Pinned by the "sweep wrap is masked" check in
+  tests/fishtank-atmosphere.test.mjs. Alternatives: documented hard
+  pop (rejected — a visible 120 px snap per shaft), or wrapping the
+  position symmetrically about the centre (rejected — would break
+  the "linear in sim time between wraps" phase the AC measures).
