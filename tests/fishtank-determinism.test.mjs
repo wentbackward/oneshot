@@ -55,9 +55,12 @@ check("World.step takes an explicit dt and advance() always feeds it FIXED_DT", 
   assert(typeof w.step === "function", "World must expose step(dt)");
   w.advance(FIXED_DT * 2 + 0.001); // two whole steps + a sub-step remainder
   assert(w.time === 2 * FIXED_DT, `clock must advance in exact FIXED_DT multiples, got ${w.time}`);
-  assert(w.acc === 0.001, `leftover must be carried, got ${w.acc}`);
+  assert(Math.abs(w.acc - 0.001) < 1e-12, `leftover must be carried, got ${w.acc}`);
   w.step(FIXED_DT * 0.5);
   assert(w.time === 2 * FIXED_DT + FIXED_DT * 0.5, "step(dt) must advance the clock by exactly dt");
+  const w2 = new World({ seed: 8 });
+  w2.advance(FIXED_DT * 2); // a whole number of steps: the accumulator drains EXACTLY
+  assert(w2.time === 2 * FIXED_DT && w2.acc === 0, `whole steps must drain the accumulator to 0, got acc=${w2.acc}`);
 });
 
 check("the same seed builds the same initial population", () => {
@@ -123,9 +126,12 @@ check("after 100 steps every agent stays inside the tank domain (bounded, finite
   }
 });
 
-check("the world clock reads exactly STEPS * FIXED_DT after the run", () => {
+check("the world clock is STEPS * FIXED_DT up to fp accumulation error after the run", () => {
   const { w } = hashAfterSteps(77);
-  assert(w.time === STEPS * FIXED_DT, `clock must be exact, got ${w.time}`);
+  // 100 successive additions of FIXED_DT differ from one multiply by
+  // up to a few ulp — that is accumulation error, not drift.
+  assert(Math.abs(w.time - STEPS * FIXED_DT) < 1e-9,
+    `clock must be ~${STEPS * FIXED_DT}, got ${w.time}`);
 });
 
 // ================================================================
