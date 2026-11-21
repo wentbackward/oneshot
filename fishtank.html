@@ -442,23 +442,22 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
   var TETRA_STROKE_WIDTH = 4;
   var TETRA_HEAD_RADIUS = 3.5;
   var TAU2 = 2 * Math.PI;
-  var palette = [];
-  function colour(index) {
-    let c = palette[index];
+  function tetraColour(cache, index) {
+    let c = cache[index];
     if (c === void 0) {
       c = `hsl(${index * 47 % 360}, 82%, 66%)`;
-      palette[index] = c;
+      cache[index] = c;
     }
     return c;
   }
-  function drawTetras(ctx, width, height, tetras) {
+  function drawTetras(ctx, width, height, tetras, colours) {
     const sx = width / TANK_WIDTH;
     const sy = height / TANK_HEIGHT;
     for (let i = 0; i < tetras.length; i++) {
-      drawTetra(ctx, tetras[i], i, sx, sy);
+      drawTetra(ctx, tetras[i], i, sx, sy, colours);
     }
   }
-  function drawTetra(ctx, t, index, sx, sy) {
+  function drawTetra(ctx, t, index, sx, sy, colours) {
     const speed = Math.hypot(t.vx, t.vy);
     const hx = speed > 0 ? t.vx / speed : 1;
     const hy = speed > 0 ? t.vy / speed : 0;
@@ -466,7 +465,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
     const py = hx;
     const headX = t.x * sx;
     const headY = t.y * sy;
-    const colourForFish = colour(index);
+    const colourForFish = tetraColour(colours, index);
     const tailSpan = TETRA_SPINE_SEGMENTS - 1;
     ctx.beginPath();
     ctx.moveTo(headX, headY);
@@ -569,11 +568,15 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
 
   // src/render/renderer.ts
   var Renderer = class {
+    /** Per-instance tetra colour cache (src/render/tetras.ts builds
+     *  the render layer with NO module-level state — the only mutable
+     *  render state a Renderer owns). */
+    tetraColours = [];
     /** Paint one frame of the given world state: the water backdrop,
      *  then the tetra school (PRD §2). */
     render(ctx, width, height, world) {
       drawWater(ctx, width, height, world.time);
-      drawTetras(ctx, width, height, world.agents);
+      drawTetras(ctx, width, height, world.agents, this.tetraColours);
     }
   };
 

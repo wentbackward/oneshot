@@ -3120,3 +3120,12 @@ arcade physics).
   cluster edge ~620 u from the nearest margin × 220 u/s < margin
   reach). Alternatives: bigger impulses (wall slapping inside the
   window) or smaller (radial mean decays below noise before frame 60).
+- **The tetra colour cache lives on the `Renderer` instance, not at
+  module scope (review should-fix #3).** The index-deterministic
+  `hsl(i·47, 82%, 66%)` strings are built once per fish index and
+  reused, exactly as before — but the cache array is a `Renderer`
+  field passed down to `drawTetras`, so `src/render/*` carries no
+  module-level mutable state. Alternatives: pure per-fish
+  recomputation (rejected — per-frame string churn in the hot path,
+  against the AGENTS.md 60 fps rule) or a module singleton (the
+  wart this removes).

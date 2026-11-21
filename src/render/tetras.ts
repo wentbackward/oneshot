@@ -35,30 +35,32 @@ const TETRA_HEAD_RADIUS = 3.5;
 
 const TAU = 2 * Math.PI;
 
-/** Cached body-colour palette (index-deterministic: no per-frame
- *  string churn in the hot path — the array only grows). */
-let palette: string[] = [];
-function colour(index: number): string {
-  let c = palette[index];
+/** Cached body-colour lookup (index-deterministic: no per-frame
+ *  string churn in the hot path — the cache only grows). The cache
+ *  ARRAY IS OWNED BY THE CALLER (a Renderer instance) so the render
+ *  layer carries no module-level state. */
+export function tetraColour(cache: string[], index: number): string {
+  let c = cache[index];
   if (c === undefined) {
     c = `hsl(${(index * 47) % 360}, 82%, 66%)`;
-    palette[index] = c;
+    cache[index] = c;
   }
   return c;
 }
 
 /** Paint every tetra of the school, mapping tank units to the
  *  current canvas (stretch: the tank aspect is fixed, the canvas
- *  is the viewport). */
-export function drawTetras(ctx: CanvasRenderingContext2D, width: number, height: number, tetras: Tetra[]): void {
+ *  is the viewport). `colours` is the caller's per-fish colour
+ *  cache (owned by the Renderer instance). */
+export function drawTetras(ctx: CanvasRenderingContext2D, width: number, height: number, tetras: Tetra[], colours: string[]): void {
   const sx = width / TANK_WIDTH;
   const sy = height / TANK_HEIGHT;
   for (let i = 0; i < tetras.length; i++) {
-    drawTetra(ctx, tetras[i]!, i, sx, sy);
+    drawTetra(ctx, tetras[i]!, i, sx, sy, colours);
   }
 }
 
-function drawTetra(ctx: CanvasRenderingContext2D, t: Tetra, index: number, sx: number, sy: number): void {
+function drawTetra(ctx: CanvasRenderingContext2D, t: Tetra, index: number, sx: number, sy: number, colours: string[]): void {
   const speed = Math.hypot(t.vx, t.vy);
   const hx = speed > 0 ? t.vx / speed : 1; // unit heading (defensive: sim guarantees speed > 0)
   const hy = speed > 0 ? t.vy / speed : 0;
@@ -66,7 +68,7 @@ function drawTetra(ctx: CanvasRenderingContext2D, t: Tetra, index: number, sx: n
   const py = hx;
   const headX = t.x * sx;
   const headY = t.y * sy;
-  const colourForFish = colour(index);
+  const colourForFish = tetraColour(colours, index);
   const tailSpan = TETRA_SPINE_SEGMENTS - 1;
   ctx.beginPath();
   ctx.moveTo(headX, headY);
