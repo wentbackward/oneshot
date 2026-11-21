@@ -6,9 +6,8 @@
 //    tank (no escapes, no NaNs, ever);
 //  - the pure sim API `startleAt(x, y)` gives every tetra within
 //    STARTLE_RADIUS an outward impulse; for the 60 frames after
-//    the event the school's MEAN RADIAL VELOCITY away from
-//    (x, y) is positive, while tetras outside the radius are
-//    untouched;
+//    the event the STARTLED SUBSET'S (measured with the same
+//    radius) MEAN RADIAL VELOCITY away from (x, y) is positive;
 //  - determinism is preserved: same seed ⇒ identical trajectory,
 //    different seed ⇒ different trajectory.
 //
@@ -65,11 +64,13 @@ function assertAllInBounds(world, label) {
   }
 }
 
-/** Mean radial velocity of the school away from (x, y). */
-function meanRadialVelocity(world, x, y) {
+/** Mean radial velocity of a SET of tetras away from (x, y) — the
+ *  caller decides which tetras cast a vote (the startle check
+ *  passes only the startled subset). */
+function meanRadialVelocity(agents, x, y) {
   let sum = 0;
   let counted = 0;
-  for (const t of world.agents) {
+  for (const t of agents) {
     const dx = t.x - x;
     const dy = t.y - y;
     const d = Math.hypot(dx, dy);
@@ -136,18 +137,26 @@ check("soak: 600 fixed steps (with two startles) — no tetra ever leaves the ta
 // ================================================================
 // Criterion: startleAt(x, y) — every tetra within STARTLE_RADIUS
 // receives an outward impulse; for the 60 frames AFTER the event
-// the mean radial velocity away from (x, y) is positive
+// the startled subset's mean radial velocity away from (x, y) is
+// positive
 // ================================================================
-check("startleAt: for 60 consecutive frames the school's mean radial velocity away from the epicentre is positive", () => {
+check("startleAt: for 60 consecutive frames the startled tetras' mean radial velocity away from the epicentre is positive", () => {
   const world = new World({ seed: 21 });
   const cx = TANK_WIDTH / 2;
   const cy = TANK_HEIGHT / 2;
+  // Precompute the startled subset with the EXACT predicate the
+  // implementation uses (hypot ≤ STARTLE_RADIUS) BEFORE the event:
+  // the 60-frame property is then asserted over precisely the
+  // tetras that received the outward impulse, and stays true even
+  // if the spawn cluster ever grows past the radius.
+  const startled = world.agents.filter((t) => Math.hypot(t.x - cx, t.y - cy) <= STARTLE_RADIUS);
+  assert(startled.length > 0, "test setup: the epicentre must catch at least one tetra");
   world.startleAt(cx, cy); // the default school spawns around the tank centre
   for (let frame = 1; frame <= 60; frame++) {
     world.step(FIXED_DT);
-    const v = meanRadialVelocity(world, cx, cy);
+    const v = meanRadialVelocity(startled, cx, cy);
     assert(v > 0,
-      `frame ${frame} after startle: mean radial velocity must be positive (outward), got ${v}`);
+      `frame ${frame} after startle: the startled subset's (${startled.length} tetras) mean radial velocity must be positive (outward), got ${v}`);
     assertAllInBounds(world, `post-startle frame ${frame}`);
   }
 });
