@@ -41,6 +41,10 @@ import {
   lightPhaseAt,
 } from "../src/render/lighting.ts";
 import { FIXED_DT } from "../src/sim/constants.ts";
+import {
+  CAUSTIC_SHAFTS,
+  CAUSTIC_SWEEP_SPEED,
+} from "../src/render/caustics.ts";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const html = readFileSync(path.join(root, "fishtank.html"), "utf8");
@@ -140,7 +144,7 @@ function boot(width, height, enabledKinds) {
     enabled: new Set(enabledKinds),
     emit(kind, args) {
       if (!this.enabled.has(kind)) return;
-      this.events.push(args === undefined ? kind : { kind, args });
+      this.events.push({ kind, args });
     },
     canvas: null,
   };
@@ -306,15 +310,16 @@ check("AC1: pausing the sim (zero steps) freezes the lighting phase and its ambi
   const g = boot(640, 360, ["stop"]);
   g.frameAt(0);
   const intoDuskSteps = Math.round((DAY_DURATION + DUSK_DURATION / 2) / FIXED_DT); // ~ t = 52.5 s
-  g.tick(intoDuskSteps, 0);
+  g.tick(intoDuskSteps - 1, 0);
+  const beforeIdx = g.state.events.length;
+  g.tick(1, (intoDuskSteps - 1) * FRAME_MS); // one auditable last frame
   const tBefore = g.q("FISH_TANK_WORLD.time");
   assert(tBefore > DAY_DURATION + 1 && tBefore < DAY_DURATION + DUSK_DURATION - 1,
     `test setup: sim must have reached mid-DUSK, it reached t = ${tBefore}s`);
 
-  // The latest frame's ambient = the last two 'stop' events recorded.
-  const stopColors = g.state.events.filter((ev) => ev.kind === "stop").map((ev) => ev.args.color);
-  const before = stopColors.slice(-2);
-  assert(stopColors.length >= 2, "test setup: no ambient backdrop was painted");
+  // The latest frame's ambient = its FIRST two stops (the backdrop
+  // gradient is always emitted before any caustic or other stop).
+  const before = ambientPair(g.state, beforeIdx);
   assert(paletteName(before[0], before[1]) === "LIGHT_DUSK",
     `mid-cycle ambient should be LIGHT_DUSK, got ${paletteName(before[0], before[1])}`);
 
@@ -329,6 +334,141 @@ check("AC1: pausing the sim (zero steps) freezes the lighting phase and its ambi
   const tAfter = g.q("FISH_TANK_WORLD.time");
   assert(tAfter === tBefore,
     `a paused sim must take zero steps (time ${tBefore} -> ${tAfter})`);
+});
+
+// ================================================================
+// AC2: caustic light shafts — every frame issues the shaft
+// GRADIENT draws (backdrop + one per shaft, two stops each, and
+// each shaft is placed by its own recorded translate), and the
+// shaft phase advances PROPORTIONALLY TO SIM TIME: two frames two
+// fixed steps apart advance the phase by exactly twice one
+// step's increment (recorded translate parameters)
+// ================================================================
+/** Split the boot's event log into per-frame slices (one slice per
+ *  rendered frame; frameAt(0) is slice 0). */
+function framesOf(g) {
+  // The caller records the slice boundaries as it drives frames; a
+  // boot that only tick()'d keeps its own `marks`.
+  const marks = g.marks ?? [];
+  const out = [];
+  for (let k = 0; k + 1 < marks.length; k++) {
+    out.push(g.state.events.slice(marks[k], marks[k + 1]));
+  }
+  return out;
+}
+
+/** The recorded shaft translate for shaft k of one frame's event
+ *  slice: the 'translate' event sitting immediately BEFORE the
+ *  (k+1)-th 'gradient' of the frame (k = 0..4; gradient 0 is the
+ *  backdrop — it carries no translate, so the k-th shaft's translate
+ *  fronts its own gradient). Throws if the structure the renderer
+ *  promises is not there. */
+function shaftTranslate(slice, k) {
+  const grads = [];
+  for (const ev of slice) if (ev.kind === "gradient") grads.push(ev);
+  if (grads.length < CAUSTIC_SHAFTS + 1) {
+    throw new Error(`frame carries only ${grads.length} gradients — the shafts did not issue gradient draws`);
+  }
+  const idx = slice.indexOf(grads[k + 1]);
+  const place = slice[idx - 1];
+  if (place?.kind !== "translate") {
+    throw new Error(`shaft ${k} is not placed by its own translate (found ${JSON.stringify(place)})`);
+  }
+  return place.args[0]; // translate(x, y)
+}
+
+check("AC2: every frame issues the caustic shaft gradient draws, each placed by its own translate", () => {
+  assert(CAUSTIC_SHAFTS >= 2, `test setup: expected several shafts, got ${CAUSTIC_SHAFTS}`);
+  const g = boot(800, 600, ["gradient", "stop", "translate"]);
+  g.marks = [0];
+  g.frameAt(0);
+  g.marks.push(g.state.events.length);
+  for (let f = 1; f <= 5; f++) {
+    g.tick(1, (f - 1) * FRAME_MS);
+    g.marks.push(g.state.events.length);
+  }
+  for (const [f, slice] of framesOf(g).entries()) {
+    const grads = slice.filter((ev) => ev.kind === "gradient").length;
+    const stops = slice.filter((ev) => ev.kind === "stop").length;
+    assert(grads === CAUSTIC_SHAFTS + 1,
+      `frame ${f}: expected 1 backdrop + ${CAUSTIC_SHAFTS} shaft gradients, got ${grads}`);
+    assert(stops === grads * 2,
+      `frame ${f}: every gradient must carry exactly two stops, got ${stops} for ${grads}`);
+    for (let k = 0; k < CAUSTIC_SHAFTS; k++) {
+      const x = shaftTranslate(slice, k); // throws if the structure is off
+      assert(Number.isFinite(x), `frame ${f} shaft ${k}: translate x went non-finite (${x})`);
+    }
+    // The shafts are tinted by the ACTIVE lighting palette (t=0.. is LIGHT_DAY).
+    const shaftStops = slice.filter((ev) => ev.kind === "stop").slice(2);
+    assert(shaftStops.every((ev) => ev.args.color.startsWith(`rgba(${LIGHT_DAY.causticRgb}, `)),
+      `frame ${f}: a shaft gradient stop is not tinted by the active palette (${LIGHT_DAY.name})`);
+  }
+});
+
+check("AC2: the shaft phase advances proportionally to sim time — a 2 x FIXED_DT gap advances exactly twice one step's increment", () => {
+  const g = boot(800, 600, ["gradient", "translate"]);
+  const EPS = 1e-9;
+  const drive = () => {
+    const from = g.state.events.length;
+    g.tick(1, frames.length * FRAME_MS);
+    const slice = g.state.events.slice(from);
+    const xs = [];
+    for (let k = 0; k < CAUSTIC_SHAFTS; k++) xs.push(shaftTranslate(slice, k));
+    frames.push({ t: g.q("FISH_TANK_WORLD.time"), xs });
+  };
+  const frames = [];
+  g.frameAt(0);
+  {
+    const xs = [];
+    for (let k = 0; k < CAUSTIC_SHAFTS; k++) xs.push(shaftTranslate(g.state.events, k));
+    frames.push({ t: 0, xs });
+  }
+  for (let f = 0; f < 200; f++) drive();
+
+  // Every adjacent frame pair moved an integral number of fixed
+  // steps, and the phase increment was LINEAR in that gap: exactly
+  // SWEEP_SPEED x dt for every one-step and every two-step frame.
+  let oneStep = null;
+  let twoStep = null;
+  for (let k = 1; k < frames.length; k++) {
+    const dt = frames[k].t - frames[k - 1].t;
+    if (!(Math.abs(dt - FIXED_DT) <= EPS || Math.abs(dt - 2 * FIXED_DT) <= EPS)) {
+      throw new Error(`frame ${k} moved ${dt}s of sim time — expected whole fixed steps`);
+    }
+    const expected = CAUSTIC_SWEEP_SPEED * dt;
+    for (let s = 0; s < CAUSTIC_SHAFTS; s++) {
+      const d = frames[k].xs[s] - frames[k - 1].xs[s];
+      assert(Math.abs(d - expected) <= EPS,
+        `shaft ${s}: a ${dt}s gap must advance the phase by ${expected}px (SWEEP_SPEED x dt), recorded ${d}px`);
+    }
+    if (Math.abs(dt - FIXED_DT) <= EPS) oneStep = frames[k].xs[0] - frames[k - 1].xs[0];
+    else twoStep = frames[k].xs[0] - frames[k - 1].xs[0];
+  }
+  assert(oneStep !== null && twoStep !== null,
+    "the 200-frame drive must include at least one one-step and one two-step frame");
+  assert(Math.abs(twoStep - 2 * oneStep) <= EPS,
+    `two frames 2 x FIXED_DT apart must advance the phase by exactly twice one step's increment (2 x ${oneStep}px = ${2 * oneStep}px, recorded ${twoStep}px)`);
+});
+
+check("AC2: pausing the sim freezes the shaft phase (the sweep is sim-time driven, not wall-clock driven)", () => {
+  const g = boot(800, 600, ["gradient", "translate"]);
+  g.frameAt(0);
+  g.tick(5, 0);
+  const from = g.state.events.length;
+  g.tick(1, 5 * FRAME_MS);
+  const live = [];
+  for (let k = 0; k < CAUSTIC_SHAFTS; k++) live.push(shaftTranslate(g.state.events.slice(from), k));
+  const tBefore = g.q("FISH_TANK_WORLD.time");
+  for (let i = 0; i < 20; i++) {
+    const f = g.state.events.length;
+    g.frozenFrames(1, 6 * FRAME_MS);
+    const slice = g.state.events.slice(f);
+    for (let k = 0; k < CAUSTIC_SHAFTS; k++) {
+      assert(shaftTranslate(slice, k) === live[k],
+        `frozen frame ${i}: shaft ${k} translate drifted — the phase is not driven by sim time`);
+    }
+  }
+  assert(g.q("FISH_TANK_WORLD.time") === tBefore, "a paused sim must take zero steps");
 });
 
 // ---------- summary ----------
