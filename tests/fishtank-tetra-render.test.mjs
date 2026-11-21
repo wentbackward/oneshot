@@ -10,9 +10,12 @@
 // the REAL bundled <script> from the committed fishtank.html boots
 // in a sandboxed node:vm context with a stubbed counting 2d
 // context; frames are driven through the captured rAF callback.
-// The stub records moveTo/lineTo/arc call sites so the test can
-// COUNT SPINE POINTS, not just raw draw calls. No network, no
-// browser.
+// The stub records each moveTo/lineTo/arc point into the path group
+// opened by the most recent beginPath call, so the test can COUNT
+// DISTINCT SPINE PATHS and the POINTS CARRIED BY EACH — an
+// aggregate point count alone cannot tell TETRA_COUNT genuine
+// 7-point spines apart from one giant 560-point path. No network,
+// no browser.
 //
 // Requires `npm ci` first (like every build-dependent check).
 //
@@ -63,9 +66,19 @@ function makeCountingCtx(state, canvas) {
     createPattern: () => ({}),
     measureText: () => ({ width: 0 }),
   };
+  // Every path-point lands in the group opened by the most recent
+  // beginPath (null before the first one — nothing gets stroked
+  // then anyway, so such stray points carry no visible geometry).
+  target.beginPath = () => {
+    state.drawCalls += 1;
+    const group = [];
+    state.paths.push(group);
+    state.currentPath = group;
+  };
   for (const m of [
     "clearRect", "fillRect", "strokeRect",
-    "beginPath", "closePath", "moveTo", "lineTo", "rect",
+    "closePath",
+    "moveTo", "lineTo", "rect",
     "arc", "ellipse", "quadraticCurveTo", "bezierCurveTo",
     "fill", "stroke", "fillText", "strokeText",
     "save", "restore", "translate", "scale", "rotate", "setTransform",
@@ -74,7 +87,7 @@ function makeCountingCtx(state, canvas) {
     target[m] = (x, y) => {
       state.drawCalls += 1;
       if (m === "moveTo" || m === "lineTo" || m === "arc") {
-        state.points.push([x, y]);
+        state.currentPath?.push([x, y]);
       }
     };
   }
@@ -106,7 +119,7 @@ function makeCanvas(state) {
 
 // Boot the REAL bundled script from the committed fishtank.html.
 function boot(width, height) {
-  const state = { drawCalls: 0, points: [] };
+  const state = { drawCalls: 0, paths: [], currentPath: null };
   const canvas = makeCanvas(state);
   let rafCb = null;
   let rafSeq = 0;
@@ -161,32 +174,34 @@ check("the vm seam exposes TETRA_COUNT and the live world holds exactly that man
 
 // ================================================================
 // Criterion: at least TETRA_COUNT spine path draws per frame —
-// every tetra's articulated spine is a path of at least
-// TETRA_SPINE_SEGMENTS recorded points
+// correlated with beginPath groups, every one of them a path
+// carrying at least TETRA_SPINE_SEGMENTS recorded points (an
+// aggregate point count could not exclude one merged 560-point
+// path standing in for the whole school)
 // ================================================================
-check("every frame draws at least TETRA_COUNT spine paths of TETRA_SPINE_SEGMENTS points each", () => {
+check("every frame draws at least TETRA_COUNT beginPath groups each carrying TETRA_SPINE_SEGMENTS points", () => {
   assert(TETRA_SPINE_SEGMENTS >= 3,
     `test setup: TETRA_SPINE_SEGMENTS must describe a MULTI-segment spine, got ${TETRA_SPINE_SEGMENTS}`);
   const g = boot(800, 600);
+  const tetraCount = g.q("TETRA_COUNT");
   g.frameAt(0); // first frame (dt 0) still paints the tank
   for (let frame = 1; frame <= 10; frame++) {
-    const base = g.state.drawCalls;
-    const basePoints = g.state.points.length;
+    const baseCalls = g.state.drawCalls;
+    const basePath = g.state.paths.length;
     g.tick(1, frame * (1000 / 60));
-    const calls = g.state.drawCalls - base;
-    const points = g.state.points.slice(basePoints);
+    const calls = g.state.drawCalls - baseCalls;
+    const paths = g.state.paths.slice(basePath);
     assert(calls >= 4, `frame ${frame}: tetra spines must be drawn (only ${calls} draw calls beyond water)`);
-    assert(points.length >= 1, `frame ${frame}: spine geometry must be routed through path points`);
-    // Group the frame's points per tetra: every spine contributes at
-    // least TETRA_SPINE_SEGMENTS finite path points per frame.
-    const tetraCount = g.q("TETRA_COUNT");
-    const needed = tetraCount * TETRA_SPINE_SEGMENTS;
-    assert(points.length >= needed,
-      `frame ${frame}: expected ≥ ${needed} spine points (TETRA_COUNT × TETRA_SPINE_SEGMENTS), got ${points.length}`);
-    for (const [x, y] of points) {
-      assert(Number.isFinite(x) && Number.isFinite(y),
-        `frame ${frame}: spine path point went non-finite (${x}, ${y})`);
+    let spinePaths = 0;
+    for (const pts of paths) {
+      for (const [x, y] of pts) {
+        assert(Number.isFinite(x) && Number.isFinite(y),
+          `frame ${frame}: spine path point went non-finite (${x}, ${y})`);
+      }
+      if (pts.length >= TETRA_SPINE_SEGMENTS) spinePaths += 1;
     }
+    assert(spinePaths >= tetraCount,
+      `frame ${frame}: expected ≥ ${tetraCount} distinct spine paths each carrying ≥ ${TETRA_SPINE_SEGMENTS} points, got ${spinePaths} of ${paths.length} beginPath groups (a single merged path cannot pass)`);
   }
 });
 
