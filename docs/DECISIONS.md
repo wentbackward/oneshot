@@ -3650,3 +3650,48 @@ arcade physics).
   behind the school): our pre-merge docstring ("There is no gravel
   layer") was stale once the parallax substrate landed, so the
   renderer header and render() comment state the actual order.
+
+## 2026-11-22 — Ticket #121: drop-food and tap-glass toolbar tools
+
+- **Drop Food and Tap Glass are persistent toolbar MODES** (a canvas
+  click acts once: spawns a pellet / one ring + startle at the
+  cursor), matching the existing place-rock/place-kelp/remove
+  architecture and its click-region guard; the default mode stays
+  place-rock. Alternatives: one-shot action buttons (rejected — a
+  second UI paradigm beside the mode buttons, and "N spawn triggers"
+  then needs a cursor without a mode), or spawn-at-random (rejected —
+  the tools should act WHERE the user points).
+- **Pellet horizontal current REUSES the world's `ambientCurrentX`**
+  (default AMBIENT_CURRENT_X = 40 u/s): the pellet's vx relaxes to
+  the water's own flow over the same drag time scale as the sink
+  speed. A still-water world (`ambientCurrentX: 0`, already a
+  WorldOption for the kelp settle tests) gives a perfectly vertical
+  drift — no new option needed. Alternative rejected: a dedicated
+  PELLET_CURRENT_X constant (duplicate dial for the same water).
+- **Uneaten pellets dissolve on the substrate** (cull once
+  `y + PELLET_RADIUS >= TANK_HEIGHT`): the tank never accumulates
+  flake litter, and the PELLET_MAX cap then bounds LIVE pellets, not
+  a growing graveyard. Alternative rejected: keep settled pellets as
+  removable clutter (adds a removal path the ticket does not ask for).
+- **Tetra→pellet seeking is a direct O(tetras × live pellets) scan
+  inside the fixed step** (worst case 80 × 64 = 5120 hypots ≈
+  negligible at 60 fps), not a spatial-grid query: the grid indexes
+  tetras only, live pellets are capped small, and the scan keeps the
+  "nearest pellet wins, first in-contact tetra eats" claim rule
+  trivially deterministic. Alternative rejected: inserting pellets
+  into the tetra grid (muddies the grid's species contract).
+- **One pellet is ever consumed exactly once by a per-step `dead`
+  claim flag** set by the first in-contact tetra in the fixed
+  iteration order and checked by all later tetras of the SAME step
+  (double-consume within one step is impossible, not just unlikely);
+  dead pellets are compacted in place after the loop (the field
+  stays `readonly`, array identity stable, like rocks/kelp).
+- **Shockwave rings are a capped array** (SHOCKWAVE_MAX_RINGS = 16,
+  each ring lives MAX_RADIUS/SPEED = 0.75 s): rapid taps retire new
+  rings at the cap while the startle still fires — the scare is the
+  tool, the ring is cosmetics. Fade alpha is a pure function of
+  radius (no separate age channel to desynchronize from the sim).
+- **`serializeState()` gains `F:` (pellet) and `S:` (ring) lines**
+  after the predator line, so the fingerprint stays honest for
+  worlds carrying food; a foodless world prints exactly what it
+  always did (all pre-existing suites unaffected).
