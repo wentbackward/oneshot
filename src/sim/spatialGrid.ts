@@ -50,6 +50,23 @@ export class SpatialGrid<T extends Positioned> {
     this.cells = Array.from({ length: this.cols * this.rows }, () => []);
   }
 
+  /** Total number of cells (cols × rows): the denominator of the
+   *  HUD's grid-utilization figure (PRD §4). */
+  get totalCells(): number {
+    return this.cols * this.rows;
+  }
+
+  /** How many cells currently hold at least one item (PRD §4
+   *  telemetry). One scan of the (small) cell array — 25 × 16 for
+   *  the default tank — with no allocation. */
+  countOccupiedCells(): number {
+    let n = 0;
+    for (const cell of this.cells) {
+      if (cell.length > 0) n += 1;
+    }
+    return n;
+  }
+
   /** Drop every item (cell arrays themselves are reused: no
    *  per-step allocation). */
   clear(): void {

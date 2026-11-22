@@ -232,3 +232,11 @@ export const KELP_FISH_RADIUS = 48;
 /** Drag coefficient: point displacement per (fish speed × dt ×
  *  falloff), tank units. */
 export const KELP_FISH_PUSH_GAIN = 2.0;
+
+// ---------- tank save/load (PRD §4) ----------
+
+/** Upper bound on the tetra population a saved layout may request
+ *  (and `World.setTetraCount` honours): large enough to never
+ *  constrain a real tank, small enough to keep a hostile or
+ *  corrupted payload from asking for a million fish. */
+export const SAVE_MAX_TETRA = 2000;

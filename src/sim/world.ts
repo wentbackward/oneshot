@@ -40,6 +40,7 @@ import {
   ROCK_MAX,
   ROCK_PICK_SLACK,
   ROCK_RADIUS,
+  SAVE_MAX_TETRA,
   SHOCKWAVE_MAX_RINGS,
   SHOCKWAVE_RING_MAX_RADIUS,
   SHOCKWAVE_RING_SPEED,
@@ -92,6 +93,14 @@ const SPAWN_CLUSTER_SQUASH = 0.6;
 /** Fresh tetras cruise inside this speed band, tank units/s. */
 const SPAWN_SPEED_MIN = 40;
 const SPAWN_SPEED_MAX = 80;
+
+/** Population-top-up reseed stride: a school grown by
+ *  setTetraCount() past its spawn size draws each cohort from
+ *  `seed + POP_RESEED_STRIDE · (cohort index)`, so the top-up is a
+ *  deterministic function of (seed, current size) — the same
+ *  policy that keeps kelp placement reproducible
+ *  (KELP_SEED_STRIDE). */
+const POP_RESEED_STRIDE = 1_000_003;
 
 /** Alignment is a unit-scale heading average (its named clamp is 1);
  *  applying it at cruise speed turns it into Reynolds' "desired
@@ -237,6 +246,16 @@ export class World {
   time = 0;
   /** Seconds carried over between frames from an incomplete step. */
   acc = 0;
+  /** Total fixed steps taken since construction (telemetry, PRD §4;
+   *  lets a pinned-clock test assert exact step consumption). */
+  steps = 0;
+  /** Lighting-phase shift in simulation seconds (PRD §4 save/load):
+   *  the renderer resolves the palette at `time + offset`, so a
+   *  loaded layout can hold Day/Dusk/Night at a fresh t = 0. The
+   *  offset is a whole phase-table quantity (see
+   *  src/fishtank-storage.ts), keeping every boundary on a step
+   *  boundary. */
+  lightingPhaseOffset = 0;
   /** Numeric PRNG seed this world was built from: a plain number,
    *  not a stateful stream — the mulberry32 stream is (re)created
    *  from it at construction, and same seed ⇒ identical tank. */
@@ -251,8 +270,9 @@ export class World {
   readonly grid: SpatialGrid<Tetra>;
   /** The apex predator (PRD §2, ticket #124): owned by the world,
    *  stepped after the tetras each fixed step. Null when the world
-   *  was built with `predator: false` (solver unit tests). */
-  readonly predator: ApexPredator | null;
+   *  was built without a predator (solver unit tests); save/load
+   *  (PRD §4) may add or remove it via setPredatorPresent(). */
+  predator: ApexPredator | null;
   /** Placed rocks (PRD §3): the dynamic circular obstacles. Fed to
    *  obstacleAvoidance() every step and enforced by a hard contact
    *  projection, so a removed rock leaves NO residual steering.
@@ -296,6 +316,34 @@ export class World {
     this.grid = new SpatialGrid(TANK_WIDTH, TANK_HEIGHT, GRID_CELL_SIZE);
     this.spawn(options.population ?? TETRA_COUNT);
     this.predator = options.predator === false ? null : new ApexPredator();
+    // First grid build (derived state): telemetry (PRD §4) reads
+    // occupancy before the first step, and the HUD never reports a
+    // stale/empty grid for a freshly spawned school.
+    this.rebuildGrid();
+  }
+
+  // ---------- population & predator (PRD §4 save/load) ----------
+
+  /** Grow or trim the tetra pool to exactly n (clamped into
+   *  [0, SAVE_MAX_TETRA]). Trimming splices the TAIL of the fixed
+   *  order; growing appends one deterministic cohort drawn from
+   *  `seed + POP_RESEED_STRIDE · startIndex`, so the same top-up
+   *  on same-seed worlds yields the same school (pinned by
+   *  tests/fishtank-save.test.mjs). Non-finite or fractional n is
+   *  refused (touches nothing). */
+  setTetraCount(n: number): void {
+    if (!Number.isInteger(n) || n < 0) return;
+    const target = Math.min(n, SAVE_MAX_TETRA);
+    if (target < this.agents.length) {
+      this.agents.length = target;
+    } else if (target > this.agents.length) {
+      this.spawnCohort(this.agents.length, target - this.agents.length);
+    }
+  }
+
+  /** Add or remove the apex predator (PRD §4 save/load). */
+  setPredatorPresent(present: boolean): void {
+    this.predator = present ? new ApexPredator() : null;
   }
 
   // ---------- placement tools (PRD §3) ----------
@@ -430,13 +478,21 @@ export class World {
     return null;
   }
 
-  /** Spawn n tetras as one loose cluster at the tank centre: a
-   *  shared base heading (jittered ±SPAWN_HEADING_JITTER) so the
-   *  school is born roughly aligned, with seeded random offsets and
-   *  speeds inside the cluster (uniform disk: the square-root keeps
-   *  the density flat, not rim-heavy). */
+  /** Spawn count tetras as one loose cluster at the tank centre
+   *  from a FRESH seeded stream: a shared base heading (jittered
+   *  ±SPAWN_HEADING_JITTER) so the school is born roughly aligned,
+   *  with seeded random offsets and speeds inside the cluster
+   *  (uniform disk: the square-root keeps the density flat, not
+   *  rim-heavy). */
   private spawn(count: number): void {
-    const rng = mulberry32(this.seed);
+    this.spawnCohort(0, count);
+  }
+
+  /** Append count tetras to the existing school (population
+   *  top-up): same cluster shape as spawn(), drawn from a stream
+   *  reseeded on (seed, startIndex) — deterministic per world. */
+  private spawnCohort(startIndex: number, count: number): void {
+    const rng = mulberry32(this.seed + POP_RESEED_STRIDE * startIndex);
     const baseHeading = rng() * TAU;
     for (let i = 0; i < count; i++) {
       const heading = baseHeading + (rng() * 2 - 1) * SPAWN_HEADING_JITTER;
@@ -509,6 +565,7 @@ export class World {
   step(dt: number): void {
     if (!Number.isFinite(dt) || dt <= 0) return;
     this.time += dt;
+    this.steps += 1;
     this.rebuildGrid();
     for (const t of this.agents) {
       this.neighbours.length = 0;
