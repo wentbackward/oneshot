@@ -4,12 +4,17 @@
 // pacing. The renderer is a pure observer of the tetras; nothing
 // here touches the canvas or the DOM.
 //
-// Species: schooling tetras (PRD §2's first behaviour). Each tetra
-// composes the Reynolds steering forces (separation, alignment,
-// cohesion, boundary avoidance — src/sim/steering.ts), is kept
-// inside the tank by an elastic wall reflection plus a hard clamp,
-// and owns an articulated tail: its phase advances every step at
-// tailFrequency(speed, torque) (src/sim/tail.ts).
+// Species (PRD §2): schooling tetras (the first behaviour) and the
+// apex predator (the third, ticket #124). Each tetra composes the
+// Reynolds steering forces (separation, alignment, cohesion,
+// boundary avoidance — src/sim/steering.ts), is kept inside the
+// tank by an elastic wall reflection plus a hard clamp, and owns an
+// articulated tail: its phase advances every step at
+// tailFrequency(speed, torque) (src/sim/tail.ts). The predator
+// (src/sim/predator.ts) patrols a named waypoint loop, stalks
+// isolated tetras once hunger crosses the threshold, and rests for
+// a fixed window after each feed; the World steps it after the
+// tetras so it always acts on current prey positions.
 //
 // Determinism contract:
 //  - every random draw goes through a seeded mulberry32 stream;
@@ -24,6 +29,8 @@ import {
   FIXED_DT,
   STARTLE_IMPULSE,
   STARTLE_RADIUS,
+  TANK_HEIGHT,
+  TANK_WIDTH,
   TETRA_COUNT,
   TETRA_MAX_SPEED,
   TETRA_MIN_SPEED,
@@ -32,10 +39,12 @@ import { mulberry32 } from "./rng.ts";
 import { tailFrequency } from "./tail.ts";
 import { FISH_MAX_SPEED, alignment, boundaryAvoidance, cohesion, separation } from "./steering.ts";
 import { SpatialGrid, type Positioned } from "./spatialGrid.ts";
+import { ApexPredator } from "./predator.ts";
 
-/** Logical tank extent in tank units (rendering maps it to the viewport). */
-export const TANK_WIDTH = 1600;
-export const TANK_HEIGHT = 1000;
+// The tank extent is defined in constants.ts (leaf modules such as
+// predator.ts need it without an import cycle); both re-exports are
+// kept for the existing importers (tests, render layer).
+export { TANK_WIDTH, TANK_HEIGHT } from "./constants.ts";
 
 /** Spatial grid cell edge in tank units (≈ 25 × 16 cells). */
 const GRID_CELL_SIZE = 64;
@@ -117,8 +126,11 @@ export class World {
   agents: Tetra[] = [];
   /** Neighbor grid (typed Tetra so queries hand back moving bodies
    *  straight into the steering forces), rebuilt every fixed step
-   *  (PRD §1). */
+   *  (PRD §1). The predator's isolation checks reuse it. */
   readonly grid: SpatialGrid<Tetra>;
+  /** The apex predator (PRD §2, ticket #124): owned by the world,
+   *  stepped after the tetras each fixed step. */
+  readonly predator: ApexPredator;
   /** Reused neighbour scratch per step (allocation-free hot path):
    *  steering forces only READ the list, so one shared buffer is
    *  safe across the fixed-order iteration. */
@@ -128,6 +140,7 @@ export class World {
     this.seed = options.seed ?? 1;
     this.grid = new SpatialGrid(TANK_WIDTH, TANK_HEIGHT, GRID_CELL_SIZE);
     this.spawn(options.population ?? TETRA_COUNT);
+    this.predator = new ApexPredator();
   }
 
   /** Spawn n tetras as one loose cluster at the tank centre: a
@@ -250,6 +263,10 @@ export class World {
       t.heading = heading;
       t.phase += TAU * tailFrequency(nx, t.torque) * dt;
     }
+    // The predator acts AFTER the tetras: prey positions are
+    // current, and a capture splice only affects the NEXT step's
+    // tetra pass and grid rebuild.
+    this.predator.step(dt, this);
   }
 
   /** Startle event (PRD §2: the school scatters when the user taps
@@ -287,17 +304,24 @@ export class World {
   }
 
   /** Fixed-precision snapshot of the whole sim state: clock first,
-   *  then one `x,y,vx,vy` line per tetra at 6 decimals. The tail
-   *  state (phase, torque) is excluded deliberately: heading is a
-   *  pure function of (vx, vy) and the tail scalars are deterministic
-   *  functions of the full history, so this fingerprint already
-   *  proves replay identity. Two same-seed worlds hash this
+   *  then one `x,y,vx,vy` line per tetra at 6 decimals, then one
+   *  `P:` line for the predator (state, pose, hunger, route
+   *  progress, rest window, feed count). The tail state (phase,
+   *  torque) is excluded deliberately: heading is a pure function
+   *  of (vx, vy) and the tail scalars are deterministic functions
+   *  of the full history, so this fingerprint already proves replay
+   *  identity — predator included. Two same-seed worlds hash this
    *  byte-identically (determinism proof). */
   serializeState(): string {
     const lines = [this.time.toFixed(6)];
     for (const t of this.agents) {
       lines.push(`${t.x.toFixed(6)},${t.y.toFixed(6)},${t.vx.toFixed(6)},${t.vy.toFixed(6)}`);
     }
+    const p = this.predator;
+    lines.push(
+      `P:${p.state}:${p.x.toFixed(6)},${p.y.toFixed(6)},${p.vx.toFixed(6)},${p.vy.toFixed(6)},` +
+      `${p.hunger.toFixed(6)},${p.waypointIndex},${p.restRemaining},${p.fedCount}`,
+    );
     return lines.join("\n");
   }
 

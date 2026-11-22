@@ -188,8 +188,9 @@ check("serialized state uses fixed 6-decimal precision for every coordinate", ()
   const w = new World({ seed: 55 });
   w.step(FIXED_DT);
   const lines = w.serializeState().split("\n");
-  assert(lines.length === w.agents.length + 1, "clock line + one state line per agent");
-  const agentLines = lines.slice(1); // first line is the clock
+  // Clock line + one state line per agent + one predator line (#124).
+  assert(lines.length === w.agents.length + 2, "clock line + one state line per agent + one predator line");
+  const agentLines = lines.slice(1, 1 + w.agents.length); // first line is the clock
   for (const line of agentLines) {
     const fields = line.split(",");
     assert(fields.length === 4, `agent line must carry x,y,vx,vy, got "${line}"`);
@@ -198,6 +199,22 @@ check("serialized state uses fixed 6-decimal precision for every coordinate", ()
         `coordinate field must be raw fixed-decimal (/-?\\d+\\.\\d{0,6}/), got "${f}"`);
       assert(Number.isFinite(Number(f)), `state must be finite, got "${f}"`);
     }
+  }
+  // The predator line: `P:<state>:x,y,vx,vy,hunger,waypointIndex,restRemaining,fedCount`
+  // — fixed-decimal numerics, a legal state word, integer counters.
+  const predLine = lines[lines.length - 1];
+  assert(predLine.startsWith("P:"), `the last line must be the predator line, got "${predLine}"`);
+  const predFields = predLine.slice(2).split(",");
+  assert(predFields.length === 8, `predator line must carry state + 7 numbers, got "${predLine}"`);
+  const [stateWithX, y, vx, vy, hunger, wpIdx, rest, fed] = predFields;
+  assert(["patrol", "stalk", "rest"].some((s) => stateWithX.startsWith(s + ":")),
+    `predator state must be patrol|stalk|rest, got "${stateWithX}"`);
+  for (const f of [stateWithX.slice(stateWithX.indexOf(":") + 1), y, vx, vy, hunger]) {
+    assert(SERIALIZED_FIELD_RE.test(f), `predator numeric field must be raw fixed-decimal, got "${f}"`);
+    assert(Number.isFinite(Number(f)), `predator state must be finite, got "${f}"`);
+  }
+  for (const f of [wpIdx, rest, fed]) {
+    assert(/^\d+$/.test(f), `predator counter must be a plain integer, got "${f}"`);
   }
 });
 
