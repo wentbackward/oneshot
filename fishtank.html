@@ -23,11 +23,14 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
 </head>
 <body>
 <canvas id="game"></canvas>
-<!-- Placement toolbar: static markup (PRD §3 Place/Remove tools),
-     wired at boot by src/ui/toolbar.ts. The vm suites boot this
-     file with a document stub; every id lookup is null-guarded
-     there, so the static buttons never break a headless boot. -->
+<!-- Tank toolbar: static markup (PRD §3 tools — Drop Food, Tap
+     Glass, Place/Remove), wired at boot by src/ui/toolbar.ts. The
+     vm suites boot this file with a document stub; every id lookup
+     is null-guarded there, so the static buttons never break a
+     headless boot. -->
 <nav id="toolbar" aria-label="tank tools">
+<button id="tool-drop-food" type="button">DROP FOOD</button>
+<button id="tool-tap-glass" type="button">TAP GLASS</button>
 <button id="tool-place-rock" class="selected" type="button">PLACE ROCK</button>
 <button id="tool-place-kelp" type="button">PLACE KELP</button>
 <button id="tool-remove" type="button">REMOVE</button>
@@ -63,6 +66,16 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
   var PREDATOR_CAPTURE_RADIUS = 28;
   var PREDATOR_REST_STEPS = 240;
   var PREDATOR_WAYPOINT_TOLERANCE = 48;
+  var PELLET_MAX = 64;
+  var PELLET_RADIUS = 5;
+  var PELLET_GRAVITY = 120;
+  var PELLET_DRAG = 2;
+  var PELLET_TERMINAL_V = PELLET_GRAVITY / PELLET_DRAG;
+  var PELLET_SENSE_RADIUS = 120;
+  var PELLET_EAT_RADIUS = 16;
+  var SHOCKWAVE_RING_SPEED = 400;
+  var SHOCKWAVE_RING_MAX_RADIUS = 300;
+  var SHOCKWAVE_MAX_RINGS = 16;
   var ROCK_MAX = 24;
   var KELP_MAX = 32;
   var ROCK_RADIUS = 40;
@@ -214,6 +227,14 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
     }
   };
 
+  // src/sim/pellets.ts
+  function stepPellet(p, dt, currentX) {
+    p.vy += (PELLET_GRAVITY - PELLET_DRAG * p.vy) * dt;
+    p.vx += (currentX - PELLET_DRAG * p.vx) * dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+  }
+
   // src/sim/tail.ts
   var TAIL_FREQ_SPEED_GAIN = 0.04;
   var TAIL_FREQ_TORQUE_GAIN = 0.25;
@@ -228,6 +249,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
   var MAX_COHESION_FORCE = 60;
   var MAX_BOUNDARY_AVOIDANCE_FORCE = MAX_STEERING_FORCE;
   var MAX_OBSTACLE_AVOIDANCE_FORCE = 100;
+  var MAX_SEEK_FORCE = 100;
   var NEIGHBOUR_RADIUS = 64;
   var COHESION_GAIN = 0.35;
   var BOUNDARY_MARGIN = 120;
@@ -308,6 +330,14 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       sum.y += dir.y * w;
     }
     return clampLength(sum, MAX_OBSTACLE_AVOIDANCE_FORCE);
+  }
+  function seek(self, target) {
+    const dx = target.x - self.x;
+    const dy = target.y - self.y;
+    const d = Math.hypot(dx, dy);
+    if (d === 0) return zero();
+    const desired = { x: dx / d * FISH_MAX_SPEED, y: dy / d * FISH_MAX_SPEED };
+    return clampLength({ x: desired.x - self.vx, y: desired.y - self.vy }, MAX_SEEK_FORCE);
   }
 
   // src/sim/spatialGrid.ts
@@ -638,6 +668,14 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
     /** Placed kelp strands (PRD §3): verlet chains anchored at the
      *  substrate, capped at KELP_MAX by placeKelp(). */
     kelp = [];
+    /** Live (uneaten, unsettled) dropped pellets (PRD §3): capped at
+     *  PELLET_MAX by dropFood(), stepped by the pure stepPellet()
+     *  integrator, consumed by the nearest in-contact tetra. */
+    pellets = [];
+    /** Live tap-glass shockwave rings (PRD §3): capped at
+     *  SHOCKWAVE_MAX_RINGS by tapGlass(), retired by step() once a
+     *  ring reaches SHOCKWAVE_RING_MAX_RADIUS. */
+    shockwaves = [];
     /** Horizontal ambient flow (tank units/s²) driving the kelp. */
     ambientCurrentX;
     /** Reused neighbour scratch per step (allocation-free hot path):
@@ -663,6 +701,37 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       this.predator = options.predator === false ? null : new ApexPredator();
     }
     // ---------- placement tools (PRD §3) ----------
+    /** Drop a food pellet at (x, y): spawned at rest — the water
+     *  does the rest (see stepPellet). Returns the pellet, or null
+     *  when the tank is at the PELLET_MAX cap or the coordinates are
+     *  non-finite (a rejected drop touches nothing). Coordinates are
+     *  clamped fully inside the tank, same policy as placeRock(). */
+    dropFood(x, y) {
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+      if (this.pellets.length >= PELLET_MAX) return null;
+      const pellet = {
+        x: clampX(x),
+        y: clampY(y),
+        vx: 0,
+        vy: 0,
+        dead: false
+      };
+      this.pellets.push(pellet);
+      return pellet;
+    }
+    /** Tap the glass at (x, y): spawn the expanding shockwave ring
+     *  there (capped at SHOCKWAVE_MAX_RINGS — at the cap a NEW ring
+     *  is refused, but the scare itself is never refused) and startle
+     *  the school at the cursor. Returns the number of startled
+     *  tetras (the startleAt() report); non-finite coordinates are
+     *  rejected — a no-op reporting 0, touching nothing. */
+    tapGlass(x, y) {
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return 0;
+      if (this.shockwaves.length < SHOCKWAVE_MAX_RINGS) {
+        this.shockwaves.push({ x: clampX(x), y: clampY(y), radius: 0 });
+      }
+      return this.startleAt(x, y);
+    }
     /** Place a rock at (x, y): a circle of ROCK_RADIUS clamped fully
      *  inside the tank. Returns the rock, or null when the tank is
      *  at the ROCK_MAX cap or the coordinates are non-finite (a
@@ -836,8 +905,31 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
         const coh = cohesion(t, this.neighbours);
         const bou = boundaryAvoidance(t, TANK_WIDTH, TANK_HEIGHT);
         const obs = obstacleAvoidance(t, this.rocks);
-        const ax = sep.x + ali.x * ALIGNMENT_CRUISE_SPEED + coh.x + bou.x + obs.x;
-        const ay = sep.y + ali.y * ALIGNMENT_CRUISE_SPEED + coh.y + bou.y + obs.y;
+        let foodX = 0;
+        let foodY = 0;
+        if (this.pellets.length > 0) {
+          let nearest = null;
+          let nearestD = Infinity;
+          for (const p of this.pellets) {
+            if (p.dead) continue;
+            const d = Math.hypot(p.x - t.x, p.y - t.y);
+            if (d <= PELLET_SENSE_RADIUS && d < nearestD) {
+              nearestD = d;
+              nearest = p;
+            }
+          }
+          if (nearest !== null) {
+            if (nearestD <= PELLET_EAT_RADIUS) {
+              nearest.dead = true;
+            } else {
+              const f = seek(t, nearest);
+              foodX = f.x;
+              foodY = f.y;
+            }
+          }
+        }
+        const ax = sep.x + ali.x * ALIGNMENT_CRUISE_SPEED + coh.x + bou.x + obs.x + foodX;
+        const ay = sep.y + ali.y * ALIGNMENT_CRUISE_SPEED + coh.y + bou.y + obs.y + foodY;
         let vx = t.vx + ax * dt;
         let vy = t.vy + ay * dt;
         const speed = Math.hypot(vx, vy);
@@ -933,6 +1025,38 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
         t.vy = vy;
         t.heading = heading;
         t.phase += TAU * tailFrequency(nx, t.torque) * dt;
+      }
+      if (this.pellets.length > 0) {
+        for (const p of this.pellets) {
+          if (p.dead) continue;
+          stepPellet(p, dt, this.ambientCurrentX);
+          if (p.x < 0) {
+            p.x = 0;
+            if (p.vx < 0) p.vx = 0;
+          } else if (p.x > TANK_WIDTH) {
+            p.x = TANK_WIDTH;
+            if (p.vx > 0) p.vx = 0;
+          }
+        }
+        if (this.pellets.some((p) => p.dead || p.y + PELLET_RADIUS >= TANK_HEIGHT)) {
+          const alive = [];
+          for (const p of this.pellets) {
+            if (!p.dead && p.y + PELLET_RADIUS < TANK_HEIGHT) alive.push(p);
+          }
+          this.pellets.length = 0;
+          for (const p of alive) this.pellets.push(p);
+        }
+      }
+      if (this.shockwaves.length > 0) {
+        for (const s of this.shockwaves) s.radius += SHOCKWAVE_RING_SPEED * dt;
+        if (this.shockwaves.some((s) => s.radius >= SHOCKWAVE_RING_MAX_RADIUS)) {
+          const alive = [];
+          for (const s of this.shockwaves) {
+            if (s.radius < SHOCKWAVE_RING_MAX_RADIUS) alive.push(s);
+          }
+          this.shockwaves.length = 0;
+          for (const s of alive) this.shockwaves.push(s);
+        }
       }
       for (const strand of this.kelp) {
         strand.step(dt, this.ambientCurrentX, this.agents);
@@ -1092,8 +1216,10 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
      *  then one `x,y,vx,vy` line per tetra at 6 decimals, then one
      *  `P:` line for the predator (state, pose, hunger, route
      *  progress, rest window, feed count — the line is absent when
-     *  the world was built without a predator (unit-test worlds).
-     *  The tail state (phase,
+     *  the world was built without a predator (unit-test worlds),
+     *  then one `F:` line per live pellet (x, y, vx, vy) and one
+     *  `S:` line per shockwave ring (x, y, radius). The tail state
+     *  (phase,
      *  torque) is excluded deliberately: heading is a pure function
      *  of (vx, vy) and the tail scalars are deterministic functions
      *  of the full history, so this fingerprint already proves replay
@@ -1109,6 +1235,12 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
         lines.push(
           `P:${p.state}:${p.x.toFixed(6)},${p.y.toFixed(6)},${p.vx.toFixed(6)},${p.vy.toFixed(6)},${p.hunger.toFixed(6)},${p.waypointIndex},${p.restRemaining},${p.fedCount}`
         );
+      }
+      for (const f of this.pellets) {
+        lines.push(`F:${f.x.toFixed(6)},${f.y.toFixed(6)},${f.vx.toFixed(6)},${f.vy.toFixed(6)}`);
+      }
+      for (const s of this.shockwaves) {
+        lines.push(`S:${s.x.toFixed(6)},${s.y.toFixed(6)},${s.radius.toFixed(6)}`);
       }
       return lines.join("\n");
     }
@@ -1506,6 +1638,42 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
     }
   };
 
+  // src/render/food.ts
+  var PELLET_FILL = "#d9a441";
+  var PELLET_EDGE = "rgba(90, 60, 20, 0.55)";
+  var RING_RGB = "210, 235, 255";
+  var RING_WIDTH = 3;
+  function drawPellets(ctx, width, height, pellets) {
+    if (pellets.length === 0) return;
+    const sx = width / TANK_WIDTH;
+    const sy = height / TANK_HEIGHT;
+    ctx.strokeStyle = PELLET_EDGE;
+    ctx.lineWidth = 1;
+    for (const p of pellets) {
+      const rx = Math.max(1.5, PELLET_RADIUS * sx);
+      const ry = Math.max(1.5, PELLET_RADIUS * sy);
+      ctx.beginPath();
+      ctx.ellipse(p.x * sx, p.y * sy, rx, ry, 0, 0, Math.PI * 2);
+      ctx.fillStyle = PELLET_FILL;
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+  function drawShockwaves(ctx, width, height, shockwaves) {
+    if (shockwaves.length === 0) return;
+    const sx = width / TANK_WIDTH;
+    const sy = height / TANK_HEIGHT;
+    ctx.lineWidth = RING_WIDTH;
+    for (const s of shockwaves) {
+      const fade = 1 - s.radius / SHOCKWAVE_RING_MAX_RADIUS;
+      if (fade <= 0) continue;
+      ctx.beginPath();
+      ctx.ellipse(s.x * sx, s.y * sy, s.radius * sx, s.radius * sy, 0, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(${RING_RGB}, ${fade.toFixed(3)})`;
+      ctx.stroke();
+    }
+  }
+
   // src/render/renderer.ts
   var Renderer = class {
     /** Per-instance tetra colour cache (src/render/tetras.ts builds
@@ -1533,7 +1701,9 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       drawKelp(ctx, width, height, world.kelp);
       drawRocks(ctx, width, height, world.rocks);
       drawTetras(ctx, width, height, world.agents, this.tetraColours);
+      drawPellets(ctx, width, height, world.pellets);
       this.bubbles.paint(ctx, width, height, world.time);
+      drawShockwaves(ctx, width, height, world.shockwaves);
     }
   };
 
@@ -1587,6 +1757,8 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
 
   // src/ui/toolbar.ts
   var TOOL_BUTTON_IDS = {
+    "drop-food": "tool-drop-food",
+    "tap-glass": "tool-tap-glass",
     "place-rock": "tool-place-rock",
     "place-kelp": "tool-place-kelp",
     "remove": "tool-remove"
@@ -1644,11 +1816,12 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       this.syncSelection();
     }
     /** A canvas click in the active mode: viewport px → tank units
-     *  → the world's pure placement/removal API. Returns the placed
-     *  or removed object, or null (out-of-view click, cap reached,
-     *  open water). Never throws on odd input. (Clicks under the
-     *  toolbar's on-screen rect are dropped BEFORE reaching this —
-     *  see the click-region guard in attach().) */
+     *  → the world's pure tool API. Returns the placed/removed
+     *  object or the spawned pellet, the startled count for a glass
+     *  tap, or null (out-of-view click, cap reached, open water).
+     *  Never throws on odd input. (Clicks under the toolbar's
+     *  on-screen rect are dropped BEFORE reaching this — see the
+     *  click-region guard in attach().) */
     handleClientClick(px, py) {
       if (!Number.isFinite(px) || !Number.isFinite(py)) return null;
       const vp = this.viewport();
@@ -1656,6 +1829,10 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       const tx = px / vp.width * TANK_WIDTH;
       const ty = py / vp.height * TANK_HEIGHT;
       switch (this.mode) {
+        case "drop-food":
+          return this.world.dropFood(tx, ty);
+        case "tap-glass":
+          return this.world.tapGlass(tx, ty);
         case "place-rock":
           return this.world.placeRock(tx, ty);
         case "place-kelp":
@@ -1726,6 +1903,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
     seam.ROCK_RADIUS = ROCK_RADIUS;
     seam.ROCK_COLLIDE_PAD = ROCK_COLLIDE_PAD;
     seam.KELP_MAX = KELP_MAX;
+    seam.PELLET_MAX = PELLET_MAX;
   }
   if (typeof window !== "undefined" && typeof document !== "undefined") {
     initFishtank(window, document);

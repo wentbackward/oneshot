@@ -1,27 +1,36 @@
 // ================================================================
-// Tank toolbar (ui, PRD §3): the Place/Remove modes for the
-// placement tools — "place rock", "place kelp", "remove". Owns
-// the MODE and translates canvas clicks into the pure sim API on
-// the World; it owns no tank state itself, so it can be driven
-// headless (node:vm) exactly like the real DOM wiring.
+// Tank toolbar (ui, PRD §3): the five tools — "drop food", "tap
+// glass", "place rock", "place kelp", "remove". Owns the MODE and
+// translates canvas clicks into the pure sim API on the World;
+// it owns no tank state itself, so it can be driven headless
+// (node:vm) exactly like the real DOM wiring.
 //
 // DOM contract: the toolbar buttons are STATIC page markup with
-// ids tool-place-rock / tool-place-kelp / tool-remove (the build
-// template owns them). attach() finds them by id and wires their
-// click listeners — every lookup is null-guarded, so a document
-// that lacks any of them (the node:vm stubs) yields a fully
-// functional headless toolbar instead of a boot crash.
+// ids tool-drop-food / tool-tap-glass / tool-place-rock /
+// tool-place-kelp / tool-remove (the build template owns them).
+// attach() finds them by id and wires their click listeners —
+// every lookup is null-guarded, so a document that lacks any of
+// them (the node:vm stubs) yields a fully functional headless
+// toolbar instead of a boot crash.
 // ================================================================
 
 import { TANK_HEIGHT, TANK_WIDTH, type Rock, type World } from "../sim/world.ts";
 import type { KelpStrand } from "../sim/kelp.ts";
+import type { Pellet } from "../sim/pellets.ts";
 
-/** The three toolbar modes. */
-export type ToolMode = "place-rock" | "place-kelp" | "remove";
+/** The five toolbar modes. */
+export type ToolMode =
+  | "drop-food"
+  | "tap-glass"
+  | "place-rock"
+  | "place-kelp"
+  | "remove";
 
 /** Button id per mode (must match the build template's static
  *  markup). */
 export const TOOL_BUTTON_IDS: Record<ToolMode, string> = {
+  "drop-food": "tool-drop-food",
+  "tap-glass": "tool-tap-glass",
   "place-rock": "tool-place-rock",
   "place-kelp": "tool-place-kelp",
   "remove": "tool-remove",
@@ -103,12 +112,16 @@ export class Toolbar {
   }
 
   /** A canvas click in the active mode: viewport px → tank units
-   *  → the world's pure placement/removal API. Returns the placed
-   *  or removed object, or null (out-of-view click, cap reached,
-   *  open water). Never throws on odd input. (Clicks under the
-   *  toolbar's on-screen rect are dropped BEFORE reaching this —
-   *  see the click-region guard in attach().) */
-  handleClientClick(px: number, py: number): Rock | KelpStrand | null {
+   *  → the world's pure tool API. Returns the placed/removed
+   *  object or the spawned pellet, the startled count for a glass
+   *  tap, or null (out-of-view click, cap reached, open water).
+   *  Never throws on odd input. (Clicks under the toolbar's
+   *  on-screen rect are dropped BEFORE reaching this — see the
+   *  click-region guard in attach().) */
+  handleClientClick(
+    px: number,
+    py: number,
+  ): Rock | KelpStrand | Pellet | number | null {
     if (!Number.isFinite(px) || !Number.isFinite(py)) return null;
     const vp = this.viewport();
     if (!(vp.width > 0) || !(vp.height > 0)) return null;
@@ -117,6 +130,10 @@ export class Toolbar {
     const tx = (px / vp.width) * TANK_WIDTH;
     const ty = (py / vp.height) * TANK_HEIGHT;
     switch (this.mode) {
+      case "drop-food":
+        return this.world.dropFood(tx, ty);
+      case "tap-glass":
+        return this.world.tapGlass(tx, ty);
       case "place-rock":
         return this.world.placeRock(tx, ty);
       case "place-kelp":

@@ -72,11 +72,14 @@ ${STYLE}
 </head>
 <body>
 <canvas id="game"></canvas>
-<!-- Placement toolbar: static markup (PRD §3 Place/Remove tools),
-     wired at boot by src/ui/toolbar.ts. The vm suites boot this
-     file with a document stub; every id lookup is null-guarded
-     there, so the static buttons never break a headless boot. -->
+<!-- Tank toolbar: static markup (PRD §3 tools — Drop Food, Tap
+     Glass, Place/Remove), wired at boot by src/ui/toolbar.ts. The
+     vm suites boot this file with a document stub; every id lookup
+     is null-guarded there, so the static buttons never break a
+     headless boot. -->
 <nav id="toolbar" aria-label="tank tools">
+<button id="tool-drop-food" type="button">DROP FOOD</button>
+<button id="tool-tap-glass" type="button">TAP GLASS</button>
 <button id="tool-place-rock" class="selected" type="button">PLACE ROCK</button>
 <button id="tool-place-kelp" type="button">PLACE KELP</button>
 <button id="tool-remove" type="button">REMOVE</button>

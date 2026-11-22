@@ -32,10 +32,17 @@ import {
   KELP_PICK_BAND,
   KELP_PICK_SLACK,
   KELP_SEED_STRIDE,
+  PELLET_EAT_RADIUS,
+  PELLET_MAX,
+  PELLET_RADIUS,
+  PELLET_SENSE_RADIUS,
   ROCK_COLLIDE_PAD,
   ROCK_MAX,
   ROCK_PICK_SLACK,
   ROCK_RADIUS,
+  SHOCKWAVE_MAX_RINGS,
+  SHOCKWAVE_RING_MAX_RADIUS,
+  SHOCKWAVE_RING_SPEED,
   STARTLE_IMPULSE,
   STARTLE_RADIUS,
   TANK_HEIGHT,
@@ -45,6 +52,7 @@ import {
   TETRA_MIN_SPEED,
 } from "./constants.ts";
 import { KelpStrand } from "./kelp.ts";
+import { stepPellet, type Pellet, type Shockwave } from "./pellets.ts";
 import { mulberry32 } from "./rng.ts";
 import { tailFrequency } from "./tail.ts";
 import {
@@ -54,6 +62,7 @@ import {
   cohesion,
   obstacleAvoidance,
   separation,
+  seek,
 } from "./steering.ts";
 import { SpatialGrid, type Positioned } from "./spatialGrid.ts";
 import { ApexPredator } from "./predator.ts";
@@ -127,6 +136,15 @@ export interface Rock {
   x: number;
   y: number;
   r: number;
+}
+
+/** A live pellet: the pure Pellet plus the per-step claim flag the
+ *  tetra pass sets when an in-contact tetra eats it (checked by
+ *  LATER tetras in the same fixed step, so one pellet is ever
+ *  consumed exactly once). Cleared with the pellet — it is never
+ *  a persisted trait. */
+interface LivePellet extends Pellet {
+  dead: boolean;
 }
 
 /** World construction options. */
@@ -238,6 +256,14 @@ export class World {
   /** Placed kelp strands (PRD §3): verlet chains anchored at the
    *  substrate, capped at KELP_MAX by placeKelp(). */
   readonly kelp: KelpStrand[] = [];
+  /** Live (uneaten, unsettled) dropped pellets (PRD §3): capped at
+   *  PELLET_MAX by dropFood(), stepped by the pure stepPellet()
+   *  integrator, consumed by the nearest in-contact tetra. */
+  readonly pellets: LivePellet[] = [];
+  /** Live tap-glass shockwave rings (PRD §3): capped at
+   *  SHOCKWAVE_MAX_RINGS by tapGlass(), retired by step() once a
+   *  ring reaches SHOCKWAVE_RING_MAX_RADIUS. */
+  readonly shockwaves: Shockwave[] = [];
   /** Horizontal ambient flow (tank units/s²) driving the kelp. */
   readonly ambientCurrentX: number;
   /** Reused neighbour scratch per step (allocation-free hot path):
@@ -265,6 +291,39 @@ export class World {
   }
 
   // ---------- placement tools (PRD §3) ----------
+
+  /** Drop a food pellet at (x, y): spawned at rest — the water
+   *  does the rest (see stepPellet). Returns the pellet, or null
+   *  when the tank is at the PELLET_MAX cap or the coordinates are
+   *  non-finite (a rejected drop touches nothing). Coordinates are
+   *  clamped fully inside the tank, same policy as placeRock(). */
+  dropFood(x: number, y: number): Pellet | null {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    if (this.pellets.length >= PELLET_MAX) return null;
+    const pellet: LivePellet = {
+      x: clampX(x),
+      y: clampY(y),
+      vx: 0,
+      vy: 0,
+      dead: false,
+    };
+    this.pellets.push(pellet);
+    return pellet;
+  }
+
+  /** Tap the glass at (x, y): spawn the expanding shockwave ring
+   *  there (capped at SHOCKWAVE_MAX_RINGS — at the cap a NEW ring
+   *  is refused, but the scare itself is never refused) and startle
+   *  the school at the cursor. Returns the number of startled
+   *  tetras (the startleAt() report); non-finite coordinates are
+   *  rejected — a no-op reporting 0, touching nothing. */
+  tapGlass(x: number, y: number): number {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return 0;
+    if (this.shockwaves.length < SHOCKWAVE_MAX_RINGS) {
+      this.shockwaves.push({ x: clampX(x), y: clampY(y), radius: 0 });
+    }
+    return this.startleAt(x, y);
+  }
 
   /** Place a rock at (x, y): a circle of ROCK_RADIUS clamped fully
    *  inside the tank. Returns the rock, or null when the tank is
@@ -448,10 +507,42 @@ export class World {
       const coh = cohesion(t, this.neighbours);
       const bou = boundaryAvoidance(t, TANK_WIDTH, TANK_HEIGHT);
       const obs = obstacleAvoidance(t, this.rocks);
+      // Food seeking (PRD §3): the NEAREST live pellet inside
+      // PELLET_SENSE_RADIUS steers the tetra on it via Reynolds
+      // seek(); inside PELLET_EAT_RADIUS the pellet is consumed
+      // INSTANTLY — the fixed iteration order makes the first
+      // in-contact tetra the sole claimant (later tetras see the
+      // dead flag and pass), so one pellet is ever eaten exactly
+      // once. A pellet outside the sense radius contributes nothing
+      // at all (byte-identical trajectories — pinned by
+      // tests/fishtank-pellets.test.mjs).
+      let foodX = 0;
+      let foodY = 0;
+      if (this.pellets.length > 0) {
+        let nearest: LivePellet | null = null;
+        let nearestD = Infinity;
+        for (const p of this.pellets) {
+          if (p.dead) continue;
+          const d = Math.hypot(p.x - t.x, p.y - t.y);
+          if (d <= PELLET_SENSE_RADIUS && d < nearestD) {
+            nearestD = d;
+            nearest = p;
+          }
+        }
+        if (nearest !== null) {
+          if (nearestD <= PELLET_EAT_RADIUS) {
+            nearest.dead = true;
+          } else {
+            const f = seek(t, nearest);
+            foodX = f.x;
+            foodY = f.y;
+          }
+        }
+      }
       const ax =
-        sep.x + ali.x * ALIGNMENT_CRUISE_SPEED + coh.x + bou.x + obs.x;
+        sep.x + ali.x * ALIGNMENT_CRUISE_SPEED + coh.x + bou.x + obs.x + foodX;
       const ay =
-        sep.y + ali.y * ALIGNMENT_CRUISE_SPEED + coh.y + bou.y + obs.y;
+        sep.y + ali.y * ALIGNMENT_CRUISE_SPEED + coh.y + bou.y + obs.y + foodY;
       let vx = t.vx + ax * dt;
       let vy = t.vy + ay * dt;
       const speed = Math.hypot(vx, vy);
@@ -602,6 +693,42 @@ export class World {
       t.vy = vy;
       t.heading = heading;
       t.phase += TAU * tailFrequency(nx, t.torque) * dt;
+    }
+    // Dropped food (PRD §3): the survivors (not claimed this step)
+    // integrate under drag + the ambient horizontal current; wall-
+    // contained in x, culled once eaten or settled onto the substrate
+    // (uneaten food dissolves — the tank never accumulates flakes).
+    if (this.pellets.length > 0) {
+      for (const p of this.pellets) {
+        if (p.dead) continue;
+        stepPellet(p, dt, this.ambientCurrentX);
+        if (p.x < 0) { p.x = 0; if (p.vx < 0) p.vx = 0; }
+        else if (p.x > TANK_WIDTH) { p.x = TANK_WIDTH; if (p.vx > 0) p.vx = 0; }
+      }
+      if (this.pellets.some((p) => p.dead || p.y + PELLET_RADIUS >= TANK_HEIGHT)) {
+        // Compacted IN PLACE (the field is readonly: stable array
+        // identity, same contract as rocks/kelp), order preserved.
+        const alive: LivePellet[] = [];
+        for (const p of this.pellets) {
+          if (!p.dead && p.y + PELLET_RADIUS < TANK_HEIGHT) alive.push(p);
+        }
+        this.pellets.length = 0;
+        for (const p of alive) this.pellets.push(p);
+      }
+    }
+    // Tap-glass rings (PRD §3): every live ring expands at the named
+    // rate; a ring that reaches its full radius retires (the render
+    // layer fades each ring as a pure function of its radius).
+    if (this.shockwaves.length > 0) {
+      for (const s of this.shockwaves) s.radius += SHOCKWAVE_RING_SPEED * dt;
+      if (this.shockwaves.some((s) => s.radius >= SHOCKWAVE_RING_MAX_RADIUS)) {
+        const alive: Shockwave[] = [];
+        for (const s of this.shockwaves) {
+          if (s.radius < SHOCKWAVE_RING_MAX_RADIUS) alive.push(s);
+        }
+        this.shockwaves.length = 0;
+        for (const s of alive) this.shockwaves.push(s);
+      }
     }
     // Kelp reacts to this step's fish positions (fixed order keeps
     // the drag deterministic) and to the ambient current.
@@ -782,8 +909,10 @@ export class World {
    *  then one `x,y,vx,vy` line per tetra at 6 decimals, then one
    *  `P:` line for the predator (state, pose, hunger, route
    *  progress, rest window, feed count — the line is absent when
-   *  the world was built without a predator (unit-test worlds).
-   *  The tail state (phase,
+   *  the world was built without a predator (unit-test worlds),
+   *  then one `F:` line per live pellet (x, y, vx, vy) and one
+   *  `S:` line per shockwave ring (x, y, radius). The tail state
+   *  (phase,
    *  torque) is excluded deliberately: heading is a pure function
    *  of (vx, vy) and the tail scalars are deterministic functions
    *  of the full history, so this fingerprint already proves replay
@@ -800,6 +929,12 @@ export class World {
         `P:${p.state}:${p.x.toFixed(6)},${p.y.toFixed(6)},${p.vx.toFixed(6)},${p.vy.toFixed(6)},` +
         `${p.hunger.toFixed(6)},${p.waypointIndex},${p.restRemaining},${p.fedCount}`,
       );
+    }
+    for (const f of this.pellets) {
+      lines.push(`F:${f.x.toFixed(6)},${f.y.toFixed(6)},${f.vx.toFixed(6)},${f.vy.toFixed(6)}`);
+    }
+    for (const s of this.shockwaves) {
+      lines.push(`S:${s.x.toFixed(6)},${s.y.toFixed(6)},${s.radius.toFixed(6)}`);
     }
     return lines.join("\n");
   }
