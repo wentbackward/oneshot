@@ -46,6 +46,20 @@ const GRAVEL_FILLS = ["#31506b", "#3c5f7d", "#466a8c", "#2b455c"];
 const ROCK_FILL = "#22384c";
 const KELP_STROKE = "rgba(38, 104, 74, 0.85)";
 
+/** Rad/s of the kelp idle sway. */
+const KELP_SWAY_SPEED = 0.8;
+
+/** Peak lateral sway of a kelp blade's mid-section, px. */
+const KELP_SWAY_AMP = 6;
+
+/** Tip multiplier over the mid-section sway — the blade bends
+ *  more at its free end. */
+const KELP_TIP_AMP = 1.6;
+
+/** How deep a rock rests in the bed: fraction of its ry sunk
+ *  below the floor line. */
+const ROCK_RY_RATIO = 0.5;
+
 /** Horizontal tile copies for the seamless double: every element
  *  is painted at x and x - tile (multiply the table entry by the
  *  tile width). Module-level on purpose — the per-frame paint must
@@ -138,7 +152,7 @@ export class Substrate {
     ctx.save();
     ctx.translate(off, 0);
     for (const r of this.rocks) {
-      const y = height - r.ry * 0.5;
+      const y = height - r.ry * ROCK_RY_RATIO;
       for (const copy of TILE_OFFSETS) {
         const x = r.u * tile + copy * tile;
         ctx.beginPath();
@@ -154,10 +168,10 @@ export class Substrate {
       const topY = height - height * k.h;
       for (const copy of TILE_OFFSETS) {
         const x = baseX + copy * tile;
-        const sway = Math.sin(t * 0.8 + k.phase) * 6;
+        const sway = Math.sin(t * KELP_SWAY_SPEED + k.phase) * KELP_SWAY_AMP;
         ctx.beginPath();
         ctx.moveTo(x, height);
-        ctx.quadraticCurveTo(x + sway, (height + topY) / 2, x + sway * 1.6, topY);
+        ctx.quadraticCurveTo(x + sway, (height + topY) / 2, x + sway * KELP_TIP_AMP, topY);
         ctx.stroke();
       }
     }

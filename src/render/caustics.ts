@@ -44,6 +44,10 @@ export const CAUSTIC_WRAP_FADE = 0.25;
 /** Rad/s of the per-shaft alpha pulse (the breathing of the light). */
 const CAUSTIC_PULSE_SPEED = 1.5;
 
+/** Per-shaft stagger of the pulse phase, radians — keeps the
+ *  shafts' breathing out of phase with its neighbours. */
+const CAUSTIC_PULSE_PHASE_STEP = 2.6;
+
 /** Half-width of a shaft at the surface, fraction of tank width. */
 const CAUSTIC_TOP_HALF_WIDTH = 0.03;
 
@@ -80,7 +84,7 @@ export function drawCausticShafts(
       distToWrap >= 1 ? 1 : distToWrap <= 0 ? 0 : distToWrap * distToWrap * (3 - 2 * distToWrap);
     const alpha =
       wrapFade *
-      (palette.causticBaseAlpha + palette.causticPulseAlpha * Math.sin(t * CAUSTIC_PULSE_SPEED + i * 2.6));
+      (palette.causticBaseAlpha + palette.causticPulseAlpha * Math.sin(t * CAUSTIC_PULSE_SPEED + i * CAUSTIC_PULSE_PHASE_STEP));
     // Translate FIRST, then build the gradient: the draw-recording
     // test locates each shaft's phase as the translate sitting
     // immediately before that shaft's gradient.

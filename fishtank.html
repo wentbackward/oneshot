@@ -767,6 +767,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
   var CAUSTIC_SWEEP_SPAN = 120;
   var CAUSTIC_WRAP_FADE = 0.25;
   var CAUSTIC_PULSE_SPEED = 1.5;
+  var CAUSTIC_PULSE_PHASE_STEP = 2.6;
   var CAUSTIC_TOP_HALF_WIDTH = 0.03;
   var CAUSTIC_BOTTOM_HALF_WIDTH = 0.09;
   var CAUSTIC_LEAN = 0.1;
@@ -779,7 +780,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       const sway = phase - CAUSTIC_SWEEP_SPAN / 2;
       const distToWrap = Math.min(phase, CAUSTIC_SWEEP_SPAN - phase) / (CAUSTIC_SWEEP_SPAN * CAUSTIC_WRAP_FADE);
       const wrapFade = distToWrap >= 1 ? 1 : distToWrap <= 0 ? 0 : distToWrap * distToWrap * (3 - 2 * distToWrap);
-      const alpha = wrapFade * (palette.causticBaseAlpha + palette.causticPulseAlpha * Math.sin(t * CAUSTIC_PULSE_SPEED + i * 2.6));
+      const alpha = wrapFade * (palette.causticBaseAlpha + palette.causticPulseAlpha * Math.sin(t * CAUSTIC_PULSE_SPEED + i * CAUSTIC_PULSE_PHASE_STEP));
       ctx.save();
       ctx.translate(width * ((i + 0.5) / CAUSTIC_SHAFTS) + sway, 0);
       const grad = ctx.createLinearGradient(0, 0, 0, height);
@@ -856,6 +857,10 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
   var GRAVEL_FILLS = ["#31506b", "#3c5f7d", "#466a8c", "#2b455c"];
   var ROCK_FILL = "#22384c";
   var KELP_STROKE = "rgba(38, 104, 74, 0.85)";
+  var KELP_SWAY_SPEED = 0.8;
+  var KELP_SWAY_AMP = 6;
+  var KELP_TIP_AMP = 1.6;
+  var ROCK_RY_RATIO = 0.5;
   var TILE_OFFSETS = [0, -1];
   var TAU4 = 2 * Math.PI;
   var Substrate = class {
@@ -910,7 +915,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       ctx.save();
       ctx.translate(off, 0);
       for (const r of this.rocks) {
-        const y = height - r.ry * 0.5;
+        const y = height - r.ry * ROCK_RY_RATIO;
         for (const copy of TILE_OFFSETS) {
           const x = r.u * tile + copy * tile;
           ctx.beginPath();
@@ -926,10 +931,10 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
         const topY = height - height * k.h;
         for (const copy of TILE_OFFSETS) {
           const x = baseX + copy * tile;
-          const sway = Math.sin(t * 0.8 + k.phase) * 6;
+          const sway = Math.sin(t * KELP_SWAY_SPEED + k.phase) * KELP_SWAY_AMP;
           ctx.beginPath();
           ctx.moveTo(x, height);
-          ctx.quadraticCurveTo(x + sway, (height + topY) / 2, x + sway * 1.6, topY);
+          ctx.quadraticCurveTo(x + sway, (height + topY) / 2, x + sway * KELP_TIP_AMP, topY);
           ctx.stroke();
         }
       }

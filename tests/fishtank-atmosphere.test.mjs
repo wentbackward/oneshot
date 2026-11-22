@@ -689,6 +689,9 @@ check("AC4: gravel and top-decor parallax layers render every frame with their n
     const pair = h.state.events.slice(fromIdx).filter((ev) => ev.kind === "translate");
     drift.push({ t: h.q("FISH_TANK_WORLD.time"), far: pair[0]?.args[0] ?? NaN, near: pair[1]?.args[0] ?? NaN });
   };
+  // Pinned inside a wrap interval: the ~2 s audit window ends far
+  // short of the near layer's tile wrap (~266 s at 800 px / 3.0 px/s),
+  // so no recorded drift gap can straddle a reset.
   h.frameAt(0);
   collect(0);
   for (let f = 1; f < FRAMES; f++) {
