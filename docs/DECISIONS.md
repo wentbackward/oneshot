@@ -3700,3 +3700,57 @@ arcade physics).
   after the predator line, so the fingerprint stays honest for
   worlds carrying food; a foodless world prints exactly what it
   always did (all pre-existing suites unaffected).
+## 2026-11-22 — Ticket #126: HUD telemetry, speed controls and save/load
+
+- **The HUD's species table lists the species the World currently
+  owns — tetras and the predator — not a hardcoded `ANGEL 0` row.**
+  The ticket's AC names "tetra/angel/predator", but the angelfish
+  species is ticket #123's scope (still open; no angel pool exists
+  in the World yet). `src/ui/hud.ts` keeps a one-row-per-species
+  registry (`SPECIES_ROWS`, id + live-count closure), so #123 adds
+  its row in one line without touching the HUD machinery.
+  Alternatives: ship a permanently-zero ANGEL row (misleading dead
+  UI, rejected) or implement the angelfish here (scope theft,
+  rejected).
+- **Lighting mode persists as the HOLDING phase name and is restored
+  via a new `World.lightingPhaseOffset` (whole phase-table starts,
+  derived once from the render layer's `LIGHT_PHASES`), which the
+  renderer adds to `world.time` when resolving the palette.** Save
+  captures the phase in effect at save time; a fresh world loading
+  it holds that same mode at t = 0, and the cycle resumes from
+  there. Alternatives: store the raw cycle time (couples the
+  payload to the clock, breaks if phase durations are tuned), or a
+  user-selectable mode picker (the PRD defines a CYCLE, not a
+  switch — out of scope).
+- **The payload stores kelp as ANCHORS, not verlet states, and the
+  tetra population as a COUNT.** The layout is user-placed state;
+  animals and strands are live processes a fresh world regrows
+  deterministically (seeded cohorts via `POP_RESEED_STRIDE`, seeded
+  strands). Pinning a million strand points would be the wrong
+  granularity for "tank layout". `setTetraCount` grows the school in
+  deterministic cohorts keyed on (seed, startIndex) so the same save
+  on same-seed worlds replays byte-identically (pinned by
+  tests/fishtank-save.test.mjs).
+- **Auto-save is triggered by successful toolbar placements/removals
+  (Toolbar.onChanged); there is no explicit Save/Load button.** The
+  PRD says the LAYOUT is persisted — it is restored automatically at
+  boot, so a manual save button would only ever fight the automatic
+  one. Alternatives: a periodic timer (writes churn, rejected) or
+  save-on-pagehide (invisible to the vm suites and to served static
+  hosting, rejected).
+- **Speed control multiplies the ALREADY-CLAMPED frame delta
+  (`advance(clampDelta(elapsed) * mult)`), never the fixed step.**
+  `FIXED_DT` stays exact; a 2x frame feeds exactly 2× the wall time.
+  Pause feeds 0 but the loop keeps updating its timestamp, so a
+  resume takes exactly one step — no catch-up burst. A `World.steps`
+  counter (also HUD/telemetry data) lets the pinned-clock test assert
+  exact step consumption, since a 1/60 s frame gap cannot be
+  represented exactly in millisecond rAF timestamps (per-frame budgets
+  may therefore wobble by at most one carried step — documented in
+  tests/fishtank-speed.test.mjs).
+- **Rejected saves fall back to the WHOLE default tank — never a
+  partial layout** (any one bad field rejects the payload wholesale),
+  mirroring the campaign-2 throwing-storage precedent; a throwing or
+  absent localStorage degrades the same way (save/load never
+  propagate). A hostile tetra count is capped at `SAVE_MAX_TETRA`
+  (2000) so a corrupted payload cannot ask for a million fish.
