@@ -110,7 +110,7 @@ export class Substrate {
         v: rng(),
         rx: 3 + 5 * rng(),
         ry: 2 + 3.5 * rng(),
-        fill: GRAVEL_FILLS[Math.floor(rng() * GRAVEL_FILLS.length) % GRAVEL_FILLS.length]!,
+        fill: GRAVEL_FILLS[Math.floor(rng() * GRAVEL_FILLS.length)]!, // mulberry32 yields [0,1): floor is always in range
       });
     }
     for (let i = 0; i < SUBSTRATE_DECOR_ROCKS; i++) {
