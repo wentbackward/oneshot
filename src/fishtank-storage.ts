@@ -154,6 +154,10 @@ export function validateSave(raw: unknown): TankSave | null {
   for (const entry of raw.kelp) {
     if (!isPlainObject(entry)) return null;
     if (!isFiniteNumber(entry.x)) return null;
+    // Same whole-payload policy as rocks: a legitimate anchor always
+    // sits on the substrate inside the tank (placeKelp clamps input
+    // into [0, TANK_WIDTH]), so anything outside is hostile.
+    if (entry.x < 0 || entry.x > TANK_WIDTH) return null;
     kelp.push({ x: entry.x });
   }
 
@@ -216,7 +220,7 @@ export function applyLayout(world: World, save: TankSave): void {
   // Hold the saved mode at the world's CURRENT clock: shifting the
   // phase table so the mode's window contains t = world.time
   // (offsets are whole phase starts, so boundaries stay exact).
-  world.lightingPhaseOffset = PHASE_STARTS[save.lighting.mode] ?? 0;
+  world.lightingPhaseOffset = PHASE_STARTS[save.lighting.mode];
 }
 
 // ---------- storage I/O (exceptions die HERE, never downstream) ----------

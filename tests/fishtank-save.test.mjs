@@ -34,7 +34,7 @@ import {
   validateSave,
 } from "../src/fishtank-storage.ts";
 import { World } from "../src/sim/world.ts";
-import { DAY_DURATION } from "../src/render/lighting.ts";
+import { DAY_DURATION, DUSK_DURATION } from "../src/render/lighting.ts";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const html = readFileSync(path.join(root, "fishtank.html"), "utf8");
@@ -288,6 +288,9 @@ check("validateSave rejects wrong-shaped payloads (missing keys, wrong types)", 
     ["kelp not an array", { ...clean, kelp: {} }],
     ["kelp entry wrong type", { ...clean, kelp: ["500"] }],
     ["kelp anchor non-finite", { ...clean, kelp: [{ x: Infinity }] }],
+    ["kelp anchor negative (-5000)", { ...clean, kelp: [{ x: -5000 }] }],
+    ["kelp anchor beyond tank width (9999)", { ...clean, kelp: [{ x: 9999 }] }],
+    ["kelp anchor fractionally beyond width (1600.5)", { ...clean, kelp: [{ x: 1600.5 }] }],
     ["kelp over the cap (33)", { ...clean, kelp: Array.from({ length: 33 }, (_, i) => ({ x: i * 10 })) }],
     ["rocks over the cap (25)", { ...clean, rocks: Array.from({ length: 25 }, (_, i) => ({ x: 100 + i, y: 100, r: 1 })) }],
     ["species not an object", { ...clean, species: "80" }],
@@ -304,6 +307,19 @@ check("validateSave rejects wrong-shaped payloads (missing keys, wrong types)", 
   ];
   for (const [name, payload] of cases) {
     assert(validateSave(payload) === null, `${name} must be rejected`);
+  }
+});
+
+check("validateSave accepts kelp anchors on the tank boundary (x = 0 and x = TANK_WIDTH)", () => {
+  const clean = {
+    schemaVersion: SAVE_SCHEMA_VERSION,
+    rocks: [],
+    species: { tetra: 80, predator: 1 },
+    lighting: { mode: "LIGHT_DAY" },
+  };
+  for (const x of [0, 1600]) {
+    const v = validateSave({ ...clean, kelp: [{ x }] });
+    assert(v !== null, `kelp anchor x=${x} sits on the substrate boundary and must validate`);
   }
 });
 
@@ -354,6 +370,27 @@ check("save/load round-trip reproduces rocks, kelp anchors, species counts and l
   assert(b.predator === null, "predator-absent must round-trip");
   // Lighting mode: the restored world holds the SAME mode.
   assert(lightingModeOf(b) === "LIGHT_DUSK", `lighting mode must round-trip, got ${lightingModeOf(b)}`);
+});
+
+check("round-trip holds each lighting mode (DAY, DUSK, NIGHT) at the restored world", () => {
+  const modes = [
+    ["LIGHT_DAY", 0],
+    ["LIGHT_DUSK", DAY_DURATION],
+    ["LIGHT_NIGHT", DAY_DURATION + DUSK_DURATION],
+  ];
+  for (const [mode, offset] of modes) {
+    const a = new World({ seed: 21 });
+    a.placeKelp(700);
+    a.lightingPhaseOffset = offset; // hold `mode` at t = 0
+    assert(lightingModeOf(a) === mode, `setup: offset ${offset} must hold ${mode}`);
+    const save = validateSave(captureLayout(a));
+    assert(save !== null, `the ${mode} capture must validate`);
+    assert(save.lighting.mode === mode, `the ${mode} capture must record ${mode}`);
+    const b = new World({ seed: 21 });
+    applyLayout(b, save);
+    assert(lightingModeOf(b) === mode, `the restored world must hold ${mode}, got ${lightingModeOf(b)}`);
+    assert(b.kelp.length === 1 && b.kelp[0].anchorX === 700, "the co-saved kelp anchor must load too");
+  }
 });
 
 check("round-trip of a grown school is deterministic: two fresh worlds applying the same save replay identically", () => {
@@ -471,6 +508,8 @@ check("boot with a WRONG-SHAPED or WRONG-TYPE payload loads the full default tan
     { ...DUSK_PRELOAD, rocks: [{ x: 100, y: 100, r: -40 }] },
     "kelp cap exceeded",
     { ...DUSK_PRELOAD, kelp: Array.from({ length: 33 }, (_, i) => ({ x: i * 10 })) },
+    "kelp anchor out of the tank (x: -5000)",
+    { ...DUSK_PRELOAD, kelp: [{ x: -5000 }] },
   ];
   for (let i = 0; i < badShapes.length; i += 2) {
     const [name, payload] = [badShapes[i], badShapes[i + 1]];
