@@ -3280,3 +3280,14 @@ arcade physics).
   GRAVEL_FILLS was deleted (the index is provably in-range, so it
   could never fire; a non-null assertion satisfies
   noUncheckedIndexedAccess without reviving the dead branch).
+
+## 2026-11-22 — Rebase of #125 onto predator main: "draw all of them" reading
+- **The rebase directive "the final frame must draw all of them" is read as
+  the EXISTING draw stack (tetra spines + the three #125 atmosphere passes)
+  painting over the combined world state, in which the predator is live in
+  sim** (it patrols and preys on isolated stragglers). No predator body
+  draw code was added in this rebase: #124's own entry explicitly rejects a
+  drawn predator landing untested/unreviewed, and new render code has no
+  place in a rebase ticket. Alternatives: draw a minimal predator body now
+  (rejected — duplicates #124's rejected option and untested), open a
+  separate predator-render ticket (the intended home for that scope).
