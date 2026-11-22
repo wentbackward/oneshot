@@ -81,6 +81,7 @@ function setupLonePrey(seed, predatorX, predatorY, tetraX, tetraY, tetraVx, tetr
   t.y = tetraY;
   t.vx = tetraVx;
   t.vy = tetraVy;
+  world.rebuildGrid(); // external poke: resync the grid to the poked poses
   return [world, p, t];
 }
 
@@ -236,6 +237,7 @@ check("recent feed: a fed predator never re-stalks while its rest-window + recov
   // predator — well out of capture range.
   const newcomer = makeTetra(Math.max(40, p.x - 150), p.y, 30, 0);
   world.agents.push(newcomer);
+  world.rebuildGrid(); // external poke: resync the grid to the new pool
   assert(Math.hypot(newcomer.x - p.x, newcomer.y - p.y) <= PREDATOR_SIGHT_RANGE,
     "test setup: the newcomer must sit in sight of the resting predator");
   assert(Math.hypot(newcomer.x - p.x, newcomer.y - p.y) > PREDATOR_CAPTURE_RADIUS,
@@ -268,6 +270,7 @@ check("isolation: a tight (non-isolated) cluster in sight never triggers stalk; 
   const b = makeTetra(490, 520, 30, 0);
   const c = makeTetra(550, 490, 30, 0);
   world.agents.push(a, b, c);
+  world.rebuildGrid(); // external poke: resync the grid to the new pool
   for (const t of world.agents) {
     for (const u of world.agents) {
       if (t !== u) assert(Math.hypot(t.x - u.x, t.y - u.y) <= PREDATOR_ISOLATION_RADIUS,
@@ -283,6 +286,7 @@ check("isolation: a tight (non-isolated) cluster in sight never triggers stalk; 
   }
   // Leave exactly one tetra: the survivor is now isolated and in sight.
   world.agents.splice(0, 2);
+  world.rebuildGrid(); // external poke: resync the grid to the shrunken pool
   assert(world.agents[0] === c, "test setup: the lone survivor is c");
   let flipStep = -1;
   for (let step = 1; step <= 10; step++) {

@@ -526,10 +526,11 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
     }
     /** Advance the predator by exactly dt seconds against the world.
      *  Called by World.step AFTER the tetras have moved, so prey
-     *  positions are current (the neighbor grid is rebuilt at the
-     *  start of each step — the same one-step-stale view the tetras'
-     *  own steering uses). May mutate world.agents: a capture splices
-     *  the victim out. */
+     *  positions are current (the neighbor grid holds the previous
+     *  step's end positions — the same one-step-behind view the
+     *  tetras' own steering queries use this step). May mutate
+     *  world.agents: a capture splices the victim out, and the
+     *  step's final grid rebuild folds the splice in. */
     step(dt, world) {
       this.hunger = Math.min(1, this.hunger + PREDATOR_HUNGER_RATE * dt);
       let dirX;
@@ -716,8 +717,14 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
      *  hashes on it); every entry is a Tetra. */
     agents = [];
     /** Neighbor grid (typed Tetra so queries hand back moving bodies
-     *  straight into the steering forces), rebuilt every fixed step
-     *  (PRD §1). The predator's isolation checks reuse it. */
+     *  straight into the steering forces). Populated at construction,
+     *  on every population change and at the END of every fixed step
+     *  (PRD §1) — so after any step or setTetraCount it holds the
+     *  CURRENT positions and telemetry (HUD utilization, PRD §4)
+     *  never reads a stale grid. During a step, queries see the
+     *  PREVIOUS step's end positions (the tetras act one step behind
+     *  their own motion — the predator's isolation checks reuse the
+     *  same view). */
     grid;
     /** The apex predator (PRD §2, ticket #124): owned by the world,
      *  stepped after the tetras each fixed step. Null when the world
@@ -781,8 +788,10 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       const target = Math.min(n, SAVE_MAX_TETRA);
       if (target < this.agents.length) {
         this.agents.length = target;
+        this.rebuildGrid();
       } else if (target > this.agents.length) {
         this.spawnCohort(this.agents.length, target - this.agents.length);
+        this.rebuildGrid();
       }
     }
     /** Add or remove the apex predator (PRD §4 save/load). */
@@ -973,17 +982,21 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       }
       return steps;
     }
-    /** One deterministic step of EXACTLY dt seconds: rebuild the
-     *  neighbor grid, then for every tetra (fixed array order)
-     *  compose the steering forces (including obstacle avoidance
-     *  around the placed rocks), clamp the speed, integrate and
+    /** One deterministic step of EXACTLY dt seconds: for every tetra
+     *  (fixed array order) compose the steering forces (including
+     *  obstacle avoidance around the placed rocks) against the grid
+     *  as left by the previous step, clamp the speed, integrate and
      *  keep the body INSIDE the tank (elastic reflection, a hard
      *  clamp) and hard-resolve it against every rock's collision
      *  radius together with the tank walls (bounded fixed point —
      *  see the resolution comment in the body), and advance its
      *  articulated tail at tailFrequency(speed, torque). Finally,
      *  advance every kelp strand under the ambient current, letting
-     *  the tetras drag the strands they swim through.
+     *  the tetras drag the strands they swim through, the predator
+     *  acts, and the neighbor grid is REBUILT LAST from the post-step
+     *  positions (see the inline comment) so post-step consumers —
+     *  the HUD's utilization telemetry (PRD §4) — read current
+     *  occupancy.
      *
      *  WELL-FORMEDNESS (enforced here, same policy as advance()): a
      *  non-finite dt (NaN, ±∞) or a dt <= 0 is refused — step() is a
@@ -996,7 +1009,6 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       if (!Number.isFinite(dt) || dt <= 0) return;
       this.time += dt;
       this.steps += 1;
-      this.rebuildGrid();
       for (const t of this.agents) {
         this.neighbours.length = 0;
         for (const n of this.grid.query(t.x, t.y, SCHOOL_PERCEPTION_RADIUS)) {
@@ -1164,6 +1176,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
         strand.step(dt, this.ambientCurrentX, this.agents);
       }
       this.predator?.step(dt, this);
+      this.rebuildGrid();
     }
     /** Count the rocks whose collision ring (r + ROCK_COLLIDE_PAD) the
      *  point (x, y) is inside, recording them in rockViolators in
@@ -1346,8 +1359,14 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       }
       return lines.join("\n");
     }
-    /** Clear + re-insert every tetra: the O(1)-average neighbor
-     *  lookup the steering forces (PRD §2) consume each step. */
+    /** Clear + re-insert every agent into the grid: the derived-state
+     *  refresh behind the O(1)-average neighbour lookups (PRD §2).
+     *  Maintained AUTOMATICALLY after construction, every
+     *  setTetraCount() and the end of every step — the grid always
+     *  holds current positions afterwards. Call it after poking the
+     *  agent pool or agent fields from OUTSIDE the world (test
+     *  scenarios) so the next step's queries see the poked
+     *  configuration. */
     rebuildGrid() {
       this.grid.clear();
       for (const t of this.agents) this.grid.insert(t);

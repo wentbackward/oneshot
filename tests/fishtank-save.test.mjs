@@ -620,6 +620,39 @@ check("a toolbar rock removal auto-saves the shrunken layout", () => {
   assert(g.q("FISH_TANK_WORLD.rocks.length") === 0, "the live world agrees");
 });
 
+check("the seam's loadTank reloads the saved layout onto the LIVE world (mid-session restore)", () => {
+  const storage = makeStorage();
+  const g = boot(W, H, storage);
+  g.frameAt(0);
+  // Establish a saved layout and persist it.
+  g.q("FISH_TANK_WORLD.placeRock(300, 250)");
+  g.q("FISH_TANK_WORLD.placeKelp(700)");
+  g.q("FISH_TANK_WORLD.setTetraCount(36)");
+  g.q("FISH_TANK_WORLD.setPredatorPresent(false)");
+  g.q("saveTank()");
+  assert(storage.writes.length === 1, "the setup save must have landed");
+  // Diverge the live world from the save.
+  g.q("FISH_TANK_WORLD.placeRock(1200, 800)");
+  g.q("FISH_TANK_WORLD.placeKelp(200)");
+  g.q("FISH_TANK_WORLD.setTetraCount(50)");
+  g.q("FISH_TANK_WORLD.setPredatorPresent(true)");
+  assert(g.q("FISH_TANK_WORLD.rocks.length") === 2, "setup: the live world has diverged (2 rocks)");
+  // Reload the saved layout mid-session.
+  g.q("loadTank()");
+  const rocks = g.q("FISH_TANK_WORLD.rocks");
+  assert(rocks.length === 1, `loadTank must restore the saved rock count (1), got ${rocks.length}`);
+  assert(rocks[0].x === 300 && rocks[0].y === 250 && rocks[0].r === 40,
+    `the restored rock must be the saved one field for field, got (${rocks[0].x}, ${rocks[0].y}, ${rocks[0].r})`);
+  const anchors = g.q("FISH_TANK_WORLD.kelp.map((s) => s.anchorX)");
+  assert(anchors.length === 1 && anchors[0] === 700,
+    `the restored kelp must be the saved anchor, got [${anchors}]`);
+  assert(g.q("FISH_TANK_WORLD.agents.length") === 36, "the saved tetra count must be restored");
+  assert(g.q("FISH_TANK_WORLD.predator") === null, "the saved predator-absent must be restored");
+  assert(g.q("lightingModeOf()") === "LIGHT_DAY",
+    `the saved lighting mode must be restored, got ${g.q("lightingModeOf()")}`);
+  g.tick(5); // and the loop keeps running on the restored world
+});
+
 // ---------- summary ----------
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

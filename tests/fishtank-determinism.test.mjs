@@ -236,6 +236,58 @@ check("the world clock is STEPS * FIXED_DT up to fp accumulation error after the
 });
 
 // ================================================================
+// Grid freshness (#126 review fold): the neighbor grid must hold the
+// LIVE positions at the end of every step — the HUD's utilization
+// readout consumes it the very next frame.
+// ================================================================
+// Mirrors src/sim/world.ts's grid geometry (cell 64, tank 1600×1000)
+// to recompute the occupancy figure INDEPENDENTLY of the grid.
+const FRESH_CELL = 64;
+const FRESH_COLS = Math.ceil(TANK_WIDTH / FRESH_CELL);
+const FRESH_ROWS = Math.ceil(TANK_HEIGHT / FRESH_CELL);
+
+function liveOccupiedSet(w) {
+  const seen = new Set();
+  for (const t of w.agents) {
+    const c = Math.min(FRESH_COLS - 1, Math.max(0, Math.floor(t.x / FRESH_CELL)));
+    const r = Math.min(FRESH_ROWS - 1, Math.max(0, Math.floor(t.y / FRESH_CELL)));
+    seen.add(r * FRESH_COLS + c);
+  }
+  return seen;
+}
+
+check("the grid is populated at construction (nothing reads an empty grid before the first step)", () => {
+  const w = new World({ seed: 41 });
+  assert(w.grid.countOccupiedCells() > 0,
+    "a fresh world's grid must already hold the spawned school");
+  for (const t of w.agents) {
+    const hit = w.grid.query(t.x, t.y, 0);
+    assert(hit.length === 1 && hit[0] === t,
+      `every spawned tetra must be grid-queryable at birth, got ${hit.length} hits for (${t.x.toFixed(3)}, ${t.y.toFixed(3)})`);
+  }
+});
+
+check("the grid reflects live positions at the end of EVERY step (no one-step lag)", () => {
+  const w = new World({ seed: 31 });
+  for (let i = 0; i < 240; i++) {
+    w.step(FIXED_DT);
+    // Membership: a radius-0 query at a tetra's CURRENT position
+    // finds exactly that tetra — a one-step-stale grid misses it the
+    // moment the fish crosses a cell edge mid-step.
+    for (const t of w.agents) {
+      const hit = w.grid.query(t.x, t.y, 0);
+      assert(hit.length === 1 && hit[0] === t,
+        `after step ${i + 1} the grid must hold the tetra at its current position (${t.x.toFixed(3)}, ${t.y.toFixed(3)})`);
+    }
+    // Occupancy: the figure the HUD displays must equal an
+    // independent recompute from the LIVE positions, every step.
+    const live = liveOccupiedSet(w);
+    assert(w.grid.countOccupiedCells() === live.size,
+      `after step ${i + 1} grid occupancy must equal the live recompute (${live.size}), got ${w.grid.countOccupiedCells()}`);
+  }
+});
+
+// ================================================================
 // The rng itself must be a genuine deterministic mulberry32
 // (regression: re-implementations of the PRNG break all of this)
 // ================================================================

@@ -14,10 +14,8 @@
 
 import type { World } from "../sim/world.ts";
 
-/** One per-species count row. The species table is the single
- *  registration point: when a new species joins the World it gains
- *  ONE row here (its id must match the build template's static
- *  markup). */
+/** One per-species count row (see SPECIES_ROWS — the single
+ *  registration point). */
 interface SpeciesRow {
   /** Static element id of the count field (build template). */
   id: string;
@@ -25,8 +23,10 @@ interface SpeciesRow {
   count: (world: World) => number;
 }
 
-/** The species the World currently owns (ticket #126 scope; the
- *  angel row joins with #123). */
+/** The single species registration point: the species the World
+ *  currently owns (ticket #126 scope; the angel row joins with
+ *  #123). When a new species joins the World it gains ONE row here
+ *  (its id must match the build template's static markup). */
 const SPECIES_ROWS: readonly SpeciesRow[] = [
   { id: "hud-count-tetra", count: (w) => w.agents.length },
   { id: "hud-count-predator", count: (w) => (w.predator !== null ? 1 : 0) },

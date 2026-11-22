@@ -1,8 +1,10 @@
 // ================================================================
 // Uniform spatial hash grid (PRD §1): O(1) average-case neighbor
 // queries so the simulation sustains 60 fps with hundreds of
-// entities. The World rebuilds it (clear + re-insert) each fixed
-// step; the grid never owns entity lifetime.
+// entities. The World rebuilds it (clear + re-insert) at
+// construction, on every population change and at the END of every
+// fixed step, so consumers always see current positions; the grid
+// never owns entity lifetime.
 //
 // Query contract: query(x, y, radius) returns every item with
 // Euclidean distance <= radius (a CLOSED ball) — radius 0 matches

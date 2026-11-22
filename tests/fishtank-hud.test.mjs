@@ -262,6 +262,17 @@ check("the HUD's grid utilization equals occupied/total recomputed from the live
     `the occupied cell count must equal the live grid (${used}), got ${m[1]}`);
 });
 
+check("the boot frame (zero sim steps) already shows live grid utilization from the initial grid", () => {
+  const g = boot(800, 600);
+  g.frameAt(0); // one frame with dt 0 — no sim step has run yet
+  assert(g.q("FISH_TANK_WORLD.steps") === 0, "setup: no step has run at boot");
+  const pos = g.q("FISH_TANK_WORLD.agents.map((t) => [t.x, t.y])");
+  const used = occupiedCellCount(pos);
+  assert(used >= 1, "setup: the spawned school occupies at least one cell");
+  assert(g.els.get("hud-grid").textContent === `${used}/${TOTAL_CELLS}`,
+    `the boot-frame utilization must come from the initial grid (not an empty one), got "${g.els.get("hud-grid").textContent}"`);
+});
+
 // ================================================================
 // Criterion: FPS — on the pinned 60 Hz clock the readout settles
 // at the clock's rate

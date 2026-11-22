@@ -3754,3 +3754,30 @@ arcade physics).
   absent localStorage degrades the same way (save/load never
   propagate). A hostile tetra count is capped at `SAVE_MAX_TETRA`
   (2000) so a corrupted payload cannot ask for a million fish.
+
+## 2026-11-22 — Ticket #126 review fold: grid rebuilt at step END; public `World.rebuildGrid()` as the external-poke sync
+- **The neighbor grid is rebuilt at the END of `World.step()` (was
+  the start), plus on construction and on every `setTetraCount()`.**
+  Step N's queries still see end-of-step-N−1 positions — the exact
+  view the former start-of-step rebuild handed out — so trajectories
+  are bit-identical (the determinism/steering/rocks/predator suites
+  plus the new grid-freshness check in
+  tests/fishtank-determinism.test.mjs are the proof). Post-step
+  consumers (the HUD's utilization readout) now see CURRENT
+  occupancy instead of a one-step-stale grid. Alternatives: a second
+  (telemetry-only) grid (double memory, double rebuild cost per
+  step) or leaving the staleness (the HUD would keep lying by ~17 ms
+  and the hud suite's independent recompute would hold only by
+  seed/frame coincidence — rejected).
+- **Externally poked agent pools resync via the now-public
+  `World.rebuildGrid()` (test scenarios pushing/splicing
+  `world.agents` directly must call it).** Raw array mutation cannot
+  be observed by the World, and the app itself only ever changes the
+  pool through `setTetraCount()`/captures (both already maintained
+  internally); the only external pokers are the predator test
+  scenarios, which now call the sync explicitly where the old
+  start-of-step rebuild had hidden it. Alternatives: an unconditional
+  second rebuild at step start (2× per-step cost for a test-only
+  path — rejected) or rewriting those scenarios through
+  `setTetraCount()` alone (cannot express the arbitrary per-fish
+  poses the scenarios need — rejected).
