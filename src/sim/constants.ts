@@ -1,8 +1,6 @@
-// ================================================================
-// Simulation constants — named tuning values for the fishtank
+// =========================================================// Simulation constants — named tuning values for the fishtank
 // fixed-timestep engine (PRD §1).
-// ================================================================
-
+// =========================================================
 /** Fixed physics timestep in seconds: the world always advances in
  *  exact multiples of this (60 Hz), independent of frame pacing. */
 export const FIXED_DT = 1 / 60;
@@ -88,3 +86,102 @@ export const PREDATOR_REST_STEPS = 240;
  *  units — generous against the 340 u/s × 1/60 s ≈ 5.7-unit step,
  *  tight enough to make each stop individually attributable. */
 export const PREDATOR_WAYPOINT_TOLERANCE = 48;
+// ---------- placement tools: rocks & kelp (PRD §3) ----------
+
+/** Tank capacity: at most this many placed rocks… */
+export const ROCK_MAX = 24;
+/** …and at most this many placed kelp strands (PRD §3 caps).
+ *  Pinned by tests/fishtank-rocks.test.mjs / -placement.test.mjs. */
+export const KELP_MAX = 32;
+
+/** Body of a placed rock: a smooth river-rock CIRCLE of this
+ *  radius (tank units) — uniform circles keep collision and
+ *  rendering trivial and honest. */
+export const ROCK_RADIUS = 40;
+
+/** Clearance a fish keeps beyond a rock's surface (tank units):
+ *  the hard collision radius is `rock.r + ROCK_COLLIDE_PAD`, and
+ *  the 600-step soak (tests/fishtank-rocks.test.mjs) pins that no
+ *  tetra ever enters it. */
+export const ROCK_COLLIDE_PAD = 6;
+
+/** Extra pick radius around a rock's surface that remove mode
+ *  accepts (tank units) — the clickable target, not the body. */
+export const ROCK_PICK_SLACK = 24;
+
+/** Remove-mode pick width around a kelp anchor's x (tank units). */
+export const KELP_PICK_SLACK = 24;
+
+/** Vertical reach of the kelp pick (tank units): only a click
+ *  inside this band above the substrate (y ≥ TANK_HEIGHT −
+ *  KELP_PICK_BAND) may strike a strand, so a remove click on open
+ *  water high above it cannot. Sized to cover the anchor plus the
+ *  BASE SEGMENTS' SWEEP: the three base segments rest
+ *  3 × (KELP_TOTAL_LENGTH / KELP_SEGMENTS) ≈ 83 units up, and the
+ *  base of the chain flexes well beyond that under fish drag and
+ *  current — so 140 comfortably brackets everything a click is
+ *  expected to hit. */
+export const KELP_PICK_BAND = 140;
+
+/** Per-placement seed stride for kelp strands: strand N draws from
+ *  `worldSeed + KELP_SEED_STRIDE · N`, so consecutive strands get
+ *  disjoint, well-mixed PRNG streams. */
+export const KELP_SEED_STRIDE = 104729;
+
+// ---------- kelp strands: multi-segment verlet (PRD §3/§5) ----------
+
+/** Verlet segments per strand — ≥ 6 required (PRD §3), pinned by
+ *  tests/fishtank-kelp.test.mjs. */
+export const KELP_SEGMENTS = 8;
+/** Total strand length in tank units; the segments tile it evenly,
+ *  so each segment's rest length is KELP_TOTAL_LENGTH /
+ *  KELP_SEGMENTS. */
+export const KELP_TOTAL_LENGTH = 220;
+/** Upward growth / buoyancy acceleration on every free point (tank
+ *  units/s², −y). It pre-tensions the strand against the substrate
+ *  anchor, so a folded strand is a distance-violation and the
+ *  upright shape is the stable one (a bottom-anchored strand under
+ *  net-downward force would be an inverted pendulum: neutrally
+ *  stable at best, and it topples). The substrate pin then only
+ *  has to carry the top of a straight, taut strand. */
+export const KELP_GROWTH = 150;
+/** Soft base-orientation pull: each iteration nudges point 1 back
+ *  toward the rest point on the substrate ray (fraction 0..1).
+ *  Tipping the strand costs this spring, so the strand always
+ *  recovers to vertical after a disturbance (fish passes, flow
+ *  gusts) instead of staying pinned at whatever angle it ended up. */
+export const KELP_ANCHOR_PULL = 0.3;
+/** Fraction of a point's previous-step velocity retained (verlet
+ *  damping): 0.985 bleeds out sway oscillation in ≈ 2–3 s. */
+export const KELP_DAMPING = 0.985;
+/** Distance-constraint passes per fixed step. Eight passes settle
+ *  the chain to << KELP_TOL length error (pinned by the soak). */
+export const KELP_CONSTRAINT_ITERS = 8;
+/** Seeded horizontal spawn jitter per point (tank units): a
+ *  strand is born almost vertical, not laser-straight. */
+export const KELP_JITTER = 2;
+/** Settle tolerance (PRD §5): after 600 relaxed zero-current
+ *  steps every segment length sits within 1 ± KELP_TOL of its
+ *  rest length. */
+export const KELP_TOL = 0.02;
+/** Rest tolerance: after 600 relaxed zero-current steps the
+ *  strand hangs within this angle (radians) of straight vertical.
+ */
+export const KELP_REST_ANGLE_TOL = 0.05;
+
+/** Ambient current: a constant horizontal flow applied as
+ *  acceleration to every kelp point (tank units/s², +x). */
+export const AMBIENT_CURRENT_X = 40;
+/** Required response: with the ambient current on, a settled
+ *  strand's tip must lean beyond this angle (radians) from
+ *  vertical. Calibrated ≈ 2.2× below the measured lean of
+ *  (current 40 vs growth 150) so the check has real margin. */
+export const KELP_CURRENT_TIP_DEVIATION_MIN = 0.10;
+
+/** Fish → kelp coupling: a kelp point within KELP_FISH_RADIUS of
+ *  a fish is dragged along the fish's velocity (falloff 1 − d/R).
+ */
+export const KELP_FISH_RADIUS = 48;
+/** Drag coefficient: point displacement per (fish speed × dt ×
+ *  falloff), tank units. */
+export const KELP_FISH_PUSH_GAIN = 2.0;

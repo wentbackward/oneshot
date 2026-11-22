@@ -26,7 +26,16 @@
 // ================================================================
 
 import {
+  AMBIENT_CURRENT_X,
   FIXED_DT,
+  KELP_MAX,
+  KELP_PICK_BAND,
+  KELP_PICK_SLACK,
+  KELP_SEED_STRIDE,
+  ROCK_COLLIDE_PAD,
+  ROCK_MAX,
+  ROCK_PICK_SLACK,
+  ROCK_RADIUS,
   STARTLE_IMPULSE,
   STARTLE_RADIUS,
   TANK_HEIGHT,
@@ -35,9 +44,17 @@ import {
   TETRA_MAX_SPEED,
   TETRA_MIN_SPEED,
 } from "./constants.ts";
+import { KelpStrand } from "./kelp.ts";
 import { mulberry32 } from "./rng.ts";
 import { tailFrequency } from "./tail.ts";
-import { FISH_MAX_SPEED, alignment, boundaryAvoidance, cohesion, separation } from "./steering.ts";
+import {
+  FISH_MAX_SPEED,
+  alignment,
+  boundaryAvoidance,
+  cohesion,
+  obstacleAvoidance,
+  separation,
+} from "./steering.ts";
 import { SpatialGrid, type Positioned } from "./spatialGrid.ts";
 import { ApexPredator } from "./predator.ts";
 
@@ -103,12 +120,93 @@ export interface Tetra extends Positioned {
   heading: number;
 }
 
+/** A placed rock (PRD §3): a smooth river-rock CIRCLE — the
+ *  circular collision obstacle the steering layer's
+ *  obstacleAvoidance() steers around. Structurally an Obstacle. */
+export interface Rock {
+  x: number;
+  y: number;
+  r: number;
+}
+
 /** World construction options. */
 export interface WorldOptions {
   /** Seed for the world's PRNG: same seed ⇒ identical tank. */
   seed?: number;
   /** How many tetras to spawn (defaults to TETRA_COUNT). */
   population?: number;
+  /** Horizontal ambient flow in tank units/s² (defaults to
+   *  AMBIENT_CURRENT_X; 0 = still water for the kelp settle tests).
+   *  Drives the kelp strands only — the fish are not advected. */
+  ambientCurrentX?: number;
+  /** Whether the world owns the apex predator (defaults to true;
+   *  the rock/kelp solver unit tests opt out so their lone tetra
+   *  cannot be captured mid-scenario). */
+  predator?: boolean;
+}
+
+/** Worst collision-ring violation depth at (cx, cy) over ALL rocks:
+ *  max over i of (rock_i.r + ROCK_COLLIDE_PAD − dist_i). Negative
+ *  when the point clears every ring; positive otherwise — by exactly
+ *  how deep the worst violation there is. */
+function worstRingDepth(
+  rocks: readonly Rock[],
+  cx: number,
+  cy: number,
+): number {
+  let worst = -Infinity;
+  for (const rock of rocks) {
+    const depth = rock.r + ROCK_COLLIDE_PAD - Math.hypot(cx - rock.x, cy - rock.y);
+    if (depth > worst) worst = depth;
+  }
+  return worst;
+}
+
+/** Clamp a coordinate into a tank edge. */
+function clampX(value: number): number {
+  return value < 0 ? 0 : value > TANK_WIDTH ? TANK_WIDTH : value;
+}
+function clampY(value: number): number {
+  return value < 0 ? 0 : value > TANK_HEIGHT ? TANK_HEIGHT : value;
+}
+
+/** Allocation-free scratch for a (x, y) pair, reused on hot paths
+ *  (owned by the World, see World.stripV). */
+interface Vec2Scratch {
+  x: number;
+  y: number;
+}
+
+/** Strip the component of (vx, vy) heading INTO any rock ring the
+ *  point (x, y) sits in or on, so a tetra parked or sliding on
+ *  those surfaces does not dig in next step. The 1e-9 slack keeps
+ *  engaged the disks an exit candidate sits on in floating point
+ *  (met exactly at their boundary); a tetra clear of every ring
+ *  and not approaching one is untouched.
+ *  Writes the stripped velocity into `out`. */
+function stripInwardVelocity(
+  rocks: readonly Rock[],
+  x: number,
+  y: number,
+  vx: number,
+  vy: number,
+  out: Vec2Scratch,
+): void {
+  out.x = vx;
+  out.y = vy;
+  for (const rock of rocks) {
+    const rx = x - rock.x;
+    const ry = y - rock.y;
+    const d = Math.hypot(rx, ry);
+    if (d >= rock.r + ROCK_COLLIDE_PAD + 1e-9) continue;
+    const ux = d > 0 ? rx / d : 1; // centre-on-body: deterministic +x
+    const uy = d > 0 ? ry / d : 0;
+    const vr = out.x * ux + out.y * uy;
+    if (vr < 0) {
+      out.x -= vr * ux;
+      out.y -= vr * uy;
+    }
+  }
 }
 
 export class World {
@@ -129,18 +227,135 @@ export class World {
    *  (PRD §1). The predator's isolation checks reuse it. */
   readonly grid: SpatialGrid<Tetra>;
   /** The apex predator (PRD §2, ticket #124): owned by the world,
-   *  stepped after the tetras each fixed step. */
-  readonly predator: ApexPredator;
+   *  stepped after the tetras each fixed step. Null when the world
+   *  was built with `predator: false` (solver unit tests). */
+  readonly predator: ApexPredator | null;
+  /** Placed rocks (PRD §3): the dynamic circular obstacles. Fed to
+   *  obstacleAvoidance() every step and enforced by a hard contact
+   *  projection, so a removed rock leaves NO residual steering.
+   *  Capped at ROCK_MAX by placeRock(). */
+  readonly rocks: Rock[] = [];
+  /** Placed kelp strands (PRD §3): verlet chains anchored at the
+   *  substrate, capped at KELP_MAX by placeKelp(). */
+  readonly kelp: KelpStrand[] = [];
+  /** Horizontal ambient flow (tank units/s²) driving the kelp. */
+  readonly ambientCurrentX: number;
   /** Reused neighbour scratch per step (allocation-free hot path):
    *  steering forces only READ the list, so one shared buffer is
    *  safe across the fixed-order iteration. */
   private readonly neighbours: Tetra[] = [];
+  /** Reused violator scratch (allocation-free hot path): the rocks
+   *  whose collision ring the tetra is inside, in world order.
+   *  PER-WORLD so concurrent worlds can never share mutation state. */
+  private readonly rockViolators: Rock[] = [];
+  /** The chosen exit point from pickBestExit (per-world scratch). */
+  private readonly bestExit: Vec2Scratch = { x: 0, y: 0 };
+  /** The inward-velocity strip scratch (per-world scratch). */
+  private readonly stripV: Vec2Scratch = { x: 0, y: 0 };
+  /** Deterministic per-strand jitter source: identical placement
+   *  sequences on identical seeds yield identical strands. */
+  private kelpSequence = 0;
 
   constructor(options: WorldOptions = {}) {
     this.seed = options.seed ?? 1;
+    this.ambientCurrentX = options.ambientCurrentX ?? AMBIENT_CURRENT_X;
     this.grid = new SpatialGrid(TANK_WIDTH, TANK_HEIGHT, GRID_CELL_SIZE);
     this.spawn(options.population ?? TETRA_COUNT);
-    this.predator = new ApexPredator();
+    this.predator = options.predator === false ? null : new ApexPredator();
+  }
+
+  // ---------- placement tools (PRD §3) ----------
+
+  /** Place a rock at (x, y): a circle of ROCK_RADIUS clamped fully
+   *  inside the tank. Returns the rock, or null when the tank is
+   *  at the ROCK_MAX cap or the coordinates are non-finite (a
+   *  rejected placement touches nothing). */
+  placeRock(x: number, y: number): Rock | null {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    if (this.rocks.length >= ROCK_MAX) return null;
+    const rock: Rock = {
+      x: Math.min(TANK_WIDTH - ROCK_RADIUS, Math.max(ROCK_RADIUS, x)),
+      y: Math.min(TANK_HEIGHT - ROCK_RADIUS, Math.max(ROCK_RADIUS, y)),
+      r: ROCK_RADIUS,
+    };
+    this.rocks.push(rock);
+    return rock;
+  }
+
+  /** Remove a previously placed rock. Returns false (and touches
+   *  nothing) when the rock is not present. */
+  removeRock(rock: Rock): boolean {
+    const at = this.rocks.indexOf(rock);
+    if (at < 0) return false;
+    this.rocks.splice(at, 1);
+    return true;
+  }
+
+  /** Place a kelp strand anchored at (x, TANK_HEIGHT) — the
+   *  substrate. Returns the strand, or null when the tank is at the
+   *  KELP_MAX cap or the coordinate is non-finite. */
+  placeKelp(x: number): KelpStrand | null {
+    if (!Number.isFinite(x)) return null;
+    if (this.kelp.length >= KELP_MAX) return null;
+    const anchorX = Math.min(TANK_WIDTH, Math.max(0, x));
+    const strand = new KelpStrand(
+      anchorX,
+      TANK_HEIGHT,
+      this.seed + KELP_SEED_STRIDE * (++this.kelpSequence),
+    );
+    this.kelp.push(strand);
+    return strand;
+  }
+
+  /** Remove a previously placed kelp strand. Returns false (and
+   *  touches nothing) when the strand is not present. */
+  removeKelp(strand: KelpStrand): boolean {
+    const at = this.kelp.indexOf(strand);
+    if (at < 0) return false;
+    this.kelp.splice(at, 1);
+    return true;
+  }
+
+  /** Remove-mode pick: the nearest object whose pick region covers
+   *  (x, y) — rocks first (their body + ROCK_PICK_SLACK, anywhere
+   *  in the tank), then kelp anchors (± KELP_PICK_SLACK around the
+   *  anchor x, but ONLY inside the KELP_PICK_BAND substrate band:
+   *  a remove click on open water high above a strand must not
+   *  strike it). Returns the removed object, or null when the
+   *  click hit open water. Non-finite coordinates are rejected
+   *  (no-op, same policy as advance()/step()). */
+  removeNearestAt(x: number, y: number): Rock | KelpStrand | null {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    let bestRock: Rock | null = null;
+    let bestRockDist = Infinity;
+    for (const rock of this.rocks) {
+      const d = Math.hypot(x - rock.x, y - rock.y);
+      if (d <= rock.r + ROCK_PICK_SLACK && d < bestRockDist) {
+        bestRockDist = d;
+        bestRock = rock;
+      }
+    }
+    if (bestRock !== null) {
+      this.removeRock(bestRock);
+      return bestRock;
+    }
+    let bestKelp: KelpStrand | null = null;
+    let bestKelpDist = Infinity;
+    for (const strand of this.kelp) {
+      // The kelp pick reaches only into the substrate band (the
+      // anchor region), not the whole tank height.
+      if (y < TANK_HEIGHT - KELP_PICK_BAND) continue;
+      const d = Math.abs(x - strand.anchorX);
+      if (d <= KELP_PICK_SLACK && d < bestKelpDist) {
+        bestKelpDist = d;
+        bestKelp = strand;
+      }
+    }
+    if (bestKelp !== null) {
+      this.removeKelp(bestKelp);
+      return bestKelp;
+    }
+    return null;
   }
 
   /** Spawn n tetras as one loose cluster at the tank centre: a
@@ -202,10 +417,15 @@ export class World {
 
   /** One deterministic step of EXACTLY dt seconds: rebuild the
    *  neighbor grid, then for every tetra (fixed array order)
-   *  compose the steering forces, clamp the speed, integrate and
-   *  keep the body INSIDE the tank (elastic reflection plus a hard
-   *  clamp), and advance its articulated tail at
-   *  tailFrequency(speed, torque).
+   *  compose the steering forces (including obstacle avoidance
+   *  around the placed rocks), clamp the speed, integrate and
+   *  keep the body INSIDE the tank (elastic reflection, a hard
+   *  clamp) and hard-resolve it against every rock's collision
+   *  radius together with the tank walls (bounded fixed point —
+   *  see the resolution comment in the body), and advance its
+   *  articulated tail at tailFrequency(speed, torque). Finally,
+   *  advance every kelp strand under the ambient current, letting
+   *  the tetras drag the strands they swim through.
    *
    *  WELL-FORMEDNESS (enforced here, same policy as advance()): a
    *  non-finite dt (NaN, ±∞) or a dt <= 0 is refused — step() is a
@@ -227,8 +447,11 @@ export class World {
       const ali = alignment(this.neighbours);
       const coh = cohesion(t, this.neighbours);
       const bou = boundaryAvoidance(t, TANK_WIDTH, TANK_HEIGHT);
-      const ax = sep.x + ali.x * ALIGNMENT_CRUISE_SPEED + coh.x + bou.x;
-      const ay = sep.y + ali.y * ALIGNMENT_CRUISE_SPEED + coh.y + bou.y;
+      const obs = obstacleAvoidance(t, this.rocks);
+      const ax =
+        sep.x + ali.x * ALIGNMENT_CRUISE_SPEED + coh.x + bou.x + obs.x;
+      const ay =
+        sep.y + ali.y * ALIGNMENT_CRUISE_SPEED + coh.y + bou.y + obs.y;
       let vx = t.vx + ax * dt;
       let vy = t.vy + ay * dt;
       const speed = Math.hypot(vx, vy);
@@ -243,12 +466,129 @@ export class World {
       }
       let x = t.x + vx * dt;
       let y = t.y + vy * dt;
-      // Elastic wall reflection, then a hard clamp as belt-and-braces:
-      // a tetra can never leave the tank, whatever forced it here.
+      // Elastic wall reflection (velocity), then the bounded
+      // position resolution below (position): a tetra can never
+      // leave the tank, whatever forced it here.
       if (x < 0) { x = -x; vx = -vx; } else if (x > TANK_WIDTH) { x = 2 * TANK_WIDTH - x; vx = -vx; }
       if (y < 0) { y = -y; vy = -vy; } else if (y > TANK_HEIGHT) { y = 2 * TANK_HEIGHT - y; vy = -vy; }
-      if (x < 0) x = 0; else if (x > TANK_WIDTH) x = TANK_WIDTH;
-      if (y < 0) y = 0; else if (y > TANK_HEIGHT) y = TANK_HEIGHT;
+      // Hard rock contact: the steering force above curves a tetra
+      // AROUND the rock, but a steep approach can still clip its
+      // surface between steps — the resolution below guarantees
+      // the 600-step-soak invariant (no tetra inside r +
+      // ROCK_COLLIDE_PAD, pinned by tests/fishtank-rocks.test.mjs)
+      // regardless of force balance: even a rock dropped straight
+      // onto the school ejects every fish.
+      //
+      // The rock disks and the tank walls are two position
+      // constraints that can fight each other, so they are resolved
+      // TOGETHER to a bounded fixed point — never in one sequential
+      // pass: a single clamp→project (or project→clamp) pass can
+      // leave the other constraint violated, because a projection
+      // can push the tetra into a second rock or out through the
+      // wall. Each pass takes the GLOBAL exit (see pickBestExit):
+      // every candidate — each violator's radial exit, each
+      // violator pair's boundary intersections, each violator ring's
+      // crossings with the four tank walls — is tank-clamped FIRST
+      // (the walls are the final authority of the pass, so a
+      // candidate is scored at the point the tetra actually lands
+      // at) and then scored by its worst remaining ring depth over
+      // ALL rocks; only a STRICT improvement over the current
+      // point is adopted, which makes the choice self-cycle-proof:
+      // an accepted point always has a strictly smaller worst
+      // depth, so no pass can re-select a point already reached.
+      // Overlapping disks (legal — placements may overlap) are thus
+      // exited in one jump, the choice never lands in a third
+      // ring's burrow, and a wedged-against-the-wall cluster has
+      // its along-the-wall escape corridor represented explicitly
+      // by the ring∩wall candidates. After an exit the tank walls
+      // get the final word, so step()'s INSIDE-TANK contract
+      // survives every pass and every conflict.
+      //
+      // The loop is CAPPED at rocks.length + 1 passes because the
+      // constraints are genuinely mutually exclusive where a rock's
+      // collision ring overhangs a wall in a thin sliver. Honest
+      // residual of the cap: in a wall sliver the tetra may rest
+      // inside the PAD RING (a wall-clamped rock only touches the
+      // wall tangentially, so a wall-resting tetra is never inside
+      // that rock's solid body), and in an adversarial geometry
+      // where the bounded candidate set offers no fully-clear
+      // point a cap-rest can still sit inside a ring — the
+      // cap-rest fallback below refuses to make the rest WORSE, and
+      // the next step's global search resumes from the rest
+      // position (plus the fish's own velocity keeps pressing it
+      // along the surface). What every step guarantees: INSIDE the
+      // tank, and clear of every ring whenever the bounded search
+      // offers a strictly-improving clear candidate — true for all
+      // reviewed configurations (two overlapping disks, the 2x2
+      // grid at 40-unit spacing, the corner-hugging 2x2 grid,
+      // single tetra and on-school), pinned by the round-2 …
+      // round-4 regression soaks and one-step lattices in
+      // tests/fishtank-rocks.test.mjs.
+      for (let pass = 0; pass <= this.rocks.length; pass++) {
+        let moved = false;
+        const n = this.collectViolators(x, y);
+        if (n > 0 && this.pickBestExit(n, x, y)) {
+          x = this.bestExit.x;
+          y = this.bestExit.y;
+          moved = true;
+          // Slide along instead of digging in: strip the inward
+          // radial velocity against any ring the exit point sits on
+          // or in — the disks the exit was scored against, plus
+          // the third-party rings of the dense-cluster case.
+          stripInwardVelocity(this.rocks, x, y, vx, vy, this.stripV);
+          vx = this.stripV.x;
+          vy = this.stripV.y;
+        }
+        // Tank walls — the final authority of each pass (a no-op
+        // after an exit, whose candidates were pre-clamped; active
+        // when the integrated point overshot a wall).
+        if (x < 0) { x = 0; moved = true; } else if (x > TANK_WIDTH) { x = TANK_WIDTH; moved = true; }
+        if (y < 0) { y = 0; moved = true; } else if (y > TANK_HEIGHT) { y = TANK_HEIGHT; moved = true; }
+        if (!moved) break;
+      }
+      // Cap-rest fallback: only reachable when the pass cap expired
+      // with rings still violated — the genuinely conflicted
+      // geometries. One final radial exit from the DEEPEST violator
+      // (largest ring depth, ties to the earlier rock in world
+      // order), evaluated AFTER the tank clamp (the walls are the
+      // final authority, same as in pickBestExit) and ADOPTED ONLY
+      // IF IT STRICTLY IMPROVES the rest position's worst depth:
+      // a fallback that merely re-enters a ring (the round-3
+      // unclamped-exit failure, corner-hugging cluster) is rejected
+      // and the cap's rest position stands.
+      {
+        const n = this.collectViolators(x, y);
+        let depth = 0;
+        let worst: Rock | null = null;
+        for (let i = 0; i < n; i++) {
+          const rock = this.rockViolators[i]!;
+          const d = rock.r + ROCK_COLLIDE_PAD - Math.hypot(x - rock.x, y - rock.y);
+          if (d > depth) {
+            depth = d;
+            worst = rock;
+          }
+        }
+        if (worst !== null) {
+          const m = worst.r + ROCK_COLLIDE_PAD;
+          const rx = x - worst.x;
+          const ry = y - worst.y;
+          const d = Math.hypot(rx, ry);
+          const ux = d > 0 ? rx / d : 1; // centre-on-body: deterministic +x
+          const uy = d > 0 ? ry / d : 0;
+          const exitX = clampX(worst.x + ux * m);
+          const exitY = clampY(worst.y + uy * m);
+          if (worstRingDepth(this.rocks, exitX, exitY) < depth) {
+            x = exitX;
+            y = exitY;
+          }
+        }
+      }
+      // Inward-velocity strip at REST: a no-op in the common case
+      // (the resolution above left the tetra clear of every ring),
+      // exactly the cap-rest violators in the conflicted geometries.
+      stripInwardVelocity(this.rocks, x, y, vx, vy, this.stripV);
+      vx = this.stripV.x;
+      vy = this.stripV.y;
       const nx = Math.hypot(vx, vy);
       // Velocity is clamped into [TETRA_MIN_SPEED, TETRA_MAX_SPEED]
       // above, so it is never (0, 0) and the heading is simply the
@@ -263,10 +603,145 @@ export class World {
       t.heading = heading;
       t.phase += TAU * tailFrequency(nx, t.torque) * dt;
     }
+    // Kelp reacts to this step's fish positions (fixed order keeps
+    // the drag deterministic) and to the ambient current.
+    for (const strand of this.kelp) {
+      strand.step(dt, this.ambientCurrentX, this.agents);
+    }
     // The predator acts AFTER the tetras: prey positions are
     // current, and a capture splice only affects the NEXT step's
     // tetra pass and grid rebuild.
-    this.predator.step(dt, this);
+    this.predator?.step(dt, this);
+  }
+
+  /** Count the rocks whose collision ring (r + ROCK_COLLIDE_PAD) the
+   *  point (x, y) is inside, recording them in rockViolators in
+   *  world order (the fixed order keeps the resolution
+   *  deterministic and provides its tie-breaks). */
+  private collectViolators(x: number, y: number): number {
+    let n = 0;
+    for (const rock of this.rocks) {
+      if (Math.hypot(x - rock.x, y - rock.y) < rock.r + ROCK_COLLIDE_PAD) {
+        this.rockViolators[n++] = rock;
+      }
+    }
+    return n;
+  }
+
+  /** Choose the GLOBAL exit for a point sitting inside `n`
+   *  collision rings: enumerate EVERY candidate — each violator's
+   *  radial exit (world order), each violator pair's two boundary
+   *  intersections (world order; equal-radius pairs only, which is
+   *  every pair since all placements are ROCK_RADIUS circles), and
+   *  each violator ring's crossings with the four tank walls — and
+   *  take the candidate whose worst remaining ring depth
+   *  (worstRingDepth over all rocks, so a candidate that clears its
+   *  own violators but digs into a third ring scores accordingly) is
+   *  strictly LESS than the point's own depth: an exit that improves
+   *  nothing is rejected outright, which is what makes the choice
+   *  self-cycle-proof (a re-selected identical point can never be a
+   *  strict improvement of itself).
+   *
+   *  EVERY candidate is tank-clamped BEFORE scoring: the walls take
+   *  the final word of the same pass, so a candidate must be judged
+   *  at the point the tetra actually lands at — not at its raw
+   *  coordinates. (Review round 4: the raw-coordinate scorer found
+   *  "phantom-clear" exits just outside the water whose clamp-back
+   *  re-entered a ring, lost every scoring round to genuine clear
+   *  points, and cycled to the cap with the tetra resting in-ring
+   *  on a wall — the corner-hugging 2x2 configuration.) The wall-
+   *  crossings exist for exactly this wedged-against-a-wall regime:
+   *  when a cluster overhangs the walls, the escape corridor runs
+   *  ALONG the wall, and only the ring∩wall points reach it in one
+   *  jump (the centre-tank 2x2 and every reviewed configuration are
+   *  pinned by the round-2 … round-4 regressions in
+   *  tests/fishtank-rocks.test.mjs).
+   *
+   *  The enumeration order is rock order and strict improvement
+   *  keeps the FIRST candidate on any tie, so the choice is
+   *  deterministic. Writes bestExit.
+   *  Returns false (nothing moved) when `n` is 0 or when no
+   *  candidate beats the current depth. */
+  private pickBestExit(n: number, x: number, y: number): boolean {
+    if (n === 0) return false;
+    let best = worstRingDepth(this.rocks, x, y); // the point itself
+    let bestX = x;
+    let bestY = y;
+    const consider = (cx: number, cy: number): void => {
+      // Score what the tetra actually lands at: the walls are the
+      // final authority of this pass, so clamp first.
+      const lcx = clampX(cx);
+      const lcy = clampY(cy);
+      const depth = worstRingDepth(this.rocks, lcx, lcy);
+      if (depth < best) {
+        best = depth;
+        bestX = lcx;
+        bestY = lcy;
+      }
+    };
+    // 1) each violator's radial exit, world order. The deterministic
+    //    +x direction for a centre-on-body point (d === 0) carries
+    //    over as-is: such a candidate is scored like any other.
+    for (let i = 0; i < n; i++) {
+      const v = this.rockViolators[i]!;
+      const m = v.r + ROCK_COLLIDE_PAD;
+      const rx = x - v.x;
+      const ry = y - v.y;
+      const d = Math.hypot(rx, ry);
+      const ux = d > 0 ? rx / d : 1;
+      const uy = d > 0 ? ry / d : 0;
+      consider(v.x + ux * m, v.y + uy * m);
+    }
+    // 2) each violator pair's boundary intersections, world order.
+    for (let i = 0; i < n; i++) {
+      const A = this.rockViolators[i]!;
+      for (let j = i + 1; j < n; j++) {
+        const B = this.rockViolators[j]!;
+        if (A.r !== B.r) continue; // the math needs equal radii
+        const dx = B.x - A.x;
+        const dy = B.y - A.y;
+        const d = Math.hypot(dx, dy);
+        const m = A.r + ROCK_COLLIDE_PAD;
+        if (d < 1e-9 || d >= 2 * m) continue; // no usable intersection
+        const h = Math.sqrt(m * m - (d / 2) * (d / 2));
+        const mx = (A.x + B.x) / 2;
+        const my = (A.y + B.y) / 2;
+        const nx = -dy / d;
+        const ny = dx / d;
+        consider(mx + h * nx, my + h * ny);
+        consider(mx - h * nx, my - h * ny);
+      }
+    }
+    // 3) each violator ring's crossings with the four tank walls,
+    //    world order: the along-the-wall escape points a cluster
+    //    wedged against a wall needs (they lie on a wall, so the
+    //    pre-score clamp in consider() is a no-op for them).
+    for (let i = 0; i < n; i++) {
+      const v = this.rockViolators[i]!;
+      const m = v.r + ROCK_COLLIDE_PAD;
+      // y = 0 and y = TANK_HEIGHT
+      for (const wallY of [0, TANK_HEIGHT]) {
+        const dy = wallY - v.y;
+        const q = m * m - dy * dy;
+        if (q <= 0) continue; // the ring does not reach that wall
+        const dx = Math.sqrt(q);
+        consider(v.x - dx, wallY);
+        consider(v.x + dx, wallY);
+      }
+      // x = 0 and x = TANK_WIDTH
+      for (const wallX of [0, TANK_WIDTH]) {
+        const dx = wallX - v.x;
+        const q = m * m - dx * dx;
+        if (q <= 0) continue;
+        const dy = Math.sqrt(q);
+        consider(wallX, v.y - dy);
+        consider(wallX, v.y + dy);
+      }
+    }
+    if (bestX === x && bestY === y) return false; // no strict improvement
+    this.bestExit.x = bestX;
+    this.bestExit.y = bestY;
+    return true;
   }
 
   /** Startle event (PRD §2: the school scatters when the user taps
@@ -306,7 +781,9 @@ export class World {
   /** Fixed-precision snapshot of the whole sim state: clock first,
    *  then one `x,y,vx,vy` line per tetra at 6 decimals, then one
    *  `P:` line for the predator (state, pose, hunger, route
-   *  progress, rest window, feed count). The tail state (phase,
+   *  progress, rest window, feed count — the line is absent when
+   *  the world was built without a predator (unit-test worlds).
+   *  The tail state (phase,
    *  torque) is excluded deliberately: heading is a pure function
    *  of (vx, vy) and the tail scalars are deterministic functions
    *  of the full history, so this fingerprint already proves replay
@@ -318,10 +795,12 @@ export class World {
       lines.push(`${t.x.toFixed(6)},${t.y.toFixed(6)},${t.vx.toFixed(6)},${t.vy.toFixed(6)}`);
     }
     const p = this.predator;
-    lines.push(
-      `P:${p.state}:${p.x.toFixed(6)},${p.y.toFixed(6)},${p.vx.toFixed(6)},${p.vy.toFixed(6)},` +
-      `${p.hunger.toFixed(6)},${p.waypointIndex},${p.restRemaining},${p.fedCount}`,
-    );
+    if (p !== null) {
+      lines.push(
+        `P:${p.state}:${p.x.toFixed(6)},${p.y.toFixed(6)},${p.vx.toFixed(6)},${p.vy.toFixed(6)},` +
+        `${p.hunger.toFixed(6)},${p.waypointIndex},${p.restRemaining},${p.fedCount}`,
+      );
+    }
     return lines.join("\n");
   }
 

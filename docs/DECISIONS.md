@@ -3291,3 +3291,362 @@ arcade physics).
   place in a rebase ticket. Alternatives: draw a minimal predator body now
   (rejected — duplicates #124's rejected option and untested), open a
   separate predator-render ticket (the intended home for that scope).
+## 2026-11-21 — Ticket #122: rock & kelp placement with verlet kelp
+
+- **Kelp is a bottom-anchored strand under NET UPWARD force
+  (KELP_GROWTH, buoyancy/growth), not a gravity-suspended rope.**
+  A chain welded to the substrate and pulled DOWN is an inverted
+  pendulum: the folded (fell-over) configuration is a valid
+  constraint state, so nothing energetically distinguishes it from
+  upright and the strand topples. Flipping the sign — every free
+  point accelerated UP (−y) against the pin — makes a FOLDED strand
+  the distance violation and the straight strand the energy
+  minimum, which is exactly the PRD §5 stability law the test
+  pins (600 steps, zero current, 1 ± KELP_TOL, hangs vertical).
+  Verified empirically across seeds before committing.
+  Alternatives: a top anchor (wrong — the strand must root at the
+  substrate), a pure spring-mass model (no rest-shape to recover
+  to, would need its own stabiliser).
+- **A soft base-orientation spring (point 1 → rest point on the
+  substrate ray, weight KELP_ANCHOR_PULL) prices tipping so any
+  tilt a disturbance leaves behind decays back to vertical instead
+  of sticking.** Without it, a strand that is slapped sideways and
+  then released would sit at whatever angle it ended up — the
+  growth force alone does not re-align a tilted strand. Applied as
+  the constraint pass's LAST WORD (a later distance pass would
+  dilute it and a diluted base spring cannot hold).
+- **The ambient current is a UNIFORM horizontal acceleration on
+  every free point (AMBIENT_CURRENT_X, constant +x).** A steady
+  current, not a time-varying one, so "tips deviate from vertical
+  beyond KELP_CURRENT_TIP_DEVIATION_MIN" is a clean, seed-robust
+  assertion (measured ≈ 0.22–0.24 rad, ~2.2× the 0.10 threshold).
+  The "sways with currents" behaviour comes for free: the growth
+  force and the current act orthogonally, so a steady flow produces
+  a steady lean whose magnitude scales with flow — and any
+  transients (fish passes, gusts) ring and decay via KELP_DAMPING.
+  Alternatives: a sinusoidal current (would make the tip-deviation
+  assertion time-dependent and seed-sensitive) or per-point noise
+  (breaks determinism).
+- **Rocks are smooth CIRCLES of ROCK_RADIUS, uniform.** A circle is
+  the simplest obstacle the existing obstacleAvoidance() already
+  models (it expects a radius) and the cleanest to hard-project a
+  tetra out of; "smooth river rock" reads as a rounded pebble in
+  the renderer without needing procedural lobes. Alternatives:
+  procedural blob outlines (more drawing code, no collision
+  benefit at this fidelity) or variable radii (no spec need).
+- **Two-layer rock collision: a STEERING force (obstacleAvoidance,
+  composed in step()) for graceful avoidance PLUS a hard radial
+  PROJECTION for the invariant.** The steering force curves a tetra
+  around a rock at cruise speed, but a steep head-on approach can
+  still close the gap between fixed steps. The projection guarantees
+  the soak invariant (no tetra ever inside r + ROCK_COLLIDE_PAD)
+  regardless of force balance; it also strips the inward radial
+  velocity so a tetra SLIDES along the surface rather than
+  oscillating in and out. Alternatives: steering only (a fast,
+  stubborn fish could clip the pad → soak fails non-deterministically)
+  or a full SAT collision solver (overkill for circles vs. point
+  fish, and it would fight the steering layer).
+- **Placement is a pure sim API on the World (placeRock/placeKelp/
+  removeRock/removeKelp/removeNearestAt), driven by a thin
+  headless-safe Toolbar (ui) that owns no tank state.** The World
+  stays the single owner of rocks/kelp so the sim, the renderer
+  and the vm tests all agree on one array; the toolbar just maps
+  viewport px → tank units and delegates. Every DOM lookup in
+  attach() is null-guarded, so the node:vm boot (whose document
+  stub returns null for any non-#game id) still boots and the
+  toolbar is driveable headless — which is what lets the
+  placement/cap/removal criteria be pinned by a real vm-boot test
+  without a DOM.
+- **The toolbar buttons are STATIC page markup in the build
+  template (ids tool-place-rock / tool-place-kelp / tool-remove),
+  not built at boot.** Mirrors the inert-hub-back-link precedent:
+  static markup the vm harness doesn't have to stub, and the
+  self-containment gate (zero src=/href=) already tolerates a
+  `<nav>` of `<button>`s. The JS only FINDS them by id and wires
+  click; missing ids degrade to a headless toolbar, never a boot
+  crash.
+- **Named tuning defaults: ROCK_MAX 24, KELP_MAX 32, ROCK_RADIUS
+  40, ROCK_COLLIDE_PAD 6, KELP_SEGMENTS 8 (≥6), KELP_TOTAL_LENGTH
+  220, KELP_GROWTH 150, KELP_ANCHOR_PULL 0.3, KELP_DAMPING 0.985,
+  KELP_CONSTRAINT_ITERS 8, AMBIENT_CURRENT_X 40,
+  KELP_CURRENT_TIP_DEVIATION_MIN 0.10, KELP_TOL 0.02,
+  KELP_REST_ANGLE_TOL 0.05, KELP_FISH_RADIUS 48,
+  KELP_FISH_PUSH_GAIN 2.0.** Chosen so every acceptance threshold
+  has comfortable margin after soak (segment length ratio within
+  ~1e-3 of 1, rest hang ≤ ~0.5°, current lean ≈ 0.22 rad, fish-pass
+  tip displacement ≈ 2× the static-current deviation).
+
+## 2026-11-22 — Ticket #122 review round: six findings
+
+- **Toolbar clicks normalise against the canvas CSS (LAYOUT) box, not
+  the device-px backing store.** The click listener receives CSS px
+  (from `getBoundingClientRect`), so the viewport provider must report
+  CSS dims: `Stage.cssWidth/cssHeight` (live getters over
+  `win.innerWidth/innerHeight` — the page template stretches the
+  canvas to 100vw × 100vh, so the canvas's layout box IS the CSS
+  viewport). `fishtank-main` now feeds those; `Viewport` documents
+  the unit contract. Pinned by a `devicePixelRatio: 2` boot in
+  tests/fishtank-placement.test.mjs (click at CSS (200,150) ⇒ tank
+  (400,250), not 1/dpr of it). Alternative: divide by `rect.width`
+  inside the listener and shrink the provider — same result, more
+  duplication of the unit choice in two places.
+- **The kelp remove-pick is bounded to a substrate band
+  (`KELP_PICK_BAND = 140` tank units above the bottom); the rock pick
+  is unchanged (rocks float anywhere, so their pick may too).** 140
+  is sized to cover the ANCHOR + BASE-SEGMENTS SWEP: the three base
+  segments rest at 3 × (KELP_TOTAL_LENGTH / KELP_SEGMENTS) ≈ 83 u
+  up, and the base flexes well beyond that under fish drag and
+  current, so 140 comfortably brackets everything a click is
+  expected to hit — while a remove click on open water ~830 u above
+  a strand no longer strikes it. (The original "≈ ⅔ of
+  KELP_TOTAL_LENGTH" framing was a coincidence, not the rationale;
+  superseded by the round-2 rewording of the constant's comment.)
+  Alternative: pick by distance to the strand's live points
+  (costlier per click, and "nearest kelp" then depends on sway —
+  surprising).
+- **Draw-order comments made honest instead of adding a gravel
+  layer.** `renderer.ts`/`scenery.ts` claimed the kelp roots sit
+  "behind the gravel", but the backdrop is a pure water gradient —
+  there is no gravel, so the kelp paints on top of everything below
+  the fish, exactly as the (now corrected) back-to-front z-order says.
+  Adding a gravel band is a visual feature outside this ticket's
+  scope; the comment now states the truth.
+- **`KELP_SEED_STRIDE` (104729) moved to constants.ts** — per-strand
+  seed is `worldSeed + KELP_SEED_STRIDE · N`; the magic number left
+  `world.ts`.
+- **`Toolbar.attach()` enforces the single-wire invariant** (private
+  `attached` flag; a repeat attach is a no-op) rather than merely
+  documenting it — a stacked canvas listener would place two rocks
+  per click, so the guard is load-bearing. Pinned by a
+  double-attach check (exactly one canvas listener, one rock per
+  click).
+- **Dropped `seam.AMBIENT_CURRENT_X`** — published but consumed
+  nowhere: the kelp tests import the constant directly from
+  `constants.ts`, and the value is reachable on the live world as
+  `FISH_TANK_WORLD.ambientCurrentX`. Alternative (consumed it in a
+  new test) rejected — a seam key exists to expose module-private
+  constants to vm-boot tests; a redundant alias earns its keep by
+  being absent.
+
+## 2026-11-22 — Ticket #122 review round 2: bounded fixed-point position resolution
+
+- **The rock/tank conflict resolves to a bounded fixed point, with
+  the WALLS as the final authority of every pass.** Each pass exits
+  every violated collision ring, then clamps to the tank; the loop
+  is capped at `rocks.length + 1` passes, so the last operation on a
+  capped loop is always the wall clamp — step()'s INSIDE-TANK
+  contract can never be the broken one. Where a wall-clamped rock's
+  `r + ROCK_COLLIDE_PAD` ring overhangs the wall, the constraints are
+  genuinely mutually exclusive in a thin sliver; there the fish may
+  rest in the pad ring but never inside the rock's SOLID body (a
+  wall-clamped rock touches the wall tangentially, so
+  `dist ≥ r` is always achievable while `y ≥ 0`). Alternative:
+  clamp→project pass order — rejected because it terminates with the
+  projection, i.e. it breaks the documented inside-the-tank contract
+  in exactly the sliver case. Unbounded loop — rejected (mutual
+  exclusion would spin forever).
+- **Two violated disks are exited via the nearer of their boundary
+  intersections, not sequential radial projections.** Radial exits
+  from two overlapping equal-radius disks ping-pong between them
+  (repro: rocks 60 u apart, r+pad 46 — the fish cycles (86,40) ⇄
+  (54,40) and never converges), so the reviewer's plain
+  "iterate the pair" fix could not clear the overlap repro either.
+  All placements are `ROCK_RADIUS` circles, so the equal-radius
+  intersection math is exact; if every violator shares one centre
+  (duplicate placements), a single radial exit clears all disks at
+  once. Pinned by both round-2 regressions (mid-school 300-step
+  soak and the single-step corner repro) in
+  tests/fishtank-rocks.test.mjs.
+- **The wall-sliver regression asserts inside-the-tank plus
+  `dist ≥ r` (solid body) every step — NOT `r + pad`.** The pad
+  assertion is unsatisfiable in the reviewer's exact configuration
+  (rock clamped to (40,40), fish pressed to the edge) by ANY
+  implementation that honours the inside-the-tank contract, so
+  pinning it would freeze the very trade the fix makes. The
+  pad-ring soak where the assertions ARE mutually satisfiable
+  (mid-school overlap, no wall in play) keeps the full
+  `r + ROCK_COLLIDE_PAD` invariant.
+- **Toolbar clicks inside the toolbar's on-screen rect are dropped
+  by a live-rect guard** (`Toolbar.clickInsideToolbar`, evaluated at
+  click time against `#toolbar`'s `getBoundingClientRect`; null-
+  guarded so headless docs are inert). A CSS `pointer-events` note
+  alone was the cheaper alternative the review offered, but the
+  guard also protects the headless/vm path and any restyle, and the
+  vm suite pins it with a stubbed toolbar rect.
+- **`KELP_PICK_BAND = 140`'s comment now states the real basis**
+  (anchor + the three base segments' rest span ≈ 83 u plus their
+  flexed sweep under drag/current) instead of the ~⅔-of-total
+  framing that invited a wrong derivation. Kelp blade width carries
+  the same kind of honesty: constant device px by design, unlike
+  the viewport-scaled rocks.
+
+## 2026-11-22 — Ticket #122 review round 3: global ring-exit choice
+
+- **The ring exit is chosen GLOBALLY, not by the first violating
+  pair.** Every candidate — each violator's radial exit, then each
+  violator pair's two boundary intersections (all placements are
+  equal-radius circles) — is scored by its WORST remaining ring
+  depth over ALL rocks (a candidate that clears its own violators
+  but digs into a third ring scores accordingly), and the minimum
+  wins, with a strict-improvement / rock-order enumeration as the
+  deterministic tie-break. Root cause of the round-2 strategy: its
+  "nearer intersection" test is local, so on a 2×2 grid at
+  40-unit spacing it re-selected the point the tetra ALREADY SAT ON
+  (the B∩C pocket intersection sits 7.99 u from D's centre — in the
+  solid body): a fixed point of its own choice that the
+  `rocks.length + 1` pass cap cannot break, resting the tetra buried
+  every step it arrived there. Pinned by the round-3 regressions in
+  tests/fishtank-rocks.test.mjs: the 2×2 grid at 40 spacing as a
+  single tetra at the grid centre AND placed on the seeded school
+  (seed 1 is the reviewer's regime made deterministic: 3 buried
+  rests at the placement step under the old code), plus a
+  UNION-SAMPLING one-step property (≈1700 lattice points inside the
+  union of the four rings; one step from each ends fully clear of
+  all four and inside the tank — 53 ms, so it runs in every suite
+  pass).
+- **Honest residual of the capped resolution (replacing the older
+  "wall-overhang is the only capped residual" claim).** What every
+  step guarantees: the tetra is INSIDE the tank (the walls are the
+  final authority of every pass and of the cap-rest fallback), and
+  it is clear of every ring whenever the bounded candidate search
+  offers such a candidate — true for every reviewed configuration
+  (two overlapping disks, the 2×2 grid, single tetra and
+  on-school). What it does NOT guarantee: zero ring overlap at a
+  CAP-REST position in genuinely adversarial geometries. (a) Wall
+  sliver — a wall-clamped rock's `r + ROCK_COLLIDE_PAD` ring
+  overhangs the wall; the tetra may rest inside the pad ring there,
+  but a wall-resting tetra is never inside that rock's solid body
+  (a wall-clamped rock touches the wall tangentially). (b) Dense
+  clusters — ≥ 3 mutually overlapping rings, possibly wedged
+  against a wall, where the candidate set offers no fully-clear
+  point: a cap-rest can still sit inside a ring. Both cases are
+  bounded and self-healing: the cap-rest fallback (below) minimises
+  the rest depth, and the next step's global search resumes from
+  the rest position.
+- **Cap-rest fallback: before the walls reclaim their authority,
+  one final radial exit from the DEEPEST violator** (largest ring
+  depth, ties to the earlier rock in world order) is taken instead
+  of accepting the cap's rest position. It breaks the self-cycle
+  the local choice fell into on dense grids, and in the wall
+  sliver the same exit simply lands back on the wall (the sliver
+  residual stays at most a pad-ring shave, INSIDE-TANK intact).
+  Inward-velocity stripping (slide along, never dig in) was
+  centralised into one helper used both per-exit (any ring the
+  exit sits on or in, with a 1e-9 fp-contact slack so the scored
+  disks engage) and at rest (no-op in the common case).
+- **`seam.ROCK_COLLIDE_PAD` is consumed, same class as the earlier
+  unconsumed `AMBIENT_CURRENT_X`.** Chose consumption over deletion:
+  tests/fishtank-placement.test.mjs now asserts the seam value
+  equals the source constant (pins the bundled pad) and runs a 300-
+  step soak in the vm-booted world — rock dropped on the school,
+  every bundled tetra kept outside `rock.r + ROCK_COLLIDE_PAD`
+  every step. Deletion rejected: the pad is load-bearing for the
+  acceptance criterion (the 600-step soak's radius) and the
+  placement suite is the natural place to assert the bundle ships
+  it.
+
+## 2026-11-22 — Ticket #122 review round 4: wall-phantom exits, scratch scope, rock story
+
+- **Exits are scored at the tank-clamped point, and only a STRICT
+  improvement is adopted (the round-3 phantom-clear fix).**
+  `pickBestExit` clamps every candidate into
+  [0, TANK_WIDTH] × [0, TANK_HEIGHT] BEFORE scoring — the walls take
+  the final word of the same pass, so a candidate is judged at the
+  point the tetra actually lands at. Raw-coordinate scoring found
+  "phantom-clear" exits just outside the water (worst depth
+  −0.004) whose wall clamp re-projected the chosen point BACK INTO a
+  ring; the next pass re-selected the same phantom, cycled to the
+  cap, and the unclamped cap-rest exit repeated it — a corner-
+  hugging 2x2 grid at 40 spacing left 3 of 8 sampled wall poses
+  in-ring for 300/300 steps. Adopting only a strict depth
+  improvement makes the choice self-cycle-proof structurally: an
+  accepted point always has a strictly smaller worst ring depth, so
+  a pass can never re-select a point already reached. The cap-rest
+  fallback now clamps its exit too and adopts it only when it
+  strictly improves the cap's rest position (round 4: "ideally
+  reject it when it improves nothing"). Proven: 1-unit-resolution
+  one-step lattices over the ENTIRE ring union, 14,699 (corner) and
+  15,325 (centre) samples, 0 failures; eight-pose 300-step wall
+  soaks green.
+- **Candidate set gained each violator ring's crossings with the
+  four tank walls.** Pre-clamp scoring alone did NOT suffice for the
+  corner: probed 1-unit lattice — 5,032/14,699 union points still
+  had no clear candidate among radial exits + pair intersections
+  (worst residual best-depth 6.0, e.g. the deep-centre pocket
+  (60,40) → (60,0) → wall shuffle). When a cluster is wedged
+  against a wall, the escape corridor runs ALONG the wall, and only
+  the ring∩wall points reach it in one jump (e.g. (0,17.3) /
+  (62.7,0) for the (40,40) rock: on its own ring boundary, clear of
+  the other three). Deterministic, ≤ 8 points per violator, and a
+  superset of the round-3 set — every previously-pinned
+  configuration keeps its witness. Alternative considered and
+  rejected: a numeric local search (ray marching / hill descent)
+  around the best candidate — it adds tuning knobs and weakens the
+  "bounded, deterministic" story the resolution layer rests on.
+- **Resolution scratch is now PER-WORLD private fields
+  (`rockViolators`, `bestExit`, `stripV`)**, not module-level
+  mutable arrays. Two concurrently simulated worlds (e.g. a preview
+  world alongside the live one, or a future replayer) could no
+  longer interleave through shared buffers; `collectViolators` and
+  `pickBestExit` became World methods, `stripInwardVelocity` takes
+  an explicit out-parameter. Zero hot-path cost (same shape, field
+  loads instead of globals; the paths only fire on ring violations
+  or at rest).
+- **Rock visual story: an adrift smooth stone, not a gravel pebble
+  (should-fix: placement vs shading disagreement).** Rocks may be
+  placed anywhere in the water column (`placeRock` imposes no
+  substrate band), but `drawRocks` sold a pebble "sitting on the
+  gravel". Chose softening the grounded LOOK over constraining
+  placement: the acceptance criteria's soaks place rocks mid-tank
+  ((500,400), (1100,600), the school-drop at the tank centre) and
+  PRD §3 asks for obstacles fish swim AROUND, not a bottom décor —
+  a substrate band would gut the mechanic. `drawRocks`'s doc now
+  states the contract honestly: the radial highlight is light from
+  above, the 0.78× vertical squash is deliberate stylised
+  foreshortening (NOT a contact shadow), and the physical circle is
+  the full `rock.r` — a slightly generous read on the squashed
+  silhouette, deliberate (fish should skirt the stone). Alternatives
+  rejected: constrain `placeRock` to a substrate band (breaks the
+  criterion's mid-tank soak placements), and render at full `r`
+  (loses the pebble read; the squash is harmless because the
+  collision is the CONSERVATIVE side of the mismatch).
+- **One-step lattice tests restructured to a single world with the
+  tetra re-seated per sample** (should-fix: ~1,500 World
+  constructions). The per-sample behaviour is position-determined
+  (fresh velocity from `pressFish`; no neighbours at population 1;
+  torque/phase history only feeds the tail, which the assertions
+  ignore), so one world re-seated per point is observably identical
+  per sample and keeps the lattice growable linearly.
+
+## 2026-11-22 — Rebase of #122 onto predator/atmosphere main
+
+- **Combined as a single squash of the reviewed 18 commits onto
+  `origin/main` (tetras #130 was already the merge-base; #124 predator
+  and #125 atmosphere merged while #122 was in review), following the
+  house precedent set by the #125 rebase entry above** — a 18-patch
+  replay would re-fight the same world.ts/constants.ts/renderer.ts
+  hunks ~10 times with no additional information, and the branch is
+  squash-merged to main anyway. Nothing from either side dropped:
+  world step order is tetras → kelp → predator (both post-tetra actors
+  kept, kelp reacting to this step's fish positions, predator on
+  current prey); renderer draw order is water → substrate far/near →
+  caustics → ripples → kelp → rocks → tetras → bubbles (header
+  comment re-stated); constants keep BOTH the PREDATOR_* block and the
+  ROCK_*/KELP_*/AMBIENT_CURRENT_X blocks; DECISIONS.md keeps both
+  sides' entries.
+- **New `WorldOptions.predator` (default true):** the two one-step
+  lattice tests rescan ~1500+ fixed steps on ONE world (the round-4
+  single-world structure), and the merged predator's hunger crosses
+  its stalk threshold (0.7 at 0.06/s ≈ 700 steps) well inside the
+  scan — a live predator captures the lone pressed tetra, voiding the
+  tests' persistent-agent premise. The two lattice tests opt out with
+  `predator: false`; `serializeState` omits its `P:` line for
+  predator-less worlds (determinism tests keep the default and are
+  unaffected). Alternatives rejected: per-sample World construction
+  (rejected in round 4), runtime monkey-patch of `world.predator`
+  (covert), population > 1 (changes the squeezing scenario).
+- **Kelp and rocks now draw AFTER the #125 substrate layers** (their
+  roots/bodies rest on the gravel, in front of the near layer but
+  behind the school): our pre-merge docstring ("There is no gravel
+  layer") was stale once the parallax substrate landed, so the
+  renderer header and render() comment state the actual order.
