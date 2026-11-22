@@ -66,6 +66,8 @@ function makeEl(id) {
     listeners: {},
     classes: new Set(),
     textContent: "",
+    attrs: {},
+    setAttribute: function (name, value) { this.attrs[name] = value; },
     addEventListener: function (type, cb) {
       (this.listeners[type] ??= []).push(cb);
     },

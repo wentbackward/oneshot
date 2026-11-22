@@ -43,12 +43,13 @@ export class Renderer {
   private readonly substrate = new Substrate();
 
   /** Paint one frame of the given world state. The scene ambient is
-   *  resolved from world.time (a paused sim freezes it); the rest
-   *  of the frame is painted in the documented order above — the
-   *  kelp and rocks sit after the substrate (their roots/bodies
+   *  resolved from world.time + the lighting-phase offset (a paused
+   *  sim freezes it; the offset is the PRD §4 save/load knob); the
+   *  rest of the frame is painted in the documented order above —
+   *  the kelp and rocks sit after the substrate (their roots/bodies
    *  rest on the gravel) and behind the tetra school. */
   render(ctx: CanvasRenderingContext2D, width: number, height: number, world: World): void {
-    const light = lightPhaseAt(world.time);
+    const light = lightPhaseAt(world.time + world.lightingPhaseOffset);
     drawBackdrop(ctx, width, height, light.palette);
     this.substrate.paintFar(ctx, width, height, world.time);
     this.substrate.paintNear(ctx, width, height, world.time);

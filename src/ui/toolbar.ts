@@ -47,6 +47,11 @@ export interface Viewport {
 export class Toolbar {
   /** Active mode (place-rock is the default at boot). */
   mode: ToolMode = "place-rock";
+  /** Fired after a click SUCCEEDED (a rock placed, a kelp strand
+   *  planted, an object removed) — the app hooks the auto-save
+   *  (PRD §4) here. Rejected clicks (caps, open water, bad
+   *  coordinates) fire nothing: the layout did not change. */
+  onChanged: (() => void) | null = null;
   private readonly world: World;
   private readonly viewport: () => Viewport;
   private readonly buttons = new Map<ToolMode, HTMLElement | null>();
@@ -134,12 +139,21 @@ export class Toolbar {
         return this.world.dropFood(tx, ty);
       case "tap-glass":
         return this.world.tapGlass(tx, ty);
-      case "place-rock":
-        return this.world.placeRock(tx, ty);
-      case "place-kelp":
-        return this.world.placeKelp(tx);
-      case "remove":
-        return this.world.removeNearestAt(tx, ty);
+      case "place-rock": {
+        const rock = this.world.placeRock(tx, ty);
+        if (rock !== null && this.onChanged !== null) this.onChanged();
+        return rock;
+      }
+      case "place-kelp": {
+        const strand = this.world.placeKelp(tx);
+        if (strand !== null && this.onChanged !== null) this.onChanged();
+        return strand;
+      }
+      case "remove": {
+        const removed = this.world.removeNearestAt(tx, ty);
+        if (removed !== null && this.onChanged !== null) this.onChanged();
+        return removed;
+      }
     }
   }
 
