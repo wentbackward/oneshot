@@ -8,10 +8,30 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { height: 100%; overflow: hidden; background: #06121e; }
 #game { display: block; width: 100vw; height: 100vh; }
+
+/* Click-region note: the nav box (buttons + gaps) sits over the
+   canvas in the top-left corner. In place modes a first click there
+   must not plant scenery hidden behind the toolbar — the buttons
+   swallow their own clicks, and Toolbar's click-region guard
+   (src/ui/toolbar.ts) drops any canvas click that lands inside
+   this box. Restyles that widen/narrow the box need no JS change. */
+#toolbar { position: fixed; top: 10px; left: 10px; z-index: 10; display: flex; gap: 6px; font: 10px/1 monospace; letter-spacing: .15em; }
+#toolbar button { color: #5a6b7d; background: rgba(5, 7, 15, .72); border: 1px solid #1c2430; border-radius: 6px; padding: 5px 9px; cursor: pointer; }
+#toolbar button:hover { color: #e8f2fb; border-color: #5a6b7d; }
+#toolbar button.selected { color: #7fe3ff; border-color: #3d8bb0; }
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
+<!-- Placement toolbar: static markup (PRD §3 Place/Remove tools),
+     wired at boot by src/ui/toolbar.ts. The vm suites boot this
+     file with a document stub; every id lookup is null-guarded
+     there, so the static buttons never break a headless boot. -->
+<nav id="toolbar" aria-label="tank tools">
+<button id="tool-place-rock" class="selected" type="button">PLACE ROCK</button>
+<button id="tool-place-kelp" type="button">PLACE KELP</button>
+<button id="tool-remove" type="button">REMOVE</button>
+</nav>
 <!-- One-shot hub back link: static markup only, no JS (the vm suites
      boot this file — anything queried at boot needs a stub, so keep
      it inert, matching the other cabinets). -->
@@ -43,6 +63,24 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
   var PREDATOR_CAPTURE_RADIUS = 28;
   var PREDATOR_REST_STEPS = 240;
   var PREDATOR_WAYPOINT_TOLERANCE = 48;
+  var ROCK_MAX = 24;
+  var KELP_MAX = 32;
+  var ROCK_RADIUS = 40;
+  var ROCK_COLLIDE_PAD = 6;
+  var ROCK_PICK_SLACK = 24;
+  var KELP_PICK_SLACK = 24;
+  var KELP_PICK_BAND = 140;
+  var KELP_SEED_STRIDE = 104729;
+  var KELP_SEGMENTS = 8;
+  var KELP_TOTAL_LENGTH = 220;
+  var KELP_GROWTH = 150;
+  var KELP_ANCHOR_PULL = 0.3;
+  var KELP_DAMPING = 0.985;
+  var KELP_CONSTRAINT_ITERS = 8;
+  var KELP_JITTER = 2;
+  var AMBIENT_CURRENT_X = 40;
+  var KELP_FISH_RADIUS = 48;
+  var KELP_FISH_PUSH_GAIN = 2;
 
   // src/sim/rng.ts
   function mulberry32(seed) {
@@ -54,6 +92,127 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       return ((t ^ t >>> 14) >>> 0) / 4294967296;
     };
   }
+
+  // src/sim/kelp.ts
+  var KelpStrand = class {
+    /** Anchor x on the substrate (point 0's x, never moves). */
+    anchorX;
+    /** Anchor y — always TANK_HEIGHT (the substrate). */
+    anchorY;
+    /** Segment count (KELP_SEGMENTS, ≥ 6). */
+    segments;
+    /** Rest length of EVERY segment (they tile the strand evenly). */
+    restLength;
+    /** The base spring's rest point: restLength up the (jittered)
+     *  base direction from the anchor — point 1 is pulled toward it
+     *  every constraint pass (see KELP_ANCHOR_PULL). */
+    baseRestX;
+    baseRestY;
+    /** points[0] is the pinned anchor; points[segments] is the tip. */
+    points = [];
+    /** Build the strand at (anchorX, anchorY) as a nearly vertical
+     *  column of segments pointing UP (−y): the seeded jitter keeps
+     *  it from being laser-straight, which would make the settle
+     *  tests vacuous (a perfectly symmetric chain has nothing to
+     *  relax). `seed` is the world's deterministic source for it. */
+    constructor(anchorX, anchorY, seed) {
+      if (!Number.isFinite(anchorX) || !Number.isFinite(anchorY)) {
+        throw new RangeError("KelpStrand: anchor must be finite");
+      }
+      this.anchorX = anchorX;
+      this.anchorY = anchorY;
+      this.segments = KELP_SEGMENTS;
+      this.restLength = KELP_TOTAL_LENGTH / KELP_SEGMENTS;
+      const rng = mulberry32(seed >>> 0);
+      for (let i = 0; i <= this.segments; i++) {
+        const jitter = i === 0 ? 0 : (rng() * 2 - 1) * KELP_JITTER;
+        const x = anchorX + jitter;
+        const y = anchorY - this.restLength * i;
+        this.points.push({ x, y, px: x, py: y });
+      }
+      const p0 = this.points[0];
+      const p1 = this.points[1];
+      const bx = p1.x - p0.x;
+      const by = p1.y - p0.y;
+      const bl = Math.hypot(bx, by);
+      this.baseRestX = p0.x + bx / bl * this.restLength;
+      this.baseRestY = p0.y + by / bl * this.restLength;
+    }
+    /** One fixed step: verlet-integrate current + growth, apply the
+     *  fish drag, then satisfy every segment's rest length
+     *  KELP_CONSTRAINT_ITERS times, re-pinning the anchor each pass
+     *  and finishing each pass with the soft base-orientation pull.
+     *
+     *  `currentX` is the ambient horizontal flow (tank units/s², 0 =
+     *  still water); `fish` is the world's agents in fixed order
+     *  (each head drags any kelp point within KELP_FISH_RADIUS).
+     *  A non-finite or non-positive `dt` is refused: the step is a
+     *  no-op touching nothing (same policy as World.step). */
+    step(dt, currentX, fish) {
+      if (!Number.isFinite(dt) || dt <= 0) return;
+      const dt2 = dt * dt;
+      for (let i = 1; i < this.points.length; i++) {
+        const p = this.points[i];
+        const vx = (p.x - p.px) * KELP_DAMPING;
+        const vy = (p.y - p.py) * KELP_DAMPING;
+        p.px = p.x;
+        p.py = p.y;
+        p.x += vx + currentX * dt2;
+        p.y += vy - KELP_GROWTH * dt2;
+      }
+      this.dragByFish(dt, fish);
+      for (let iter = 0; iter < KELP_CONSTRAINT_ITERS; iter++) {
+        const anchor = this.points[0];
+        anchor.x = this.anchorX;
+        anchor.y = this.anchorY;
+        for (let i = 1; i < this.points.length; i++) {
+          this.satisfy(this.points[i - 1], this.points[i]);
+        }
+        const base = this.points[1];
+        base.x += (this.baseRestX - base.x) * KELP_ANCHOR_PULL;
+        base.y += (this.baseRestY - base.y) * KELP_ANCHOR_PULL;
+      }
+    }
+    /** Fish → kelp coupling: each fish drags every point inside
+     *  KELP_FISH_RADIUS along its own velocity, scaled by the
+     *  named gain and a linear (1 − d/R) falloff. Displacement per
+     *  step is bounded by gain × speed × dt, so a fast fish whips
+     *  the strand while a slow one barely stirs it. */
+    dragByFish(dt, fish) {
+      const r2 = KELP_FISH_RADIUS * KELP_FISH_RADIUS;
+      for (const f of fish) {
+        const fx = f.vx * dt;
+        const fy = f.vy * dt;
+        if (fx === 0 && fy === 0) continue;
+        for (let i = 1; i < this.points.length; i++) {
+          const p = this.points[i];
+          const ex = p.x - f.x;
+          const ey = p.y - f.y;
+          const d2 = ex * ex + ey * ey;
+          if (d2 >= r2) continue;
+          const falloff = 1 - Math.sqrt(d2) / KELP_FISH_RADIUS;
+          p.x += fx * KELP_FISH_PUSH_GAIN * falloff;
+          p.y += fy * KELP_FISH_PUSH_GAIN * falloff;
+        }
+      }
+    }
+    /** Relax segment (a, b) to the rest length: split the correction
+     *  between the endpoints, giving the pinned anchor zero weight
+     *  (b is never pinned — only points[0] is). */
+    satisfy(a, b) {
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const d = Math.hypot(dx, dy);
+      if (d === 0) return;
+      const diff = (d - this.restLength) / d;
+      const wA = a === this.points[0] ? 0 : 0.5;
+      const wB = a === this.points[0] ? 1 : 0.5;
+      a.x += dx * diff * wA;
+      a.y += dy * diff * wA;
+      b.x -= dx * diff * wB;
+      b.y -= dy * diff * wB;
+    }
+  };
 
   // src/sim/tail.ts
   var TAIL_FREQ_SPEED_GAIN = 0.04;
@@ -68,9 +227,11 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
   var MAX_ALIGNMENT_FORCE = 1;
   var MAX_COHESION_FORCE = 60;
   var MAX_BOUNDARY_AVOIDANCE_FORCE = MAX_STEERING_FORCE;
+  var MAX_OBSTACLE_AVOIDANCE_FORCE = 100;
   var NEIGHBOUR_RADIUS = 64;
   var COHESION_GAIN = 0.35;
   var BOUNDARY_MARGIN = 120;
+  var OBSTACLE_AVOID_DISTANCE = 150;
   var FISH_MAX_SPEED = 80;
   function zero() {
     return { x: 0, y: 0 };
@@ -133,6 +294,20 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
     if (pos.y < BOUNDARY_MARGIN) f.y += (BOUNDARY_MARGIN - pos.y) / BOUNDARY_MARGIN * MAX_BOUNDARY_AVOIDANCE_FORCE;
     if (pos.y > height - BOUNDARY_MARGIN) f.y -= (pos.y - (height - BOUNDARY_MARGIN)) / BOUNDARY_MARGIN * MAX_BOUNDARY_AVOIDANCE_FORCE;
     return clampLength(f, MAX_BOUNDARY_AVOIDANCE_FORCE);
+  }
+  function obstacleAvoidance(self, obstacles) {
+    const sum = zero();
+    for (const o of obstacles) {
+      const dx = self.x - o.x;
+      const dy = self.y - o.y;
+      const d = Math.hypot(dx, dy);
+      const w = 1 - (d - o.r) / OBSTACLE_AVOID_DISTANCE;
+      if (w <= 0) continue;
+      const dir = d === 0 ? { x: 1, y: 0 } : { x: dx / d, y: dy / d };
+      sum.x += dir.x * w;
+      sum.y += dir.y * w;
+    }
+    return clampLength(sum, MAX_OBSTACLE_AVOIDANCE_FORCE);
   }
 
   // src/sim/spatialGrid.ts
@@ -403,6 +578,37 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
   var TORQUE_SMOOTHING = 0.25;
   var SCHOOL_PERCEPTION_RADIUS = 180;
   var TAU = 2 * Math.PI;
+  function worstRingDepth(rocks, cx, cy) {
+    let worst = -Infinity;
+    for (const rock of rocks) {
+      const depth = rock.r + ROCK_COLLIDE_PAD - Math.hypot(cx - rock.x, cy - rock.y);
+      if (depth > worst) worst = depth;
+    }
+    return worst;
+  }
+  function clampX(value) {
+    return value < 0 ? 0 : value > TANK_WIDTH ? TANK_WIDTH : value;
+  }
+  function clampY(value) {
+    return value < 0 ? 0 : value > TANK_HEIGHT ? TANK_HEIGHT : value;
+  }
+  function stripInwardVelocity(rocks, x, y, vx, vy, out) {
+    out.x = vx;
+    out.y = vy;
+    for (const rock of rocks) {
+      const rx = x - rock.x;
+      const ry = y - rock.y;
+      const d = Math.hypot(rx, ry);
+      if (d >= rock.r + ROCK_COLLIDE_PAD + 1e-9) continue;
+      const ux = d > 0 ? rx / d : 1;
+      const uy = d > 0 ? ry / d : 0;
+      const vr = out.x * ux + out.y * uy;
+      if (vr < 0) {
+        out.x -= vr * ux;
+        out.y -= vr * uy;
+      }
+    }
+  }
   var World = class {
     /** World clock in seconds: advances in exact step-size multiples. */
     time = 0;
@@ -421,17 +627,126 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
      *  (PRD §1). The predator's isolation checks reuse it. */
     grid;
     /** The apex predator (PRD §2, ticket #124): owned by the world,
-     *  stepped after the tetras each fixed step. */
+     *  stepped after the tetras each fixed step. Null when the world
+     *  was built with `predator: false` (solver unit tests). */
     predator;
+    /** Placed rocks (PRD §3): the dynamic circular obstacles. Fed to
+     *  obstacleAvoidance() every step and enforced by a hard contact
+     *  projection, so a removed rock leaves NO residual steering.
+     *  Capped at ROCK_MAX by placeRock(). */
+    rocks = [];
+    /** Placed kelp strands (PRD §3): verlet chains anchored at the
+     *  substrate, capped at KELP_MAX by placeKelp(). */
+    kelp = [];
+    /** Horizontal ambient flow (tank units/s²) driving the kelp. */
+    ambientCurrentX;
     /** Reused neighbour scratch per step (allocation-free hot path):
      *  steering forces only READ the list, so one shared buffer is
      *  safe across the fixed-order iteration. */
     neighbours = [];
+    /** Reused violator scratch (allocation-free hot path): the rocks
+     *  whose collision ring the tetra is inside, in world order.
+     *  PER-WORLD so concurrent worlds can never share mutation state. */
+    rockViolators = [];
+    /** The chosen exit point from pickBestExit (per-world scratch). */
+    bestExit = { x: 0, y: 0 };
+    /** The inward-velocity strip scratch (per-world scratch). */
+    stripV = { x: 0, y: 0 };
+    /** Deterministic per-strand jitter source: identical placement
+     *  sequences on identical seeds yield identical strands. */
+    kelpSequence = 0;
     constructor(options = {}) {
       this.seed = options.seed ?? 1;
+      this.ambientCurrentX = options.ambientCurrentX ?? AMBIENT_CURRENT_X;
       this.grid = new SpatialGrid(TANK_WIDTH, TANK_HEIGHT, GRID_CELL_SIZE);
       this.spawn(options.population ?? TETRA_COUNT);
-      this.predator = new ApexPredator();
+      this.predator = options.predator === false ? null : new ApexPredator();
+    }
+    // ---------- placement tools (PRD §3) ----------
+    /** Place a rock at (x, y): a circle of ROCK_RADIUS clamped fully
+     *  inside the tank. Returns the rock, or null when the tank is
+     *  at the ROCK_MAX cap or the coordinates are non-finite (a
+     *  rejected placement touches nothing). */
+    placeRock(x, y) {
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+      if (this.rocks.length >= ROCK_MAX) return null;
+      const rock = {
+        x: Math.min(TANK_WIDTH - ROCK_RADIUS, Math.max(ROCK_RADIUS, x)),
+        y: Math.min(TANK_HEIGHT - ROCK_RADIUS, Math.max(ROCK_RADIUS, y)),
+        r: ROCK_RADIUS
+      };
+      this.rocks.push(rock);
+      return rock;
+    }
+    /** Remove a previously placed rock. Returns false (and touches
+     *  nothing) when the rock is not present. */
+    removeRock(rock) {
+      const at = this.rocks.indexOf(rock);
+      if (at < 0) return false;
+      this.rocks.splice(at, 1);
+      return true;
+    }
+    /** Place a kelp strand anchored at (x, TANK_HEIGHT) — the
+     *  substrate. Returns the strand, or null when the tank is at the
+     *  KELP_MAX cap or the coordinate is non-finite. */
+    placeKelp(x) {
+      if (!Number.isFinite(x)) return null;
+      if (this.kelp.length >= KELP_MAX) return null;
+      const anchorX = Math.min(TANK_WIDTH, Math.max(0, x));
+      const strand = new KelpStrand(
+        anchorX,
+        TANK_HEIGHT,
+        this.seed + KELP_SEED_STRIDE * ++this.kelpSequence
+      );
+      this.kelp.push(strand);
+      return strand;
+    }
+    /** Remove a previously placed kelp strand. Returns false (and
+     *  touches nothing) when the strand is not present. */
+    removeKelp(strand) {
+      const at = this.kelp.indexOf(strand);
+      if (at < 0) return false;
+      this.kelp.splice(at, 1);
+      return true;
+    }
+    /** Remove-mode pick: the nearest object whose pick region covers
+     *  (x, y) — rocks first (their body + ROCK_PICK_SLACK, anywhere
+     *  in the tank), then kelp anchors (± KELP_PICK_SLACK around the
+     *  anchor x, but ONLY inside the KELP_PICK_BAND substrate band:
+     *  a remove click on open water high above a strand must not
+     *  strike it). Returns the removed object, or null when the
+     *  click hit open water. Non-finite coordinates are rejected
+     *  (no-op, same policy as advance()/step()). */
+    removeNearestAt(x, y) {
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+      let bestRock = null;
+      let bestRockDist = Infinity;
+      for (const rock of this.rocks) {
+        const d = Math.hypot(x - rock.x, y - rock.y);
+        if (d <= rock.r + ROCK_PICK_SLACK && d < bestRockDist) {
+          bestRockDist = d;
+          bestRock = rock;
+        }
+      }
+      if (bestRock !== null) {
+        this.removeRock(bestRock);
+        return bestRock;
+      }
+      let bestKelp = null;
+      let bestKelpDist = Infinity;
+      for (const strand of this.kelp) {
+        if (y < TANK_HEIGHT - KELP_PICK_BAND) continue;
+        const d = Math.abs(x - strand.anchorX);
+        if (d <= KELP_PICK_SLACK && d < bestKelpDist) {
+          bestKelpDist = d;
+          bestKelp = strand;
+        }
+      }
+      if (bestKelp !== null) {
+        this.removeKelp(bestKelp);
+        return bestKelp;
+      }
+      return null;
     }
     /** Spawn n tetras as one loose cluster at the tank centre: a
      *  shared base heading (jittered ±SPAWN_HEADING_JITTER) so the
@@ -490,10 +805,15 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
     }
     /** One deterministic step of EXACTLY dt seconds: rebuild the
      *  neighbor grid, then for every tetra (fixed array order)
-     *  compose the steering forces, clamp the speed, integrate and
-     *  keep the body INSIDE the tank (elastic reflection plus a hard
-     *  clamp), and advance its articulated tail at
-     *  tailFrequency(speed, torque).
+     *  compose the steering forces (including obstacle avoidance
+     *  around the placed rocks), clamp the speed, integrate and
+     *  keep the body INSIDE the tank (elastic reflection, a hard
+     *  clamp) and hard-resolve it against every rock's collision
+     *  radius together with the tank walls (bounded fixed point —
+     *  see the resolution comment in the body), and advance its
+     *  articulated tail at tailFrequency(speed, torque). Finally,
+     *  advance every kelp strand under the ambient current, letting
+     *  the tetras drag the strands they swim through.
      *
      *  WELL-FORMEDNESS (enforced here, same policy as advance()): a
      *  non-finite dt (NaN, ±∞) or a dt <= 0 is refused — step() is a
@@ -515,8 +835,9 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
         const ali = alignment(this.neighbours);
         const coh = cohesion(t, this.neighbours);
         const bou = boundaryAvoidance(t, TANK_WIDTH, TANK_HEIGHT);
-        const ax = sep.x + ali.x * ALIGNMENT_CRUISE_SPEED + coh.x + bou.x;
-        const ay = sep.y + ali.y * ALIGNMENT_CRUISE_SPEED + coh.y + bou.y;
+        const obs = obstacleAvoidance(t, this.rocks);
+        const ax = sep.x + ali.x * ALIGNMENT_CRUISE_SPEED + coh.x + bou.x + obs.x;
+        const ay = sep.y + ali.y * ALIGNMENT_CRUISE_SPEED + coh.y + bou.y + obs.y;
         let vx = t.vx + ax * dt;
         let vy = t.vy + ay * dt;
         const speed = Math.hypot(vx, vy);
@@ -545,10 +866,63 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
           y = 2 * TANK_HEIGHT - y;
           vy = -vy;
         }
-        if (x < 0) x = 0;
-        else if (x > TANK_WIDTH) x = TANK_WIDTH;
-        if (y < 0) y = 0;
-        else if (y > TANK_HEIGHT) y = TANK_HEIGHT;
+        for (let pass = 0; pass <= this.rocks.length; pass++) {
+          let moved = false;
+          const n = this.collectViolators(x, y);
+          if (n > 0 && this.pickBestExit(n, x, y)) {
+            x = this.bestExit.x;
+            y = this.bestExit.y;
+            moved = true;
+            stripInwardVelocity(this.rocks, x, y, vx, vy, this.stripV);
+            vx = this.stripV.x;
+            vy = this.stripV.y;
+          }
+          if (x < 0) {
+            x = 0;
+            moved = true;
+          } else if (x > TANK_WIDTH) {
+            x = TANK_WIDTH;
+            moved = true;
+          }
+          if (y < 0) {
+            y = 0;
+            moved = true;
+          } else if (y > TANK_HEIGHT) {
+            y = TANK_HEIGHT;
+            moved = true;
+          }
+          if (!moved) break;
+        }
+        {
+          const n = this.collectViolators(x, y);
+          let depth = 0;
+          let worst = null;
+          for (let i = 0; i < n; i++) {
+            const rock = this.rockViolators[i];
+            const d = rock.r + ROCK_COLLIDE_PAD - Math.hypot(x - rock.x, y - rock.y);
+            if (d > depth) {
+              depth = d;
+              worst = rock;
+            }
+          }
+          if (worst !== null) {
+            const m = worst.r + ROCK_COLLIDE_PAD;
+            const rx = x - worst.x;
+            const ry = y - worst.y;
+            const d = Math.hypot(rx, ry);
+            const ux = d > 0 ? rx / d : 1;
+            const uy = d > 0 ? ry / d : 0;
+            const exitX = clampX(worst.x + ux * m);
+            const exitY = clampY(worst.y + uy * m);
+            if (worstRingDepth(this.rocks, exitX, exitY) < depth) {
+              x = exitX;
+              y = exitY;
+            }
+          }
+        }
+        stripInwardVelocity(this.rocks, x, y, vx, vy, this.stripV);
+        vx = this.stripV.x;
+        vy = this.stripV.y;
         const nx = Math.hypot(vx, vy);
         const heading = Math.atan2(vy, vx);
         const instantTorque = wrapPi(heading - t.heading) / dt;
@@ -560,7 +934,126 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
         t.heading = heading;
         t.phase += TAU * tailFrequency(nx, t.torque) * dt;
       }
-      this.predator.step(dt, this);
+      for (const strand of this.kelp) {
+        strand.step(dt, this.ambientCurrentX, this.agents);
+      }
+      this.predator?.step(dt, this);
+    }
+    /** Count the rocks whose collision ring (r + ROCK_COLLIDE_PAD) the
+     *  point (x, y) is inside, recording them in rockViolators in
+     *  world order (the fixed order keeps the resolution
+     *  deterministic and provides its tie-breaks). */
+    collectViolators(x, y) {
+      let n = 0;
+      for (const rock of this.rocks) {
+        if (Math.hypot(x - rock.x, y - rock.y) < rock.r + ROCK_COLLIDE_PAD) {
+          this.rockViolators[n++] = rock;
+        }
+      }
+      return n;
+    }
+    /** Choose the GLOBAL exit for a point sitting inside `n`
+     *  collision rings: enumerate EVERY candidate — each violator's
+     *  radial exit (world order), each violator pair's two boundary
+     *  intersections (world order; equal-radius pairs only, which is
+     *  every pair since all placements are ROCK_RADIUS circles), and
+     *  each violator ring's crossings with the four tank walls — and
+     *  take the candidate whose worst remaining ring depth
+     *  (worstRingDepth over all rocks, so a candidate that clears its
+     *  own violators but digs into a third ring scores accordingly) is
+     *  strictly LESS than the point's own depth: an exit that improves
+     *  nothing is rejected outright, which is what makes the choice
+     *  self-cycle-proof (a re-selected identical point can never be a
+     *  strict improvement of itself).
+     *
+     *  EVERY candidate is tank-clamped BEFORE scoring: the walls take
+     *  the final word of the same pass, so a candidate must be judged
+     *  at the point the tetra actually lands at — not at its raw
+     *  coordinates. (Review round 4: the raw-coordinate scorer found
+     *  "phantom-clear" exits just outside the water whose clamp-back
+     *  re-entered a ring, lost every scoring round to genuine clear
+     *  points, and cycled to the cap with the tetra resting in-ring
+     *  on a wall — the corner-hugging 2x2 configuration.) The wall-
+     *  crossings exist for exactly this wedged-against-a-wall regime:
+     *  when a cluster overhangs the walls, the escape corridor runs
+     *  ALONG the wall, and only the ring∩wall points reach it in one
+     *  jump (the centre-tank 2x2 and every reviewed configuration are
+     *  pinned by the round-2 … round-4 regressions in
+     *  tests/fishtank-rocks.test.mjs).
+     *
+     *  The enumeration order is rock order and strict improvement
+     *  keeps the FIRST candidate on any tie, so the choice is
+     *  deterministic. Writes bestExit.
+     *  Returns false (nothing moved) when `n` is 0 or when no
+     *  candidate beats the current depth. */
+    pickBestExit(n, x, y) {
+      if (n === 0) return false;
+      let best = worstRingDepth(this.rocks, x, y);
+      let bestX = x;
+      let bestY = y;
+      const consider = (cx, cy) => {
+        const lcx = clampX(cx);
+        const lcy = clampY(cy);
+        const depth = worstRingDepth(this.rocks, lcx, lcy);
+        if (depth < best) {
+          best = depth;
+          bestX = lcx;
+          bestY = lcy;
+        }
+      };
+      for (let i = 0; i < n; i++) {
+        const v = this.rockViolators[i];
+        const m = v.r + ROCK_COLLIDE_PAD;
+        const rx = x - v.x;
+        const ry = y - v.y;
+        const d = Math.hypot(rx, ry);
+        const ux = d > 0 ? rx / d : 1;
+        const uy = d > 0 ? ry / d : 0;
+        consider(v.x + ux * m, v.y + uy * m);
+      }
+      for (let i = 0; i < n; i++) {
+        const A = this.rockViolators[i];
+        for (let j = i + 1; j < n; j++) {
+          const B = this.rockViolators[j];
+          if (A.r !== B.r) continue;
+          const dx = B.x - A.x;
+          const dy = B.y - A.y;
+          const d = Math.hypot(dx, dy);
+          const m = A.r + ROCK_COLLIDE_PAD;
+          if (d < 1e-9 || d >= 2 * m) continue;
+          const h = Math.sqrt(m * m - d / 2 * (d / 2));
+          const mx = (A.x + B.x) / 2;
+          const my = (A.y + B.y) / 2;
+          const nx = -dy / d;
+          const ny = dx / d;
+          consider(mx + h * nx, my + h * ny);
+          consider(mx - h * nx, my - h * ny);
+        }
+      }
+      for (let i = 0; i < n; i++) {
+        const v = this.rockViolators[i];
+        const m = v.r + ROCK_COLLIDE_PAD;
+        for (const wallY of [0, TANK_HEIGHT]) {
+          const dy = wallY - v.y;
+          const q = m * m - dy * dy;
+          if (q <= 0) continue;
+          const dx = Math.sqrt(q);
+          consider(v.x - dx, wallY);
+          consider(v.x + dx, wallY);
+        }
+        for (const wallX of [0, TANK_WIDTH]) {
+          const dx = wallX - v.x;
+          const q = m * m - dx * dx;
+          if (q <= 0) continue;
+          const dy = Math.sqrt(q);
+          consider(wallX, v.y - dy);
+          consider(wallX, v.y + dy);
+        }
+      }
+      if (bestX === x && bestY === y) return false;
+      this.bestExit.x = bestX;
+      this.bestExit.y = bestY;
+      return true;
     }
     /** Startle event (PRD §2: the school scatters when the user taps
      *  the glass): every tetra within STARTLE_RADIUS of (x, y)
@@ -598,7 +1091,9 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
     /** Fixed-precision snapshot of the whole sim state: clock first,
      *  then one `x,y,vx,vy` line per tetra at 6 decimals, then one
      *  `P:` line for the predator (state, pose, hunger, route
-     *  progress, rest window, feed count). The tail state (phase,
+     *  progress, rest window, feed count — the line is absent when
+     *  the world was built without a predator (unit-test worlds).
+     *  The tail state (phase,
      *  torque) is excluded deliberately: heading is a pure function
      *  of (vx, vy) and the tail scalars are deterministic functions
      *  of the full history, so this fingerprint already proves replay
@@ -610,9 +1105,11 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
         lines.push(`${t.x.toFixed(6)},${t.y.toFixed(6)},${t.vx.toFixed(6)},${t.vy.toFixed(6)}`);
       }
       const p = this.predator;
-      lines.push(
-        `P:${p.state}:${p.x.toFixed(6)},${p.y.toFixed(6)},${p.vx.toFixed(6)},${p.vy.toFixed(6)},${p.hunger.toFixed(6)},${p.waypointIndex},${p.restRemaining},${p.fedCount}`
-      );
+      if (p !== null) {
+        lines.push(
+          `P:${p.state}:${p.x.toFixed(6)},${p.y.toFixed(6)},${p.vx.toFixed(6)},${p.vy.toFixed(6)},${p.hunger.toFixed(6)},${p.waypointIndex},${p.restRemaining},${p.fedCount}`
+        );
+      }
       return lines.join("\n");
     }
     /** Clear + re-insert every tetra: the O(1)-average neighbor
@@ -629,6 +1126,72 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
     return a;
   }
 
+  // src/render/scenery.ts
+  var TAU2 = 2 * Math.PI;
+  var ROCK_LIGHT = "#93a0ad";
+  var ROCK_DARK = "#49545f";
+  var ROCK_SHEEN = "rgba(235, 244, 252, 0.18)";
+  var KELP_DARK = "#2c6e46";
+  var KELP_LIGHT = "#5aa873";
+  var KELP_WIDTH_DARK = 7;
+  var KELP_WIDTH_LIGHT = 2.5;
+  function traceStrand(ctx, strand, sx, sy) {
+    const pts = strand.points;
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x * sx, pts[0].y * sy);
+    for (let i = 1; i < pts.length - 1; i++) {
+      const mx = (pts[i].x + pts[i + 1].x) / 2 * sx;
+      const my = (pts[i].y + pts[i + 1].y) / 2 * sy;
+      ctx.quadraticCurveTo(pts[i].x * sx, pts[i].y * sy, mx, my);
+    }
+    const tip = pts[pts.length - 1];
+    ctx.lineTo(tip.x * sx, tip.y * sy);
+  }
+  function drawKelp(ctx, width, height, strands) {
+    const sx = width / TANK_WIDTH;
+    const sy = height / TANK_HEIGHT;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (const strand of strands) {
+      traceStrand(ctx, strand, sx, sy);
+      ctx.strokeStyle = KELP_DARK;
+      ctx.lineWidth = KELP_WIDTH_DARK;
+      ctx.stroke();
+      traceStrand(ctx, strand, sx, sy);
+      ctx.strokeStyle = KELP_LIGHT;
+      ctx.lineWidth = KELP_WIDTH_LIGHT;
+      ctx.stroke();
+    }
+  }
+  function drawRocks(ctx, width, height, rocks) {
+    const sx = width / TANK_WIDTH;
+    const sy = height / TANK_HEIGHT;
+    for (const rock of rocks) {
+      const cx = rock.x * sx;
+      const cy = rock.y * sy;
+      const rx = rock.r * sx;
+      const ry = rock.r * sy * 0.78;
+      const grad = ctx.createRadialGradient(
+        cx - rx * 0.35,
+        cy - ry * 0.45,
+        Math.max(1, rx * 0.15),
+        cx,
+        cy,
+        Math.max(rx, ry)
+      );
+      grad.addColorStop(0, ROCK_LIGHT);
+      grad.addColorStop(1, ROCK_DARK);
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, rx, ry, 0, 0, TAU2);
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(cx - rx * 0.2, cy - ry * 0.35, rx * 0.4, ry * 0.22, 0, 0, TAU2);
+      ctx.fillStyle = ROCK_SHEEN;
+      ctx.fill();
+    }
+  }
+
   // src/render/tetras.ts
   var TETRA_SPINE_SEGMENTS = 7;
   var TETRA_BODY_LENGTH = 24;
@@ -636,7 +1199,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
   var TETRA_TAIL_WAVE_NUMBER = 0.9;
   var TETRA_STROKE_WIDTH = 4;
   var TETRA_HEAD_RADIUS = 3.5;
-  var TAU2 = 2 * Math.PI;
+  var TAU3 = 2 * Math.PI;
   function tetraColour(cache, index) {
     let c = cache[index];
     if (c === void 0) {
@@ -676,7 +1239,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
     ctx.lineJoin = "round";
     ctx.stroke();
     ctx.beginPath();
-    ctx.arc(headX, headY, TETRA_HEAD_RADIUS, 0, TAU2);
+    ctx.arc(headX, headY, TETRA_HEAD_RADIUS, 0, TAU3);
     ctx.fillStyle = colourForFish;
     ctx.fill();
   }
@@ -808,7 +1371,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
   var BUBBLE_RADIUS_MIN = 1.5;
   var BUBBLE_RADIUS_MAX = 5;
   var BUBBLE_STROKE = "rgba(230, 250, 255, 0.35)";
-  var TAU3 = 2 * Math.PI;
+  var TAU4 = 2 * Math.PI;
   function hash(unit2, salt) {
     const v = Math.sin(unit2 * 127.1 + salt * 311.7) * 43758.5453;
     return v - Math.floor(v);
@@ -822,7 +1385,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
           radius: BUBBLE_RADIUS_MIN + (BUBBLE_RADIUS_MAX - BUBBLE_RADIUS_MIN) * hash(i, 3),
           speed: BUBBLE_RISE_MIN + (BUBBLE_RISE_MAX - BUBBLE_RISE_MIN) * hash(i, 2),
           offset: hash(i, 4),
-          phase0: hash(i, 5) * TAU3
+          phase0: hash(i, 5) * TAU4
         });
       }
     }
@@ -837,10 +1400,10 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       for (let i = 0; i < this.slots.length; i++) {
         const s = this.slots[i];
         const rise = column / s.speed;
-        const x = s.lane * width + Math.sin(t / rise * TAU3 * BUBBLE_RISE_PERIODS + s.phase0) * BUBBLE_WOBBLE_AMP;
+        const x = s.lane * width + Math.sin(t / rise * TAU4 * BUBBLE_RISE_PERIODS + s.phase0) * BUBBLE_WOBBLE_AMP;
         const y = height + BUBBLE_MARGIN - (t * s.speed + s.offset * column) % column;
         ctx.beginPath();
-        ctx.arc(x, y, s.radius, 0, TAU3);
+        ctx.arc(x, y, s.radius, 0, TAU4);
         ctx.stroke();
       }
     }
@@ -862,7 +1425,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
   var KELP_TIP_AMP = 1.6;
   var ROCK_RY_RATIO = 0.5;
   var TILE_OFFSETS = [0, -1];
-  var TAU4 = 2 * Math.PI;
+  var TAU5 = 2 * Math.PI;
   var Substrate = class {
     gravel = [];
     rocks = [];
@@ -883,7 +1446,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
         this.rocks.push({ u: rng(), rx: 18 + 24 * rng(), ry: 8 + 12 * rng() });
       }
       for (let i = 0; i < SUBSTRATE_KELP_TUFTS; i++) {
-        this.kelp.push({ u: rng(), h: 0.06 + 0.07 * rng(), phase: rng() * TAU4 });
+        this.kelp.push({ u: rng(), h: 0.06 + 0.07 * rng(), phase: rng() * TAU5 });
       }
     }
     /** Paint the FAR gravel layer (drawn first, i.e. behind the
@@ -900,7 +1463,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
         for (const copy of TILE_OFFSETS) {
           const x = s.u * tile + copy * tile;
           ctx.beginPath();
-          ctx.ellipse(x, y, s.rx, s.ry, 0, 0, TAU4);
+          ctx.ellipse(x, y, s.rx, s.ry, 0, 0, TAU5);
           ctx.fillStyle = s.fill;
           ctx.fill();
         }
@@ -920,7 +1483,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
         for (const copy of TILE_OFFSETS) {
           const x = r.u * tile + copy * tile;
           ctx.beginPath();
-          ctx.ellipse(x, y, r.rx, r.ry, 0, 0, TAU4);
+          ctx.ellipse(x, y, r.rx, r.ry, 0, 0, TAU5);
           ctx.fillStyle = ROCK_FILL;
           ctx.fill();
         }
@@ -957,7 +1520,9 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
     substrate = new Substrate();
     /** Paint one frame of the given world state. The scene ambient is
      *  resolved from world.time (a paused sim freezes it); the rest
-     *  of the frame is painted in the documented order above. */
+     *  of the frame is painted in the documented order above — the
+     *  kelp and rocks sit after the substrate (their roots/bodies
+     *  rest on the gravel) and behind the tetra school. */
     render(ctx, width, height, world) {
       const light = lightPhaseAt(world.time);
       drawBackdrop(ctx, width, height, light.palette);
@@ -965,6 +1530,8 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       this.substrate.paintNear(ctx, width, height, world.time);
       drawCausticShafts(ctx, width, height, world.time, light.palette);
       drawSurfaceRipples(ctx, width, world.time);
+      drawKelp(ctx, width, height, world.kelp);
+      drawRocks(ctx, width, height, world.rocks);
       drawTetras(ctx, width, height, world.agents, this.tetraColours);
       this.bubbles.paint(ctx, width, height, world.time);
     }
@@ -992,18 +1559,132 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       stage.refit();
       return stage;
     }
-    /** Backing-store width/height in device px. */
+    /** Backing-store width/height in DEVICE px (the rendering space;
+     *  use cssWidth/cssHeight for pointer coordinates). */
     get width() {
       return this.canvas.width;
     }
     get height() {
       return this.canvas.height;
     }
+    /** CSS (layout) width of the canvas box in device-INDEPENDENT px:
+     *  the space pointer coordinates arrive in. The page template
+     *  stretches the canvas to 100vw × 100vh, so this is the window's
+     *  CSS viewport. */
+    get cssWidth() {
+      return this.win.innerWidth;
+    }
+    get cssHeight() {
+      return this.win.innerHeight;
+    }
     /** Refit the backing store to the viewport (device-pixel aware). */
     refit() {
       const dpr = this.win.devicePixelRatio > 0 ? this.win.devicePixelRatio : 1;
       this.canvas.width = Math.max(1, Math.round(this.win.innerWidth * dpr));
       this.canvas.height = Math.max(1, Math.round(this.win.innerHeight * dpr));
+    }
+  };
+
+  // src/ui/toolbar.ts
+  var TOOL_BUTTON_IDS = {
+    "place-rock": "tool-place-rock",
+    "place-kelp": "tool-place-kelp",
+    "remove": "tool-remove"
+  };
+  var Toolbar = class {
+    /** Active mode (place-rock is the default at boot). */
+    mode = "place-rock";
+    world;
+    viewport;
+    buttons = /* @__PURE__ */ new Map();
+    canvasEl = null;
+    /** The toolbar's on-screen rect provider (null in headless
+     *  documents): the click-region guard that keeps placements and
+     *  removals from hiding behind the toolbar. */
+    toolbarEl = null;
+    /** Single-wire invariant: once attached, every listener exists
+     *  exactly once (a repeat attach is a no-op, so listeners never
+     *  stack). */
+    attached = false;
+    constructor(world, viewport) {
+      this.world = world;
+      this.viewport = viewport;
+    }
+    /** Wire the static buttons and the canvas click (all
+     *  null-guarded — headless documents simply get a headless
+     *  toolbar). SINGLE-WIRE INARIANT: each listener is wired
+     *  exactly once; a repeat attach() is a no-op, so a second call
+     *  can never stack a duplicate canvas-click listener (which
+     *  would place a rock twice per click). */
+    attach(doc, canvas) {
+      if (this.attached) return this;
+      this.attached = true;
+      Object.keys(TOOL_BUTTON_IDS).forEach((mode) => {
+        const el = doc.getElementById(TOOL_BUTTON_IDS[mode]);
+        this.buttons.set(mode, el);
+        if (!el) return;
+        el.addEventListener("click", () => this.setMode(mode));
+      });
+      if (canvas !== null && typeof canvas.addEventListener === "function" && typeof canvas.getBoundingClientRect === "function") {
+        this.canvasEl = canvas;
+        this.toolbarEl = doc.getElementById("toolbar");
+        canvas.addEventListener("click", (ev) => {
+          if (this.clickInsideToolbar(ev.clientX, ev.clientY)) return;
+          const rect = canvas.getBoundingClientRect();
+          this.handleClientClick(ev.clientX - rect.left, ev.clientY - rect.top);
+        });
+      }
+      this.syncSelection();
+      return this;
+    }
+    /** Switch the active mode and refresh the selected-button
+     *  highlight (and the cursor hint on the canvas). */
+    setMode(mode) {
+      this.mode = mode;
+      this.syncSelection();
+    }
+    /** A canvas click in the active mode: viewport px → tank units
+     *  → the world's pure placement/removal API. Returns the placed
+     *  or removed object, or null (out-of-view click, cap reached,
+     *  open water). Never throws on odd input. (Clicks under the
+     *  toolbar's on-screen rect are dropped BEFORE reaching this —
+     *  see the click-region guard in attach().) */
+    handleClientClick(px, py) {
+      if (!Number.isFinite(px) || !Number.isFinite(py)) return null;
+      const vp = this.viewport();
+      if (!(vp.width > 0) || !(vp.height > 0)) return null;
+      const tx = px / vp.width * TANK_WIDTH;
+      const ty = py / vp.height * TANK_HEIGHT;
+      switch (this.mode) {
+        case "place-rock":
+          return this.world.placeRock(tx, ty);
+        case "place-kelp":
+          return this.world.placeKelp(tx);
+        case "remove":
+          return this.world.removeNearestAt(tx, ty);
+      }
+    }
+    /** True when (clientX, clientY) falls inside the toolbar's
+     *  on-screen rect (null in headless documents → false, so the
+     *  guard is inert there). */
+    clickInsideToolbar(clientX, clientY) {
+      const el = this.toolbarEl;
+      if (el === null || typeof el.getBoundingClientRect !== "function") {
+        return false;
+      }
+      if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return false;
+      const r = el.getBoundingClientRect();
+      return clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom;
+    }
+    syncSelection() {
+      this.buttons.forEach((el, mode) => {
+        if (!el || !el.classList) return;
+        if (mode === this.mode) el.classList.add("selected");
+        else el.classList.remove("selected");
+      });
+      if (this.canvasEl && this.canvasEl.style) {
+        this.canvasEl.style.cursor = this.mode === "remove" ? "pointer" : "crosshair";
+      }
     }
   };
 
@@ -1014,7 +1695,13 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
     const stage = Stage.attach(canvasEl, win);
     const world = new World();
     const renderer = new Renderer();
-    exposeTestSeam(world);
+    const toolbar = new Toolbar(world, () => ({
+      // CSS (layout) dims — the space the click listener's
+      // coordinates arrive in — NOT the device-px backing store.
+      width: stage.cssWidth,
+      height: stage.cssHeight
+    })).attach(doc, canvasEl);
+    exposeTestSeam(world, toolbar);
     let lastTs = null;
     const frame = (ts) => {
       const elapsed = lastTs === null ? 0 : (ts - lastTs) / 1e3;
@@ -1029,11 +1716,16 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
   function clampDelta(seconds) {
     return Math.min(MAX_FRAME_DELTA, Math.max(0, seconds));
   }
-  function exposeTestSeam(world) {
+  function exposeTestSeam(world, toolbar) {
     const seam = globalThis;
     seam.FIXED_DT = FIXED_DT;
     seam.TETRA_COUNT = TETRA_COUNT;
     seam.FISH_TANK_WORLD = world;
+    seam.FISH_TANK_TOOLBAR = toolbar;
+    seam.ROCK_MAX = ROCK_MAX;
+    seam.ROCK_RADIUS = ROCK_RADIUS;
+    seam.ROCK_COLLIDE_PAD = ROCK_COLLIDE_PAD;
+    seam.KELP_MAX = KELP_MAX;
   }
   if (typeof window !== "undefined" && typeof document !== "undefined") {
     initFishtank(window, document);

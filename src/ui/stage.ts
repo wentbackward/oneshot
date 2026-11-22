@@ -28,13 +28,26 @@ export class Stage {
     return stage;
   }
 
-  /** Backing-store width/height in device px. */
+  /** Backing-store width/height in DEVICE px (the rendering space;
+   *  use cssWidth/cssHeight for pointer coordinates). */
   get width(): number {
     return this.canvas.width;
   }
 
   get height(): number {
     return this.canvas.height;
+  }
+
+  /** CSS (layout) width of the canvas box in device-INDEPENDENT px:
+   *  the space pointer coordinates arrive in. The page template
+   *  stretches the canvas to 100vw × 100vh, so this is the window's
+   *  CSS viewport. */
+  get cssWidth(): number {
+    return this.win.innerWidth;
+  }
+
+  get cssHeight(): number {
+    return this.win.innerHeight;
   }
 
   /** Refit the backing store to the viewport (device-pixel aware). */

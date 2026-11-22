@@ -46,6 +46,17 @@ const STYLE = `
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { height: 100%; overflow: hidden; background: #06121e; }
 #game { display: block; width: 100vw; height: 100vh; }
+
+/* Click-region note: the nav box (buttons + gaps) sits over the
+   canvas in the top-left corner. In place modes a first click there
+   must not plant scenery hidden behind the toolbar — the buttons
+   swallow their own clicks, and Toolbar's click-region guard
+   (src/ui/toolbar.ts) drops any canvas click that lands inside
+   this box. Restyles that widen/narrow the box need no JS change. */
+#toolbar { position: fixed; top: 10px; left: 10px; z-index: 10; display: flex; gap: 6px; font: 10px/1 monospace; letter-spacing: .15em; }
+#toolbar button { color: #5a6b7d; background: rgba(5, 7, 15, .72); border: 1px solid #1c2430; border-radius: 6px; padding: 5px 9px; cursor: pointer; }
+#toolbar button:hover { color: #e8f2fb; border-color: #5a6b7d; }
+#toolbar button.selected { color: #7fe3ff; border-color: #3d8bb0; }
 `.trim();
 
 function renderPage(js) {
@@ -61,6 +72,15 @@ ${STYLE}
 </head>
 <body>
 <canvas id="game"></canvas>
+<!-- Placement toolbar: static markup (PRD §3 Place/Remove tools),
+     wired at boot by src/ui/toolbar.ts. The vm suites boot this
+     file with a document stub; every id lookup is null-guarded
+     there, so the static buttons never break a headless boot. -->
+<nav id="toolbar" aria-label="tank tools">
+<button id="tool-place-rock" class="selected" type="button">PLACE ROCK</button>
+<button id="tool-place-kelp" type="button">PLACE KELP</button>
+<button id="tool-remove" type="button">REMOVE</button>
+</nav>
 <!-- One-shot hub back link: static markup only, no JS (the vm suites
      boot this file — anything queried at boot needs a stub, so keep
      it inert, matching the other cabinets). -->
