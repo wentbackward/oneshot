@@ -33,8 +33,15 @@ const CATEGORIES = new Set(["background", "tile", "texture", "sprite", "icon-set
 /** Read + validate assets/<game>/. Throws a descriptive Error on
  *  ANY contract violation (bad name, missing file, dimension
  *  mismatch, missing license line, ...). Returns
- *  { dir, entries, rawBytes } with entries sorted by name. */
-export function loadGameAssets(game, root = ROOT) {
+ *  { dir, entries, rawBytes } with entries sorted by name; each
+ *  entry ALSO carries `bytes` — the buffer of exactly the read the
+ *  validation saw. Every asset file is read ONCE per call: the
+ *  rawBytes budget and the payload serialization (assetPayloadJson)
+ *  both derive from these same buffers, so a tree that mutates
+ *  concurrently with this call cannot split the measurement from
+ *  the bytes that get embedded. `readAssetFile` is injectable so
+ *  the snapshot property is testable without racing a real process. */
+export function loadGameAssets(game, root = ROOT, readAssetFile = readFileSync) {
   if (!GAMES.includes(game)) throw new Error(`unknown game "${game}" (expected one of ${GAMES.join(", ")})`);
   const dir = path.join(root, "assets", game);
   let manifest;
@@ -54,7 +61,13 @@ export function loadGameAssets(game, root = ROOT) {
     if (entries[i].name === entries[i - 1].name) throw new Error(`duplicate asset name "${entries[i].name}"`);
   }
   let rawBytes = 0;
-  for (const e of entries) rawBytes += readFileSync(path.join(dir, e.file)).length;
+  for (const e of entries) {
+    // The ONE read per file: budget and payload must agree on these
+    // bytes (see the function doc).
+    const bytes = readAssetFile(path.join(dir, e.file));
+    e.bytes = bytes;
+    rawBytes += bytes.length;
+  }
   return { dir, entries, rawBytes };
 }
 
@@ -101,15 +114,17 @@ function normalizeEntry(game, dir, raw) {
  *  in sorted manifest order, fixed key order, base64 of the
  *  committed file bytes. Pure function of the tree — rebuilding
  *  from the same tree is byte-identical. */
-export function assetPayloadJson(game, root = ROOT) {
-  const { dir, entries } = loadGameAssets(game, root);
+export function assetPayloadJson(game, root = ROOT, readAssetFile = readFileSync) {
+  const { entries } = loadGameAssets(game, root, readAssetFile);
   const items = entries.map((e) => ({
     name: e.name,
     w: e.width,
     h: e.height,
     frames: e.frames,
     ph: e.placeholder ? 1 : 0,
-    d: readFileSync(path.join(dir, e.file)).toString("base64"),
+    // The SAME buffer loadGameAssets validated and counted toward
+    // rawBytes — never a second, later read of the file.
+    d: e.bytes.toString("base64"),
   }));
   // Manual serialization: JSON.stringify of an object preserves
   // insertion order, so the fixed key order above IS the wire
