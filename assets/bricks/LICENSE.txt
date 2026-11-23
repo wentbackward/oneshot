@@ -1,0 +1,11 @@
+Asset provenance — assets/bricks
+=====================================
+All current entries are PLACEHOLDERS generated in-repo by
+scripts/generate-placeholders.mjs (deterministic, no external
+sources) and dedicated to the public domain (CC0-1.0).
+
+Final (non-placeholder) art arriving via docs/ASSET-SOURCING.md
+adds one attribution line per asset below, mirroring the
+`license` field of the manifest entry:
+
+- (none yet — placeholders only)

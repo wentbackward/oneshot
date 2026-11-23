@@ -25,6 +25,7 @@ import {
 } from "./sim/constants.ts";
 import { World } from "./sim/world.ts";
 import { Renderer } from "./render/renderer.ts";
+import { decodeAllAssets, EMBEDDED_ASSETS } from "./render/assets.ts";
 import { Stage } from "./ui/stage.ts";
 import { Toolbar } from "./ui/toolbar.ts";
 import { Hud } from "./ui/hud.ts";
@@ -66,6 +67,14 @@ function initFishtank(win: Window, doc: Document): World {
   // loadTank (it never throws).
   loadTank(world, storage);
   const renderer = new Renderer();
+  // Ticket #137 asset contract: the embedded payload (printed into
+  // the page shell ahead of this bundle) decodes ONCE, before the
+  // first frame, into this cached table; the loop only starts in
+  // onSettled(). decodeAllAssets() settles SYNCHRONOUSLY when there
+  // is no decoder (headless vm boots), so those first frames remain
+  // exactly the procedural ones.
+  const assetCache: Record<string, ImageBitmap> = Object.create(null);
+  renderer.bindAssets(assetCache);
   const toolbar = new Toolbar(world, () => ({
     // CSS (layout) dims — the space the click listener's
     // coordinates arrive in — NOT the device-px backing store.
@@ -83,31 +92,34 @@ function initFishtank(win: Window, doc: Document): World {
     multRef.value = mult;
   }).attach(doc);
 
-  exposeTestSeam(world, toolbar, hud, speed, storage);
+  exposeTestSeam(world, toolbar, hud, speed, storage, assetCache);
 
-  let lastTs: number | null = null;
-  let fpsEma = 0; // 0 = unknown (the first frame has no prior timestamp)
-  const frame = (ts: number): void => {
-    // First frame has no prior timestamp (dt 0); afterwards clamp
-    // the gap: floored at 0 (timestamp rewind) and capped at
-    // MAX_FRAME_DELTA (tab switch / long pause).
-    const elapsed = lastTs === null ? 0 : (ts - lastTs) / 1000;
-    lastTs = ts;
-    if (elapsed > 0) {
-      const instFps = 1 / elapsed;
-      fpsEma = fpsEma > 0 ? FPS_EMA_ALPHA * instFps + (1 - FPS_EMA_ALPHA) * fpsEma : instFps;
-    }
-    // Speed control (PRD §4): the CLAMPED wall delta is multiplied
-    // by the sim speed, so a 2x frame feeds exactly 2 × the wall
-    // time and the fixed step budget consumes it in whole
-    // FIXED_DT quanta (pause feeds 0 — the timestamp still
-    // advances, so resuming can never burst).
-    world.advance(clampDelta(elapsed) * multRef.value);
-    renderer.render(stage.ctx, stage.width, stage.height, world);
-    hud.update(world, fpsEma);
+  const startLoop = (): void => {
+    let lastTs: number | null = null;
+    let fpsEma = 0; // 0 = unknown (the first frame has no prior timestamp)
+    const frame = (ts: number): void => {
+      // First frame has no prior timestamp (dt 0); afterwards clamp
+      // the gap: floored at 0 (timestamp rewind) and capped at
+      // MAX_FRAME_DELTA (tab switch / long pause).
+      const elapsed = lastTs === null ? 0 : (ts - lastTs) / 1000;
+      lastTs = ts;
+      if (elapsed > 0) {
+        const instFps = 1 / elapsed;
+        fpsEma = fpsEma > 0 ? FPS_EMA_ALPHA * instFps + (1 - FPS_EMA_ALPHA) * fpsEma : instFps;
+      }
+      // Speed control (PRD §4): the CLAMPED wall delta is multiplied
+      // by the sim speed, so a 2x frame feeds exactly 2 × the wall
+      // time and the fixed step budget consumes it in whole
+      // FIXED_DT quanta (pause feeds 0 — the timestamp still
+      // advances, so resuming can never burst).
+      world.advance(clampDelta(elapsed) * multRef.value);
+      renderer.render(stage.ctx, stage.width, stage.height, world);
+      hud.update(world, fpsEma);
+      win.requestAnimationFrame(frame);
+    };
     win.requestAnimationFrame(frame);
   };
-  win.requestAnimationFrame(frame);
+  decodeAllAssets(assetCache, startLoop);
   return world;
 }
 
@@ -132,6 +144,7 @@ function exposeTestSeam(
   hud: Hud,
   speed: SimSpeedControls,
   storage: StorageLike | null,
+  assetCache: Record<string, ImageBitmap>,
 ): void {
   const seam = globalThis as unknown as Record<string, unknown>;
   seam.FIXED_DT = FIXED_DT;
@@ -146,6 +159,8 @@ function exposeTestSeam(
   seam.FISH_TANK_HUD = hud;
   seam.FISH_TANK_SPEED = speed;
   seam.STORAGE_KEY = STORAGE_KEY;
+  seam.FISH_TANK_ASSETS = assetCache;
+  seam.EMBEDDED_ASSETS = EMBEDDED_ASSETS;
   seam.saveTank = (): void => saveTank(world, storage);
   seam.loadTank = (): void => loadTank(world, storage);
   seam.lightingModeOf = (): string => lightingModeOf(world);

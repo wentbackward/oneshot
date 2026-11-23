@@ -14,8 +14,10 @@ or the deploy path.
 ## Products
 
 Current output — each one a single self-contained `.html` (vanilla HTML5 +
-CSS + Canvas 2D + Web Audio, procedural everything, no build step, no
-dependencies — open the file and it runs):
+CSS + Canvas 2D + Web Audio, no CDNs, no network, no dependencies — open
+the file and it runs; asteroids is fully procedural, while bricks and
+fishtank carry in-repo, build-time-embedded placeholder art — the asset
+contract lives in `docs/DECISIONS.md`):
 
 **👉 https://oneshot.paulgresham.com/**
 

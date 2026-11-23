@@ -31,6 +31,8 @@
     "grep -qE '<canvas' fishtank.html",
     "[ \"$(grep -E '(src|href)=' fishtank.html | grep -v 'href=\"index.html\"' | wc -l)\" -eq 0 ]",
     "node scripts/build-fishtank.mjs --check",
+    "node scripts/embed-bricks-assets.mjs --check",
+    "! grep -qE '<(img|audio|link)[ >]' bricks.html && ! grep -qE '<(img|audio|link)[ >]' fishtank.html",
     "npm run typecheck",
     "for f in tests/*.test.mjs; do timeout 60 node \"$f\" || exit 1; done"
   ],
