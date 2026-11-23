@@ -24,11 +24,12 @@ interface SpeciesRow {
 }
 
 /** The single species registration point: the species the World
- *  currently owns (ticket #126 scope; the angel row joins with
- *  #123). When a new species joins the World it gains ONE row here
- *  (its id must match the build template's static markup). */
+ *  currently owns. When a new species joins the World it gains ONE
+ *  row here (its id must match the build template's static
+ *  markup). */
 const SPECIES_ROWS: readonly SpeciesRow[] = [
   { id: "hud-count-tetra", count: (w) => w.agents.length },
+  { id: "hud-count-angel", count: (w) => w.angels.length },
   { id: "hud-count-predator", count: (w) => (w.predator !== null ? 1 : 0) },
 ];
 
