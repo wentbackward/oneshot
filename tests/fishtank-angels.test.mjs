@@ -239,8 +239,10 @@ check("food seeking: the angel's distance to a dropped pellet strictly decreases
   // Still water (zero ambient current, same convention as the kelp
   // settle tests): the criterion pins the ANGEL'S seeking behaviour,
   // not the pellet drift the current would add.
-  const world = new World({ seed: 17, population: 0, predator: false, ambientCurrentX: 0 });
+  const world = new World({ seed: 17, population: 0, predator: false, ambientCurrentX: 0, angels: 1 });
   const a = world.angels[0];
+  assert(world.angels.length === 1,
+    "test setup: a single angel — the criterion must be exercised by it, not passed by luck of the other five sitting out of sense range");
   placeAngel(a, 800, 560, Math.PI, 0); // bobbing at a trough: vy points up, at the pellet
   const p = world.dropFood(800, 480);
   assert(p !== null && Math.hypot(p.x - a.x, p.y - a.y) <= PELLET_SENSE_RADIUS,
