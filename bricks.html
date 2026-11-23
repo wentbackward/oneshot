@@ -2739,22 +2739,32 @@ function bootAssets(onReady) {
     onReady(); // no decoder / empty payload: synchronous fallback
     return;
   }
-  var jobs = [];
-  for (var i = 0; i < ASSET_PAYLOAD_TABLE.length; i += 1) {
-    (function (entry) {
-      var bytes = base64ToBytes(entry.d);
-      if (!bytes) { jobs.push(Promise.reject(new Error("asset payload undecodable: " + entry.name))); return; }
-      // Real browsers' createImageBitmap wants a Blob; where no
-      // Blob exists (headless vm boots) the raw buffer goes through.
-      var source = typeof Blob !== "undefined" ? new Blob([bytes]) : bytes.buffer;
-      try {
-        jobs.push(decode(source).then(function (bitmap) { ASSETS[entry.name] = bitmap; }));
-      } catch { jobs.push(Promise.reject(new Error("decode threw: " + entry.name))); }
-    })(ASSET_PAYLOAD_TABLE[i]);
-  }
-  // One settlement per entry; a single failure only loses that
-  // bitmap — the loop still starts, on the procedural fallback.
-  Promise.all(jobs).catch(function () {}).then(onReady);
+  // One settlement per entry — success OR failure — so the loop
+  // starts only when EVERY entry has individually settled: one bad
+  // decode loses that bitmap (the procedural fallback still renders)
+  // but the boot never claims full settlement while others are
+  // still pending.
+  var pending = ASSET_PAYLOAD_TABLE.length;
+  var settle = function () {
+    pending -= 1;
+    if (pending === 0) onReady();
+  };
+  for (var i = 0; i < ASSET_PAYLOAD_TABLE.length; i += 1) (function (entry) {
+    var bytes = base64ToBytes(entry.d);
+    if (!bytes) { settle(); return; }
+    // Real browsers' createImageBitmap wants a Blob; where no
+    // Blob exists (headless vm boots) the raw buffer goes through.
+    var source = typeof Blob !== "undefined" ? new Blob([bytes]) : bytes.buffer;
+    try {
+      decode(source)
+        .then(function (bitmap) { ASSETS[entry.name] = bitmap; })
+        .catch(function () {
+          // One bad entry loses its slot only; the frame still
+          // renders without it.
+        })
+        .then(settle);
+    } catch { settle(); }
+  })(ASSET_PAYLOAD_TABLE[i]);
 }
 
 // ---- Frame loop ----
