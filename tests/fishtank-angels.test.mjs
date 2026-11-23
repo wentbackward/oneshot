@@ -223,7 +223,10 @@ check("foraging: with one kelp strand a seeded 600-step soak keeps the angel ≥
 // single time, the same single-consume assertion as the tetra test)
 // ================================================================
 check("food seeking: the angel's distance to a dropped pellet strictly decreases and the pellet is consumed exactly once", () => {
-  const world = new World({ seed: 17, population: 0, predator: false });
+  // Still water (zero ambient current, same convention as the kelp
+  // settle tests): the criterion pins the ANGEL'S seeking behaviour,
+  // not the pellet drift the current would add.
+  const world = new World({ seed: 17, population: 0, predator: false, ambientCurrentX: 0 });
   const a = world.angels[0];
   placeAngel(a, 800, 560, Math.PI, 0); // bobbing at a trough: vy points up, at the pellet
   const p = world.dropFood(800, 480);
@@ -256,12 +259,17 @@ check("food seeking: the angel's distance to a dropped pellet strictly decreases
 // pellet — every angel closes on it, and exactly one consumes it
 // ================================================================
 check("competition: two in-sense angels converge on one pellet and exactly one consumes it", () => {
-  const world = new World({ seed: 23, population: 0, predator: false, angels: 2 });
+  // Still water (see the food-seeking test's note).
+  const world = new World({ seed: 23, population: 0, predator: false, ambientCurrentX: 0, angels: 2 });
   const [a, b] = world.angels;
   assert(a && b, "test setup: the world must carry at least 2 angels");
-  placeAngel(a, 700, 520, Math.PI, 0);
-  placeAngel(b, 900, 520, Math.PI, 0);
-  const p = world.dropFood(800, 460);
+  // Both angels start BELOW the flake, nearly nose-to-nose (the
+  // tetra-suite's scenario): the pellet sinks toward them, so
+  // closure outruns the angel cruise ceiling — at terminal sink
+  // speed a diagonal intercept can never gain vertical ground.
+  placeAngel(a, 788, 560, Math.PI, 0);
+  placeAngel(b, 812, 560, Math.PI, 0);
+  const p = world.dropFood(800, 480);
   assert(p !== null, "test setup: one pellet spawned");
   const dA0 = Math.hypot(p.x - a.x, p.y - a.y);
   const dB0 = Math.hypot(p.x - b.x, p.y - b.y);
@@ -300,6 +308,9 @@ check("a pellet outside PELLET_SENSE_RADIUS leaves the angel trajectory identica
   const b = new World({ seed, population: 0, predator: false });
   const aAngel = a.angels[0];
   placeAngel(aAngel, 800, 520, 0, 40);
+  // Mirror the SAME placement onto the twin — only the pellet may
+  // differ between the two worlds.
+  placeAngel(b.angels[0], 800, 520, 0, 40);
   const far = a.dropFood(60, 60);
   assert(far !== null, "test setup: pellet spawned");
   const d = Math.hypot(aAngel.x - far.x, aAngel.y - far.y);
