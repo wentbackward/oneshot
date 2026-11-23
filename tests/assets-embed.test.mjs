@@ -30,6 +30,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { Worker } from "node:worker_threads";
 import { createHash } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
@@ -64,11 +65,16 @@ function assert(cond, msg) {
 }
 
 const sha256 = (buf) => createHash("sha256").update(buf).digest("hex");
+// stdout and stderr are kept APART: the stale-report contract asserts
+// on stderr specifically (one line, no stack trace).
 const run = (cwd, argv) => {
   try {
-    return { code: 0, output: execFileSync(process.execPath, argv, { cwd, encoding: "utf8", stdio: "pipe" }) };
+    const stdout = execFileSync(process.execPath, argv, { cwd, encoding: "utf8", stdio: "pipe" });
+    return { code: 0, stdout, stderr: "", output: `${stdout}\n` };
   } catch (err) {
-    return { code: typeof err.status === "number" ? err.status : 1, output: `${err.stdout ?? ""}\n${err.stderr ?? ""}` };
+    const stdout = typeof err.stdout === "string" ? err.stdout : "";
+    const stderr = typeof err.stderr === "string" ? err.stderr : "";
+    return { code: typeof err.status === "number" ? err.status : 1, stdout, stderr, output: `${stdout}\n${stderr}` };
   }
 };
 const flushMicrotasks = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -216,6 +222,36 @@ check("fishtank.html: a one-byte asset mutation makes build --check exit non-zer
     rmSync(tmp, { recursive: true, force: true });
   }
 });
+
+// ================================================================
+// Corrupt asset tree: --check must map a mangled manifest onto the
+// one-line `stale:` report (exit 1, stderr exactly one line, no Node
+// stack trace) — pinned per script so the catch blocks the scripts
+// rely on can never quietly print a raw throw again.
+// ================================================================
+for (const [game, script] of [
+  ["bricks", "embed-bricks-assets.mjs"],
+  ["fishtank", "build-fishtank.mjs"],
+]) {
+  check(`${game}: --check on a corrupt manifest exits 1 with a single one-line stale: report (no stack trace)`, () => {
+    const tmp = tmpTree();
+    try {
+      // Mangle the manifest in place: the tree now violates the
+      // contract (unreadable JSON), not merely drifts from the embed.
+      const manifest = path.join(tmp, "assets", game, "manifest.json");
+      writeFileSync(manifest, "{ oops — not the manifest anymore");
+      const r = run(tmp, [path.join(tmp, "scripts", script), "--check"]);
+      assert(r.code === 1, `--check must exit 1 on a corrupt manifest, got ${r.code}:\n${r.output}`);
+      assert(r.stdout === "", `the stale report must not write to stdout, got: ${JSON.stringify(r.stdout)}`);
+      const lines = r.stderr.trim().split("\n");
+      assert(lines.length === 1, `stderr must be exactly one line, got ${lines.length}: ${JSON.stringify(r.stderr)}`);
+      assert(lines[0].startsWith("stale: "), `the single stderr line must be the stale: report, got: ${JSON.stringify(lines[0])}`);
+      assert(!/^\s+at /.test(r.stderr), "stderr must not carry a Node stack trace");
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+}
 
 // ================================================================
 // Runtime: decode-before-first-frame + cached bitmap table +
@@ -437,6 +473,86 @@ await checkAsync("fishtank runtime: without a decoder the boot is synchronous an
   g.tick(0);
   g.tick(1000 / 60);
   assert(g.drawImages.length === 0, "no drawImage may appear when nothing decoded (procedural-only frames)");
+});
+
+// Regression: the gravel tiling loop (paintGravelTexture) advances x by
+// the tile width; on a zero-height canvas the band — and therefore the
+// step — is 0 and the loop spun forever, freezing the tab. The boot+
+// tick runs in a worker so a regression fails this check on timeout
+// instead of hanging the whole suite.
+const ZERO_HEIGHT_WORKER = `
+const { parentPort } = require("node:worker_threads");
+const vm = require("node:vm");
+parentPort.once("message", (source) => {
+  const drawImages = [];
+  // Capped: a spin regression must burn out on the parent's timeout,
+  // not grow the worker's heap past its limit first.
+  const recordDraw = (...args) => { if (drawImages.length < 1000) drawImages.push(args); };
+  const noop = () => {};
+  const canvas = { width: 0, height: 0, style: {}, getContext: () => ctx };
+  const ctx = new Proxy({ canvas }, {
+    get(t, prop) {
+      if (prop === Symbol.toPrimitive) return undefined;
+      const v = t[prop];
+      if (typeof v === "function") return v;
+      if (prop === "drawImage") return recordDraw;
+      if (prop === "createLinearGradient" || prop === "createRadialGradient") return () => ({ addColorStop: noop });
+      if (prop === "measureText") return () => ({ width: 0 });
+      return noop;
+    },
+    set: () => true,
+  });
+  let rafCb = null;
+  const sandbox = {
+    window: {
+      innerWidth: 800, innerHeight: 600, devicePixelRatio: 1,
+      addEventListener: noop,
+      requestAnimationFrame: (cb) => { rafCb = cb; return 1; },
+    },
+    document: { getElementById: (id) => (id === "game" ? canvas : null) },
+    atob: (s) => require("node:buffer").Buffer.from(s, "base64").toString("binary"),
+    createImageBitmap: () => Promise.resolve({ fakeBitmap: true, width: 2, height: 2 }),
+  };
+  vm.runInContext(source, vm.createContext(sandbox));
+  setTimeout(() => {
+    // The decodes must have settled and registered the loop by now.
+    if (typeof rafCb !== "function") { parentPort.postMessage("no-loop"); return; }
+    // Degenerate backing store AFTER boot (resize never yields 0):
+    // the very next frame must still terminate.
+    canvas.height = 0;
+    rafCb(1000 / 60);
+    setTimeout(() => { rafCb((2 * 1000) / 60); parentPort.postMessage("done"); }, 0);
+  }, 0);
+});
+`;
+
+await checkAsync("fishtank runtime: a zero-height frame with the gravel texture cached terminates (no infinite tiling loop)", async () => {
+  const html = readFileSync(path.join(ROOT, "fishtank.html"), "utf8");
+  const gameSource = html.match(/<script>([\s\S]*?)<\/script>/)[1];
+  const worker = new Worker(ZERO_HEIGHT_WORKER, { eval: true });
+  const outcome = await new Promise((resolve) => {
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      worker.removeListener("error", onError);
+      worker.removeListener("exit", onExit);
+      if (!worker.terminated) worker.terminate();
+      resolve(result);
+    };
+    const onError = (err) => finish({ kind: "error", message: err.message });
+    const onExit = (code) => finish(code === 0 ? { kind: "no-result" } : { kind: "exit", code });
+    const timer = setTimeout(() => finish({ kind: "timeout" }), 10000);
+    worker.on("error", onError);
+    worker.on("exit", onExit);
+    worker.once("message", (msg) => finish({ kind: "result", msg }));
+    worker.postMessage(gameSource);
+  });
+  assert(outcome.kind === "result" && outcome.msg === "done",
+    outcome.kind === "timeout"
+      ? "the zero-height frame never completed — the gravel tiling loop spun forever (tile step 0)"
+      : `expected a clean two-frame boot, got ${outcome.kind}${"message" in outcome ? `: ${outcome.message}` : ""}`);
 });
 
 // ----------------------------------------------------------------
