@@ -184,6 +184,24 @@ for (const game of GAMES) {
   });
 }
 
+check("seam: the seam assertion is live — a ramp tile that does not wrap trips it (seam gap > max interior gap)", () => {
+  // Negative fixture for the tiling-seam check: a 4×1 horizontal ramp
+  // (R = 0, 64, 128, 192). Its largest interior step is 64, but the
+  // wrap edge jumps 192 → 0 (gap 192), so any honest seam test must
+  // reject it. Encoded in-memory with the lib codec and decoded back,
+  // this keeps the fixture a real PNG end to end — if the seam math
+  // or the tiling assertion were weakened, THIS check fails.
+  const w = 4;
+  const h = 1;
+  const rgba = new Uint8Array(w * h * 4);
+  for (let x = 0; x < w; x += 1) rgba[x * 4] = x * 64; // R ramps, other channels 0
+  const img = decodePng(encodePng({ width: w, height: h, rgba }));
+  const seam = seamGap(img);
+  const grain = maxInteriorGap(img);
+  assert(seam > grain,
+    `the ramp fixture must violate the seam rule (seam ${seam} > max interior ${grain}); if this fails, the tiling-seam assertion no longer rejects non-tiling tiles`);
+});
+
 check("budget: every shipped game HTML is within the named per-file size ceiling", () => {
   for (const f of ["bricks.html", "fishtank.html", "asteroids.html", "index.html"]) {
     const size = readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), "..", f)).byteLength;

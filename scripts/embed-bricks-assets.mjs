@@ -61,12 +61,17 @@ if (args.length > 1 || (args[0] !== undefined && args[0] !== "--check")) {
 }
 
 const html = readFileSync(OUTPUT, "utf8");
-const freshBlock = blockFor(assetPayloadJson(GAME));
 
 if (args[0] === "--check") {
   let loc;
+  let freshBlock;
   try {
     loc = locateBlock(html);
+    // Computed lazily INSIDE the try/catch: a corrupt asset tree
+    // (mangled manifest / missing PNG) throws here and maps onto the
+    // same one-line `stale:` report as a stale block — never a raw
+    // Node stack trace.
+    freshBlock = blockFor(assetPayloadJson(GAME));
   } catch (err) {
     console.error(`stale: ${err.message}`);
     process.exit(1);
@@ -80,6 +85,9 @@ if (args[0] === "--check") {
   process.exit(1);
 }
 
+// Mutation path (--check always exits above): a corrupt tree may
+// fail loudly here — this is the command that rewrites the file.
+const freshBlock = blockFor(assetPayloadJson(GAME));
 let out;
 if (html.includes("//__BRICKS_ASSETS_BEGIN__")) {
   const loc = locateBlock(html);

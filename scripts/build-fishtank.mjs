@@ -162,7 +162,19 @@ if (args.length > 1 || (args[0] !== undefined && args[0] !== "--check")) {
   process.exit(2);
 }
 
-const generated = renderPage(bundleJs());
+// The payload computation (renderPage → assetBlock →
+// assetPayloadJson) runs INSIDE this try/catch: a corrupt asset tree
+// (mangled manifest / missing PNG) is reported with the same
+// one-line `stale:` contract (exit 1) as a drifted artifact — never
+// a raw Node stack trace.
+let generated;
+try {
+  generated = renderPage(bundleJs());
+} catch (err) {
+  if (args[0] !== "--check") throw err; // the write command may fail loudly
+  console.error(`stale: a fresh build could not be produced from src/ + assets/ (${err.message}) (run: node scripts/build-fishtank.mjs)`);
+  process.exit(1);
+}
 
 if (args[0] === "--check") {
   let committed = "";
