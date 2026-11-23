@@ -13,7 +13,10 @@
 // (or fully-wrapped placement) so the integrity suite's seamless
 // seam check passes by construction.
 //
-// Run: node scripts/generate-placeholders.mjs
+// Run: node scripts/generate-placeholders.mjs [OUT_DIR]
+//   OUT_DIR (default: the repo root) receives an assets/ subtree;
+//   regenerating from the same toolchain into the same tree writes
+//   byte-identical files.
 // ================================================================
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -475,8 +478,8 @@ const LICENSE_TXT = (game) => [
   "",
 ].join("\n");
 
-function emitGame(game, slots) {
-  const dir = path.join(ROOT, "assets", game);
+function emitGame(outRoot, game, slots) {
+  const dir = path.join(outRoot, "assets", game);
   const entries = [];
   for (const slot of slots) {
     if (slot.fw * slot.frames !== slot.w || slot.fh !== slot.h) {
@@ -509,10 +512,11 @@ function emitGame(game, slots) {
 
 // assets/<game>/ dirs are created with a .gitkeep-free tree (the
 // generated files themselves are the content).
+const OUT_ROOT = path.resolve(process.argv[2] ?? ROOT);
 for (const [game, slots] of [["bricks", BRICKS], ["fishtank", FISH_TANK]]) {
   // The assets/ tree is committed with the generated files; the
   // dirs are (re)created here so a wiped checkout regenerates.
-  mkdirSync(path.join(ROOT, "assets", game), { recursive: true });
-  emitGame(game, slots);
+  mkdirSync(path.join(OUT_ROOT, "assets", game), { recursive: true });
+  emitGame(OUT_ROOT, game, slots);
 }
 console.log("done — placeholder sets generated for bricks and fishtank");
