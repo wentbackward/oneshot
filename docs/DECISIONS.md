@@ -3781,3 +3781,42 @@ arcade physics).
   path — rejected) or rewriting those scenarios through
   `setTetraCount()` alone (cannot express the arbitrary per-fish
   poses the scenarios need — rejected).
+
+## 2026-11-23 — Rebase of #126 onto #121 (drop-food / tap-glass): two deliberate settlements
+
+- **The combined step order is: guard → tetra pass (incl. pellet
+  seeking) → pellet integration/culling → shockwave ring expansion/
+  retirement → kelp → predator → FINAL `rebuildGrid()`.** #126's
+  review-fold moved the grid rebuild from the START of `step()` to
+  its END so the HUD's utilization telemetry reads CURRENT
+  occupancy (see the #126 section above). The pellets and rings
+  integrate BETWEEN the tetra pass and the kelp (their #121 order)
+  and are NOT grid occupants — the grid indexes tetras only — so the
+  end-of-step rebuild sees exactly the post-step fish positions the
+  per-step grid-freshness test in
+  tests/fishtank-determinism.test.mjs ("the grid reflects live
+  positions at the end of EVERY step") pins, and the #121
+  byte-identical-trajectory pin ("a pellet outside the sense radius
+  alters the course not at all") keeps holding: moving the rebuild
+  to the end never changes WHICH positions step N queries (end of
+  step N-1), so both suites are the joint proof of the settlement.
+  Alternatives rejected: rebuilding the grid a SECOND time after the
+  pellet/ring updates (they insert nothing, so a pure allocation
+  churn with no semantic gain) or making pellets grid occupants
+  (already rejected in #121's section — it would muddy the grid's
+  species contract).
+- **Save/load treats pellets and shockwave rings as TRANSIENT: the
+  layout schema has no field for them and a save made while they are
+  live round-trips to a clean world.** `captureLayout` snapshots
+  rocks, kelp anchors, species counts and the holding lighting mode
+  only; the validator never sees pellet/ring data, so their absence
+  cannot be (and is not) a rejection trigger — the #126 review's
+  "one bad field rejects the WHOLE payload" policy applies to the
+  layout fields it does define. A restored world therefore never
+  resurrects a mid-sink flake or a half-expanded ring. Alternative
+  rejected: persisting live pellet/ring state (they are live
+  processes, not user-placed layout — the same anchors-not-verlet
+  reasoning the #126 section records for kelp strands). Guarded by
+  "a save made while pellets and shockwave rings are live round-
+  trips WITHOUT them (transient by design)" in
+  tests/fishtank-save.test.mjs.
