@@ -123,6 +123,9 @@ export class Renderer {
     if (!tex) return;
     const band = height * GRAVEL_TEXTURE_BAND;
     const tileW = band * (tex.width / tex.height);
+    // A zero-height canvas makes the tile step 0 — the tiling loop
+    // would spin forever and freeze the tab.
+    if (tileW <= 0) return;
     ctx.globalAlpha = GRAVEL_TEXTURE_ALPHA;
     for (let x = 0; x < width; x += tileW) {
       ctx.drawImage(tex, x, height - band, tileW, band);
