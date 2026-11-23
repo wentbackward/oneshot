@@ -193,6 +193,107 @@ check("bricks.html: --check exits 0 on the committed tree and a one-byte asset m
 });
 
 // ================================================================
+// Single-snapshot read: the rawBytes budget AND the serialized
+// payload must come from the SAME read of every asset file. A tree
+// that mutates between a first and a second read must not be able
+// to split the measurement from the bytes actually embedded.
+// ================================================================
+check("assetPayloadJson: the rawBytes budget and the serialized payload come from ONE read per file (a concurrently mutated tree cannot split them)", () => {
+  const tmp = mkdtempSync(path.join(os.tmpdir(), "assets-137-snapshot-"));
+  try {
+    const dir = path.join(tmp, "assets", "bricks");
+    mkdirSync(dir, { recursive: true });
+    const manifest = {
+      game: "bricks",
+      entries: [{
+        name: "solo", file: "solo.png",
+        width: 4, height: 4, frames: 1, frameWidth: 4, frameHeight: 4,
+        alpha: "opaque", tiling: false, placeholder: true,
+        category: "sprite", license: "CC0 (fixture)",
+      }],
+    };
+    writeFileSync(path.join(dir, "manifest.json"), JSON.stringify(manifest));
+    writeFileSync(path.join(dir, "solo.png"), Buffer.alloc(8, 0)); // reader below supersedes the on-disk bytes
+    const firstRead = Buffer.from([1, 2, 3]); // what the tree "was"
+    const laterRead = Buffer.from([9, 9, 9, 9]); // what a second, later read would see
+    const reads = new Map();
+    // Emulates a tree mutated right after the first read of each file.
+    const reader = (p) => {
+      const n = (reads.get(p) ?? 0) + 1;
+      reads.set(p, n);
+      return n === 1 ? firstRead : laterRead;
+    };
+    const { rawBytes } = loadGameAssets("bricks", tmp, reader);
+    assert(rawBytes === firstRead.length,
+      `rawBytes must come from the same snapshot as the payload, got ${rawBytes} for a ${firstRead.length}-byte first read`);
+    const payload = JSON.parse(assetPayloadJson("bricks", tmp, reader));
+    assert(Buffer.from(payload[0].d, "base64").equals(firstRead),
+      "the embedded base64 must be the bytes that were measured and validated — not a second, later read");
+    assert(reads.get(path.join(dir, "solo.png")) === 1,
+      "each asset file must be read exactly once per embed");
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+// ================================================================
+// Initial embed (no marker block yet): the insertion point is the
+// line AFTER the "use strict" directive. When that line has no
+// terminating newline the point is ambiguous and the script must
+// refuse — it must never be able to destroy the file it edits.
+// ================================================================
+function tmpEmbedTree() {
+  const tmp = mkdtempSync(path.join(os.tmpdir(), "embed-137-init-"));
+  mkdirSync(path.join(tmp, "scripts"), { recursive: true });
+  cpSync(path.join(ROOT, "assets"), path.join(tmp, "assets"), { recursive: true });
+  cpSync(path.join(ROOT, "scripts", "lib"), path.join(tmp, "scripts", "lib"), { recursive: true });
+  copyFileSync(path.join(ROOT, "scripts", "embed-bricks-assets.mjs"), path.join(tmp, "scripts", "embed-bricks-assets.mjs"));
+  return tmp;
+}
+const embedScript = (tmp) => path.join(tmp, "scripts", "embed-bricks-assets.mjs");
+
+check("embed-bricks: the initial embed REFUSES (exit 1, file byte-untouched) when the \"use strict\" line lacks a terminating newline", () => {
+  const tmp = tmpEmbedTree();
+  try {
+    // Last line of the file, no trailing newline: without a guard the
+    // splice anchor lands at offset 0 and the whole file head is
+    // overwritten by the payload block.
+    const mangled = '<!doctype html>\n<html><head></head><body>\n<script>\n"use strict";';
+    const htmlPath = path.join(tmp, "bricks.html");
+    writeFileSync(htmlPath, mangled);
+    const r = run(tmp, [embedScript(tmp)]);
+    assert(r.code === 1, `an unterminated directive line must be refused with exit 1, got ${r.code}:\n${r.output}`);
+    assert(r.stderr.length > 0, "the refusal must carry a diagnostic on stderr");
+    assert(readFileSync(htmlPath) === mangled,
+      "the script must leave the file it cannot safely edit byte-for-byte untouched");
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+check("embed-bricks: the initial embed on a well-formed file inserts the block directly below the directive line and stays re-checkable", () => {
+  const tmp = tmpEmbedTree();
+  try {
+    const plain = '<!doctype html>\n<html><head></head><body>\n<script>\n"use strict";\nconst BOOT_MARKER_137 = 1;\n</script>\n</html>\n';
+    const htmlPath = path.join(tmp, "bricks.html");
+    writeFileSync(htmlPath, plain);
+    const r = run(tmp, [embedScript(tmp)]);
+    assert(r.code === 0, `the initial embed must succeed on a well-formed file, got ${r.code}:\n${r.output}`);
+    const out = readFileSync(htmlPath, "utf8");
+    assert(out.startsWith("<!doctype html>\n"), "the file head must survive the initial embed");
+    assert(countOccurrences(out, "//__BRICKS_ASSETS_BEGIN__") === 1, "exactly one block after the initial embed");
+    const strictIdx = out.indexOf('"use strict";');
+    assert(out.slice(strictIdx).startsWith('"use strict";\n//__BRICKS_ASSETS_BEGIN__'),
+      "the block must sit directly below the directive line");
+    assert(out.includes("const BOOT_MARKER_137 = 1;"), "the pre-existing script body must survive after the inserted block");
+    const c = run(tmp, [embedScript(tmp), "--check"]);
+    assert(c.code === 0, `the freshly embedded file must pass --check, got ${c.code}:\n${c.output}`);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+// ================================================================
 // fishtank: the build's --check freshness model covers the
 // embedded payload (pristine rebuild byte-identical; one-byte
 // asset mutation breaks --check)
