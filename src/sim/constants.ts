@@ -1,4 +1,5 @@
-// =========================================================// Simulation constants — named tuning values for the fishtank
+// =========================================================
+// Simulation constants — named tuning values for the fishtank
 // fixed-timestep engine (PRD §1).
 // =========================================================
 /** Fixed physics timestep in seconds: the world always advances in

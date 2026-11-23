@@ -101,6 +101,20 @@ check("a default World spawns exactly ANGEL_COUNT angelfish, all inside the tank
 });
 
 // ================================================================
+// Criterion (guard, symmetric with setTetraCount): a NON-INTEGER or
+// NEGATIVE angels count is REFUSED — the world comes up with an
+// EMPTY angel pool instead of silently truncating or looping fewer
+// times
+// ================================================================
+check("a non-integer or negative angels count is refused (empty pool, nothing spawned)", () => {
+  for (const bad of [2.5, -1]) {
+    const world = new World({ seed: 3, population: 0, predator: false, angels: bad });
+    assert(world.angels.length === 0,
+      `angels: ${bad} must be refused (mirrors setTetraCount), got ${world.angels.length} angel(s)`);
+  }
+});
+
+// ================================================================
 // Criterion: SLOWER CRUISERS — an angel's speed NEVER exceeds the
 // named ANGEL_CRUISE_SPEED (sampled at EVERY step of a 300-step run
 // in the full default tank: tetras + predator + kelp-free water)
@@ -131,7 +145,6 @@ check("independence: two nearby angels do not converge over 300 steps (no cohesi
   const b = world.angels[1];
   placeAngel(a, 700, 500, 0, 40);
   placeAngel(b, 900, 500, 0, 40); // 200 units apart, cruising in open water
-  world.rebuildGrid();
   const d0 = Math.hypot(b.x - a.x, b.y - a.y);
   assert(d0 === 200, `test setup: the pair must start 200 units apart, got ${d0}`);
   let earlySum = 0;
@@ -139,7 +152,7 @@ check("independence: two nearby angels do not converge over 300 steps (no cohesi
   for (let step = 0; step < 300; step++) {
     world.step(FIXED_DT);
     const d = Math.hypot(b.x - a.x, b.y - a.y);
-    if (step < 300) assertAllAngelsInBounds(world, `independence step ${step + 1}`);
+    assertAllAngelsInBounds(world, `independence step ${step + 1}`);
     if (step < 100) earlySum += d;
     else if (step >= 200) lateSum += d;
     assert(d > d0 * 0.5,

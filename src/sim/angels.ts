@@ -205,6 +205,12 @@ export class Angel {
     if (world.pellets.length > 0) {
       for (const p of world.pellets) {
         if (p.dead) continue;
+        // Convention (do not "fix" one side only): SENSE and EAT
+        // distances are measured on the RENDERED y (bob-inclusive)
+        // — the fish is physically at the flake it sees — while the
+        // HOMING below steers on baseY. The two disagree by at most
+        // ±ANGEL_BOB_AMP (14 u), which is harmless against the sense
+        // (120 u) and eat (16 u) radii.
         const d = Math.hypot(p.x - this.x, p.y - this.y);
         if (d <= PELLET_SENSE_RADIUS && d < pelletD) {
           pelletD = d;
@@ -354,8 +360,11 @@ export class Angel {
 /** Build the full angel pool of a world: one seeded stream
  *  (worldSeed + ANGEL_SEED_STRIDE) in a FIXED draw order per
  *  angel, so the same seed always yields the same independents.
- *  Positions spread across the lower half (the plant zone). */
+ *  Positions spread across the lower half (the plant zone).
+ *  A non-integer or negative count is refused (empty pool),
+ *  mirroring setTetraCount's refusal. */
 export function spawnAngels(worldSeed: number, count: number): Angel[] {
+  if (!Number.isInteger(count) || count < 0) return [];
   const rng: Rng = mulberry32(worldSeed + ANGEL_SEED_STRIDE);
   const angels: Angel[] = [];
   for (let i = 0; i < count; i++) {

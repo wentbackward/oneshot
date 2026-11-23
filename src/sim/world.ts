@@ -182,7 +182,9 @@ export interface WorldOptions {
    *  cannot be captured mid-scenario). */
   predator?: boolean;
   /** How many angelfish to spawn (defaults to ANGEL_COUNT).
-   *  Independent cruisers — see src/sim/angels.ts. */
+   *  Independent cruisers — see src/sim/angels.ts. A non-integer
+   *  or negative count is refused (empty pool), mirroring
+   *  setTetraCount's refusal. */
   angels?: number;
 }
 
@@ -1028,7 +1030,8 @@ export class World {
 
   /** Fixed-precision snapshot of the whole sim state: clock first,
    *  then one `x,y,vx,vy` line per tetra at 6 decimals, then one
-   *  `A:` line per angelfish (same shape — #123), then one `P:` line for the predator (state, pose, hunger, route
+   *  `A:` line per angelfish (same shape — #123), then one `P:` line
+   *  for the predator (state, pose, hunger, route
    *  progress, rest window, feed count — the line is absent when
    *  the world was built without a predator (unit-test worlds),
    *  then one `F:` line per live pellet (x, y, vx, vy) and one
