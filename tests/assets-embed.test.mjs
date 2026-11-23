@@ -345,7 +345,9 @@ function makeBricksEls(canvas) {
   ]) els[id] = makeBricksEl(id);
   return els;
 }
-function bootBricks(withDecoder) {
+// `decodeSpec` is true (every entry resolves), false (no decoder at
+// all), or a function used as createImageBitmap as-is.
+function bootBricks(decodeSpec) {
   const bricksHtml = readFileSync(path.join(ROOT, "bricks.html"), "utf8");
   const gameSource = bricksHtml.match(/<script>([\s\S]*?)<\/script>/)[1];
   const drawImages = [];
@@ -353,16 +355,21 @@ function bootBricks(withDecoder) {
   const els = makeBricksEls(canvas);
   const fakeBitmaps = [];
   let rafCb = null;
+  const decoder = typeof decodeSpec === "function"
+    ? decodeSpec
+    : decodeSpec
+      ? (buf) => {
+        const fake = { fakeBitmap: true, bytes: buf.byteLength };
+        fakeBitmaps.push(fake);
+        return Promise.resolve(fake);
+      }
+      : undefined;
   const sandbox = {
     localStorage: { getItem: () => null, setItem: () => {} },
     window: {
       innerWidth: 960, innerHeight: 600,
       addEventListener: () => {},
-      createImageBitmap: withDecoder ? (buf) => {
-        const fake = { fakeBitmap: true, bytes: buf.byteLength };
-        fakeBitmaps.push(fake);
-        return Promise.resolve(fake);
-      } : undefined,
+      createImageBitmap: decoder,
     },
     atob: (s) => Buffer.from(s, "base64").toString("binary"),
     document: {
@@ -372,7 +379,7 @@ function bootBricks(withDecoder) {
     },
     requestAnimationFrame: (cb) => { rafCb = cb; return 1; },
   };
-  if (!withDecoder) delete sandbox.window.createImageBitmap;
+  if (!decoder) delete sandbox.window.createImageBitmap;
   const context = vm.createContext(sandbox);
   vm.runInContext(gameSource, context);
   return {
@@ -432,6 +439,30 @@ await checkAsync("bricks runtime: a failing decoder degrades to the procedural f
   assert(vm.runInContext("Object.keys(ASSETS).length", context) === 0, "no bitmap may enter the cache from a failed decode");
   vm.runInContext("draw()", context);
   assert(drawImages.length === 0, "without any decoded bitmap the arena background must stay the procedural fill (no drawImage)");
+});
+
+await checkAsync("bricks runtime: onReady waits for EVERY entry to settle — a fast rejection must not start the loop while a slow decode is still pending", async () => {
+  // Entry 0 rejects immediately, every other entry resolves ~30ms
+  // later. With a "first rejection settles the batch" boot (e.g.
+  // Promise.all) the loop would already be running while the slow
+  // entries are still pending; the per-entry settle must wait for
+  // all of them.
+  const nEntries = extractEmbedded(readFileSync(path.join(ROOT, "bricks.html"), "utf8"), "bricks").length;
+  let call = 0;
+  const g = bootBricks(() => {
+    call += 1;
+    if (call === 1) return Promise.reject(new Error("decode failure (fixture)"));
+    return new Promise((resolve) => setTimeout(() => resolve({ fakeBitmap: true, slow: true }), 30));
+  });
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  await sleep(10); // entry 0 already rejected, the rest still pending
+  assert(!g.rafRegistered(), "the loop must not start while any decode is still pending (batch settled on the first rejection)");
+  assert(call === nEntries, `every entry must have been handed to the decoder before settlement (${call}/${nEntries})`);
+  await sleep(50); // the slow entries have resolved by now
+  assert(g.rafRegistered(), "the loop must start once every entry has settled");
+  const cached = g.q("Object.keys(ASSETS).length");
+  assert(cached === nEntries - 1,
+    `the cache must hold every SUCCEEDED entry (${cached}/${nEntries - 1})`);
 });
 
 // ---- fishtank boot harness (same style as tests/fishtank-scaffold.*) ----
