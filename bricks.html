@@ -2744,8 +2744,11 @@ function bootAssets(onReady) {
     (function (entry) {
       var bytes = base64ToBytes(entry.d);
       if (!bytes) { jobs.push(Promise.reject(new Error("asset payload undecodable: " + entry.name))); return; }
+      // Real browsers' createImageBitmap wants a Blob; where no
+      // Blob exists (headless vm boots) the raw buffer goes through.
+      var source = typeof Blob !== "undefined" ? new Blob([bytes]) : bytes.buffer;
       try {
-        jobs.push(decode(bytes.buffer).then(function (bitmap) { ASSETS[entry.name] = bitmap; }));
+        jobs.push(decode(source).then(function (bitmap) { ASSETS[entry.name] = bitmap; }));
       } catch { jobs.push(Promise.reject(new Error("decode threw: " + entry.name))); }
     })(ASSET_PAYLOAD_TABLE[i]);
   }

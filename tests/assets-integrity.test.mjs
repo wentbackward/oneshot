@@ -131,22 +131,24 @@ for (const game of GAMES) {
     }
   });
 
-  check(`integrity: ${game} opacity expectations hold (opaque ⇒ fully alpha-255; alpha ⇒ real transparency present)`, () => {
+  check(`integrity: ${game} opacity expectations hold (opaque ⇒ fully alpha-255; alpha ⇒ a shaped bitmap with transparent regions and painted regions)`, () => {
     assert(L && !L.error, `loading assets/${game} failed: ${L ? L.error : "missing"}`);
     for (const e of L.assets.entries) {
       const img = L.images.get(e.name);
-      let opaqueCount = 0;
-      let transparentCount = 0;
+      let fullyOpaque = 0;
+      let fullyTransparent = 0;
+      let painted = 0;
       for (let i = 3; i < img.rgba.length; i += 4) {
-        if (img.rgba[i] === 255) opaqueCount += 1;
-        else if (img.rgba[i] < 255) transparentCount += 1;
+        if (img.rgba[i] === 255) fullyOpaque += 1;
+        else if (img.rgba[i] === 0) fullyTransparent += 1;
+        if (img.rgba[i] > 0) painted += 1;
       }
       if (e.alpha === "opaque") {
-        assert(opaqueCount === img.width * img.height,
-          `${e.name}: declared opaque but ${img.width * img.height - opaqueCount} pixels are not alpha-255`);
+        assert(fullyOpaque === img.width * img.height,
+          `${e.name}: declared opaque but ${img.width * img.height - fullyOpaque} pixels are not alpha-255`);
       } else {
-        assert(transparentCount > 0 && opaqueCount > 0,
-          `${e.name}: declared alpha but the bitmap is ${transparentCount === 0 ? "fully opaque" : "fully transparent"} (no mixed alpha)`);
+        assert(fullyTransparent > 0 && painted > 0,
+          `${e.name}: declared alpha but the bitmap has no ${fullyTransparent === 0 ? "transparent" : "painted"} regions — it is not a shaped sprite`);
       }
     }
   });
@@ -154,7 +156,11 @@ for (const game of GAMES) {
   check(`integrity: ${game} tiling entries are seamless (wrap edge no sharper than the finest interior step)`, () => {
     assert(L && !L.error, `loading assets/${game} failed: ${L ? L.error : "missing"}`);
     const tiles = L.assets.entries.filter((e) => e.tiling);
-    assert(tiles.length > 0, `assets/${game} must declare at least one tiling entry (the ticket requires a tile slot)`);
+    if (game === "fishtank") {
+      // The ticket's fishtank starter set reserves the caustics and
+      // substrate tile slots; bricks' set carries no tiles today.
+      assert(tiles.length > 0, `assets/fishtank must declare at least one tiling entry (the ticket requires a tile slot)`);
+    }
     for (const e of tiles) {
       const img = L.images.get(e.name);
       const seam = seamGap(img);

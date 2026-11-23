@@ -35,7 +35,7 @@ export interface EmbeddedAssetEntry {
   d: string;
 }
 
-export type BitmapDecoder = (bytes: ArrayBuffer) => Promise<ImageBitmap>;
+export type BitmapDecoder = (source: Blob | ArrayBuffer) => Promise<ImageBitmap>;
 
 const PAYLOAD_GLOBAL = "__FISHTANK_ASSETS__";
 
@@ -53,12 +53,14 @@ export const EMBEDDED_ASSETS: readonly EmbeddedAssetEntry[] = (() => {
   return Array.isArray(raw) ? (raw as EmbeddedAssetEntry[]) : [];
 })();
 
-/** base64 → raw bytes, or null when the payload entry is
+/** base64 → raw bytes on a dedicated ArrayBuffer (so a Blob can
+ *  wrap the view losslessly), or null when the payload entry is
  *  undecodable (dropped from the cache, frame still renders). */
-export function base64ToBytes(b64: string): Uint8Array | null {
+export function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> | null {
   try {
     const bin = atob(b64);
-    const bytes = new Uint8Array(bin.length);
+    const ab = new ArrayBuffer(bin.length);
+    const bytes = new Uint8Array(ab);
     for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
     return bytes;
   } catch {
@@ -70,7 +72,12 @@ export function base64ToBytes(b64: string): Uint8Array | null {
  *  the payload is empty or no decoder exists, onSettled() runs
  *  SYNCHRONOUSLY (the headless-boot contract); otherwise it runs
  *  after the last decode has settled — success OR failure — so the
- *  loop can never hang on a broken entry. */
+ *  loop can never hang on a broken entry.
+ *
+ *  Source handed to the decoder: a Blob, which is what real
+ *  browsers' createImageBitmap actually accepts (Chrome rejects
+ *  raw ArrayBuffers); where no Blob constructor exists (headless
+ *  vm boots) the raw buffer goes through as-is. */
 export function decodeAllAssets(cache: Record<string, ImageBitmap>, onSettled: () => void): void {
   const decoder: unknown = (globalThis as Record<string, unknown>).createImageBitmap;
   if (EMBEDDED_ASSETS.length === 0 || typeof decoder !== "function" || typeof atob !== "function") {
@@ -89,14 +96,22 @@ export function decodeAllAssets(cache: Record<string, ImageBitmap>, onSettled: (
       settle();
       continue;
     }
-    decode(bytes.buffer as ArrayBuffer)
-      .then((bitmap: ImageBitmap) => {
-        cache[entry.name] = bitmap;
-      })
-      .catch(() => {
-        // One bad entry loses its slot only; the frame still
-        // renders without it.
-      })
-      .then(settle);
+    const source: Blob | ArrayBuffer =
+      typeof Blob !== "undefined" ? new Blob([bytes]) : (bytes.buffer as ArrayBuffer);
+    try {
+      decode(source)
+        .then((bitmap: ImageBitmap) => {
+          cache[entry.name] = bitmap;
+        })
+        .catch(() => {
+          // One bad entry loses its slot only; the frame still
+          // renders without it.
+        })
+        .then(settle);
+    } catch {
+      // A synchronous throw (hostile/absent decoder) drops the
+      // entry instead of killing the boot.
+      settle();
+    }
   }
 }

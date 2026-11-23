@@ -2141,7 +2141,8 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
   function base64ToBytes(b64) {
     try {
       const bin = atob(b64);
-      const bytes = new Uint8Array(bin.length);
+      const ab = new ArrayBuffer(bin.length);
+      const bytes = new Uint8Array(ab);
       for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
       return bytes;
     } catch {
@@ -2166,10 +2167,15 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
         settle();
         continue;
       }
-      decode(bytes.buffer).then((bitmap) => {
-        cache[entry.name] = bitmap;
-      }).catch(() => {
-      }).then(settle);
+      const source = typeof Blob !== "undefined" ? new Blob([bytes]) : bytes.buffer;
+      try {
+        decode(source).then((bitmap) => {
+          cache[entry.name] = bitmap;
+        }).catch(() => {
+        }).then(settle);
+      } catch {
+        settle();
+      }
     }
   }
 
