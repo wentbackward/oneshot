@@ -3976,3 +3976,24 @@ stays synthesized Web Audio everywhere. The contract:
   business: pebbles, kelp, fish bodies, skins, the ball/trail, debris and
   power-up icons ship, decode and cache today, and wait for their slots
   to be drawn.
+
+## 2026-11-23 — Ticket #137 review fold: single-snapshot asset reads and the initial-embed guard
+- **One read per asset file, carried through:** `loadGameAssets` now reads each
+  file exactly once and carries the buffer on the entry (`e.bytes`); both the
+  `rawBytes` budget and `assetPayloadJson`'s base64 derive from that same
+  buffer. Reason: on a concurrently mutated tree the budget and the embedded
+  payload could previously come from different bytes. Alternatives: tolerate
+  the drift (no — the integrity story depends on budget/payload agreement), or
+  snapshot the whole tree up front (heavier than needed for a per-game
+  sub-MiB tree). The reader is an injectable parameter so the snapshot
+  property is testable deterministically (no process races in the suite).
+- **Initial embed refuses on an unterminated directive line:** when
+  `bricks.html` has no marker block, the splice anchor is the newline after
+  `"use strict";`; if that line is the file's last line without a trailing
+  newline the anchor is ambiguous, so the script refuses with a clear stderr
+  diagnostic and leaves the file byte-untouched (previously `indexOf(...) + 1`
+  collapsed to 0 and the splice overwrote the file head). Reason: the script
+  must never be able to destroy the file it edits; a well-formed file never
+  triggers this. Alternative considered: fall back to EOF — rejected because
+  an unterminated last line signals a mangled file whose structure no longer
+  matches what the block assumes, so guessing is worse than refusing.
