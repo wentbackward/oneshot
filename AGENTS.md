@@ -45,9 +45,15 @@ in this repo. Precondition: repo + package public.
 ## Engineering rules
 
 - Each game is self-contained: all CSS stays in `<style>` and all JS in
-  `<script>` inside its own `.html` file.
-  No CDNs, no external images/audio — everything procedural (Canvas shapes,
-  Web Audio synthesis).
+  `<script>` inside its own `.html` file. No CDNs and no network of any
+  kind. Image assets: bricks and fishtank use in-repo assets
+  (`assets/<game>/`) embedded at build time as base64 and decoded to
+  cached ImageBitmaps before the first frame — the asset contract in
+  `docs/DECISIONS.md` (ticket #137) keeps the shipped file a single
+  self-contained artifact (no `<img>`/`<audio>`/`<link>` tags, no
+  `src=`/`href=` except the hub back link). Asteroids remains fully
+  procedural (Canvas shapes / vector paths). Audio remains synthesized
+  Web Audio in every game.
 - The file must remain a valid, self-contained, playable game when opened
   directly in a browser.
 - Keep the code readable and structured (clear section markers, named

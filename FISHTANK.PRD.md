@@ -1,4 +1,4 @@
-Build a high-performance, interactive 2D/2.5D aquarium ecosystem simulation in TypeScript using HTML5 Canvas, spatial partitioning, and procedural entity animation.
+Build a high-performance, interactive 2D/2.5D aquarium ecosystem simulation in TypeScript using HTML5 Canvas, spatial partitioning, and procedural entity animation. (Entity ANIMATION stays procedural; fish bodies may be textured from in-repo, build-time-embedded image assets under the asset contract in docs/DECISIONS.md.)
 
 1. Architecture & Spatial Engine
 - Isolate simulation physics (`src/sim/`) from rendering (`src/render/`) and UI controls (`src/ui/`).
@@ -10,7 +10,7 @@ Build a high-performance, interactive 2D/2.5D aquarium ecosystem simulation in T
   - **Schooling Tetra/Minnows:** Tight cohesive schools that scatter rapidly when a predator approaches or the user taps the glass.
   - **Grazing Angelfish/Discus:** Slower, independent cruisers with vertical bobbing that forage near bottom plants and drift toward dropped food.
   - **Apex Predator (e.g., Small Shark or Pike):** Patrols the tank, stalks isolated prey when hunger crosses a threshold, and enters a cooldown/resting state after feeding.
-- **Procedural Spine/Fin Animation:** Render each fish using a multi-segment articulated spine or wave-deformed body path where tail undulation frequency scales dynamically with swimming speed and turning torque.
+- **Procedural Spine/Fin Animation:** Render each fish using a multi-segment articulated spine or wave-deformed body path where tail undulation frequency scales dynamically with swimming speed and turning torque. Fish bodies may ride this spine as textured sprites (embedded image assets per the asset contract in docs/DECISIONS.md) — the spine articulation and the speed/torque-scaled undulation remain procedural; the hybrid is the intended design.
 
 3. Environment, Water Physics & Interactivity
 - **Interactive Tools (Toolbar):**

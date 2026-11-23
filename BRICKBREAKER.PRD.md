@@ -5,7 +5,7 @@ Product Requirement Document (PRD): Single-Page Brick Breaker
 
 1. Product Overview
 
-The goal is to build a classic, responsive, and fully playable Arkanoid-style brick-breaker game contained entirely within a single HTML5 file (combining HTML, CSS, and JavaScript). The game should require no external dependencies, libraries, or asset hosting.
+The goal is to build a classic, responsive, and fully playable Arkanoid-style brick-breaker game contained entirely within a single HTML5 file (combining HTML, CSS, and JavaScript). The game should require no external dependencies, libraries, or asset hosting. In-repo image assets that are embedded into the single file at build time (base64 payloads — no network, no hosting; see the asset contract in docs/DECISIONS.md) satisfy this constraint.
 
 2. Core Game Loop & Mechanics
 

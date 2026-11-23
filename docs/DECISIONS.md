@@ -3887,3 +3887,92 @@ arcade physics).
   identical constants and formula, no module-cycle (the leaf
   imports nothing from `world.ts`/`angels.ts`), proven by the
   unchanged determinism golden hashes.
+
+## 2026-11-23 — Ticket #137: asset foundation — the asset contract (normative)
+
+Reverses the all-procedural image rule FOR BRICKS AND FISH TANK ONLY.
+Asteroids stays fully procedural (its arcade look is its intent); audio
+stays synthesized Web Audio everywhere. The contract:
+
+1. **Assets live in-repo** under `assets/<game>/` (`assets/bricks/`,
+   `assets/fishtank/`), each manifest entry carrying a license/attribution
+   line and each game directory a companion `LICENSE.txt`. Allowed
+   categories: hand-drawn/vector 2D, photographic, and pre-rendered 3D
+   renders baked to images.
+2. **Embedded, not hosted.** The shipped `bricks.html` / `fishtank.html`
+   stay exactly one self-contained file: base64 payloads live inline in
+   JS (fishtank: page shell printed ahead of the esbuild bundle; bricks:
+   marker-delimited block at the top of the main `<script>`), decoded to
+   `ImageBitmap`s at boot into a cached table. Invariant: **no
+   `<img>`/`<audio>`/`<link>` tags and no `src=`/`href=`** anywhere in the
+   shipped HTML (the inert `href="index.html"` back link is the lone
+   exemption). This is what keeps every existing gate grep, the
+   Dockerfile COPY line and the packager FILES array unchanged.
+3. **Deterministic embedding:** stable sorted manifest order (manifest
+   `name`), fixed-key-order payload JSON, reproducible base64 — rebuilding
+   from the same tree is byte-identical. The fishtank `--check` staleness
+   model covers the payload (a one-byte asset mutation flips `--check`);
+   bricks gets the twin model via `scripts/embed-bricks-assets.mjs
+   [--check]`.
+4. **Size budgets:** named constants in `scripts/lib/assets.mjs` —
+   `MAX_RAW_ASSET_BYTES_PER_GAME` = 1 MiB (sum of raw asset bytes per
+   game) and `MAX_SHIPPED_HTML_BYTES` = 1.5 MiB per shipped file, both
+   asserted by `tests/assets-integrity.test.mjs`. Revisiting them is a
+   DECISIONS entry, not a silent retune.
+5. **Runtime rules:** decode BEFORE the first frame; one cached bitmap
+   table; ZERO per-frame allocation — textures are `drawImage` calls over
+   the boot cache, so the 60 fps rule applies to them exactly as to the
+   procedural paint. One failed decode loses its slot, not the game: the
+   frame degrades to the procedural paint, and where no decoder exists
+   (headless vm suites) the boot settles SYNCHRONOUSLY and renders the
+   byte-identical pre-#137 frame.
+6. **Audio is untouched:** all games keep synthesized Web Audio; no audio
+   assets of any kind enter the contract.
+7. **Placeholder flag:** every manifest entry records `placeholder:
+   true/false`; the final-art swap is data-only (file + manifest entry +
+   rebuild) and testable through the integrity/embed suites. Sourcing and
+   the human approval gates live in `docs/ASSET-SOURCING.md`.
+
+## 2026-11-23 — Ticket #137: mechanics — why the plumbing landed the way it did
+
+- **Bricks option (b), not (a):** a minimal embed script splicing the
+  marker-delimited payload into the committed `bricks.html` (the ticket
+  offered either). A template-based build would have meant lifting the
+  ~2900-line game into `src/` — machinery this ticket does not ask for.
+  The committed file stays source AND artifact, valid and playable when
+  opened directly; the gate gains one freshness check plus a no-`<img>/
+  <audio>/<link>` grep.
+- **Headless suites stay untouched by construction:** no vm sandbox
+  defines `createImageBitmap` on its global, so `decodeAllAssets()` /
+  `bootAssets()` take the synchronous fallback — every pre-existing
+  draw-recording (palette pairs, substrate/caustic translate indices,
+  "no drawImage anywhere" in the atmosphere suite) reads the identical
+  procedural frame. The decode-and-draw path is proven separately with a
+  stubbed decoder (tests/assets-embed.test.mjs), and a real-browser
+  screenshot run is part of the smoke evidence.
+- **Real browsers need a Blob:** Chrome's `createImageBitmap` rejects raw
+  ArrayBuffers, so both runtimes hand it `new Blob([bytes])` wherever a
+  `Blob` constructor exists, and pass the raw buffer through only to
+  headless stubs. A synchronous throw from a hostile decoder drops the
+  entry instead of killing the boot (fishtank learned this the hard way:
+  the first cut crashed the boot in Chrome).
+- **Fishtank draw order:** the textures OVERLAY the procedural layers with
+  flat `drawImage` rectangles (no save/translate, no gradients) at named
+  alphas — `BACKGROUND_TEXTURE_ALPHA` = 0.35 over the ambient backdrop,
+  `GRAVEL_TEXTURE_ALPHA` = 0.3 in a `GRAVEL_TEXTURE_BAND` = 0.055 strip —
+  so the Day/Dusk/Night cycle keeps visibly driving the frame and the
+  draw-recording audits still read the procedural layers as scene truth.
+- **Bricks arena background stretches without distortion** because the
+  placeholder varies only vertically; the alleyway (480×800 portrait)
+  therefore sees a clean stretch. Final art must keep a vertical-only
+  pattern or ship a portrait variant (runbook).
+- **Placeholder provenance:** every current slot is a generated stand-in
+  (flat fills + 5×7-font labels, `scripts/generate-placeholders.mjs`,
+  fixed seeds, CC0 in-repo) — its job is to prove the pipeline and reserve
+  the draw-call slots. Tiles are seamless by construction (periodic
+  functions / fully-wrapped placement) and the integrity suite's seam
+  check refuses any wrap edge sharper than the tile's own finest interior
+  step. Visual quality beyond rendering is the enhancement tickets'
+  business: pebbles, kelp, fish bodies, skins, the ball/trail, debris and
+  power-up icons ship, decode and cache today, and wait for their slots
+  to be drawn.
