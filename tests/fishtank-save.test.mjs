@@ -411,6 +411,29 @@ check("round-trip of a grown school is deterministic: two fresh worlds applying 
     "two fresh worlds loading the same layout must replay byte-identically");
 });
 
+// #121/#126 interaction: pellets and shockwave rings are TRANSIENT by
+// design — the layout schema has no field for them, so a save made
+// while they are live must neither fail validation nor resurrect them.
+check("a save made while pellets and shockwave rings are live round-trips WITHOUT them (transient by design)", () => {
+  const a = new World({ seed: 13 });
+  a.placeRock(400, 300);
+  const p = a.dropFood(500, 100);
+  assert(p !== null, "setup: the pellet must spawn");
+  a.tapGlass(700, 200);
+  assert(a.pellets.length === 1 && a.shockwaves.length === 1, "setup: both transients live");
+  a.step(1 / 60); // let both move so the save captures a mid-flight world
+  assert(a.pellets.length === 1 && a.shockwaves.length === 1, "setup: transients still live at save time");
+  const save = validateSave(captureLayout(a));
+  assert(save !== null, "the validator must accept a payload captured with live transients (their absence is not a fault)");
+  assert(save.rocks.length === 1 && save.rocks[0].x === 400, "the layout (rock) survives the transient save");
+  assert(save.lighting.mode === "LIGHT_DAY", "the lighting mode survives the transient save");
+  const b = new World({ seed: 13 });
+  applyLayout(b, save);
+  assert(b.rocks.length === 1, "the restored world carries the rock");
+  assert(b.pellets.length === 0, "pellets do NOT persist: the restored world starts clean");
+  assert(b.shockwaves.length === 0, "shockwave rings do NOT persist: the restored world starts clean");
+});
+
 // ================================================================
 // Layer 2 — the vm suite: localStorage stub capturing the JSON
 // ================================================================
