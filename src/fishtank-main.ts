@@ -10,6 +10,7 @@ import {
   FIXED_DT,
   KELP_MAX,
   MAX_FRAME_DELTA,
+  PELLET_MAX,
   ROCK_COLLIDE_PAD,
   ROCK_MAX,
   ROCK_RADIUS,
@@ -57,12 +58,12 @@ function clampDelta(seconds: number): number {
 }
 
 /** Test seam: tests/fishtank-scaffold.test.mjs, tests/fishtank-
- *  tetra-render.test.mjs and tests/fishtank-placement.test.mjs
- *  run the bundled IIFE in node:vm and query these globals; an
- *  IIFE exposes no module exports, so the fixed-step constant,
- *  the default population, the placement-tool constants, the live
- *  world and the live toolbar are published on globalThis at
- *  boot. */
+ *  tetra-render.test.mjs, tests/fishtank-placement.test.mjs and
+ *  tests/fishtank-food-toolbar.test.mjs run the bundled IIFE in
+ *  node:vm and query these globals; an IIFE exposes no module
+ *  exports, so the fixed-step constant, the default population,
+ *  the placement- and food-tool constants, the live world and the
+ *  live toolbar are published on globalThis at boot. */
 function exposeTestSeam(world: World, toolbar: Toolbar): void {
   const seam = globalThis as unknown as Record<string, unknown>;
   seam.FIXED_DT = FIXED_DT;
@@ -73,6 +74,7 @@ function exposeTestSeam(world: World, toolbar: Toolbar): void {
   seam.ROCK_RADIUS = ROCK_RADIUS;
   seam.ROCK_COLLIDE_PAD = ROCK_COLLIDE_PAD;
   seam.KELP_MAX = KELP_MAX;
+  seam.PELLET_MAX = PELLET_MAX;
 }
 
 if (typeof window !== "undefined" && typeof document !== "undefined") {

@@ -86,6 +86,53 @@ export const PREDATOR_REST_STEPS = 240;
  *  units — generous against the 340 u/s × 1/60 s ≈ 5.7-unit step,
  *  tight enough to make each stop individually attributable. */
 export const PREDATOR_WAYPOINT_TOLERANCE = 48;
+// ---------- dropped food & tap-glass (PRD §3, #121) ----------
+
+/** Tank capacity: at most this many live (uneaten, unsettled)
+ *  pellets, enforced by World.dropFood(). Pinned by
+ *  tests/fishtank-food-toolbar.test.mjs. */
+export const PELLET_MAX = 64;
+
+/** Visual/body radius of a pellet (tank units): a small flake. */
+export const PELLET_RADIUS = 5;
+
+/** Sinking acceleration on a pellet, tank units/s². */
+export const PELLET_GRAVITY = 120;
+/** Linear drag coefficient (1/s) opposing the pellet's velocity in
+ *  BOTH axes: the water's resistance. The integrator relaxes vy to
+ *  the terminal PELLET_GRAVITY / PELLET_DRAG and vx to the current's
+ *  equilibrium flow `currentX / PELLET_DRAG` (units/s) over the
+ *  same time scale. */
+export const PELLET_DRAG = 2;
+/** Terminal sink speed, tank units/s — the drag balance of gravity
+ *  (PELLET_GRAVITY / PELLET_DRAG). The integrator approaches it from
+ *  below, never above; pinned by tests/fishtank-pellets.test.mjs. */
+export const PELLET_TERMINAL_V = PELLET_GRAVITY / PELLET_DRAG;
+
+/** How far a tetra SENSES a pellet and homes on it (tank units):
+ *  the food-seeking perception, deliberately narrower than the
+ *  school perception so food competes with, and usually wins over,
+ *  schooling forces at this range. */
+export const PELLET_SENSE_RADIUS = 120;
+
+/** Tetra→pellet contact distance: at (or under) this gap the
+ *  nearest claiming tetra eats the pellet. Inside PELLET_SENSE_
+ *  RADIUS by construction. */
+export const PELLET_EAT_RADIUS = 16;
+
+/** Expanding shockwave ring growth rate (tap glass), tank units/s.
+ *  30 fixed frames (0.5 s) take the ring to 200 units — strictly
+ *  growing yet clear of SHOCKWAVE_RING_MAX_RADIUS, pinned by
+ *  tests/fishtank-food-toolbar.test.mjs. */
+export const SHOCKWAVE_RING_SPEED = 400;
+/** Radius at which a ring is retired (fully expanded, tank units).
+ *  A ring lives SHOCKWAVE_RING_MAX_RADIUS / SHOCKWAVE_RING_SPEED =
+ *  0.75 s of sim time. */
+export const SHOCKWAVE_RING_MAX_RADIUS = 300;
+/** Live rings the world keeps at most: new rings are REFUSED at
+ *  the cap (the startle still fires — the scare is never denied). */
+export const SHOCKWAVE_MAX_RINGS = 16;
+
 // ---------- placement tools: rocks & kelp (PRD §3) ----------
 
 /** Tank capacity: at most this many placed rocks… */

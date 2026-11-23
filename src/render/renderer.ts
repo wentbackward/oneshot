@@ -12,8 +12,12 @@
 //   6  kelp strands (placed, PRD §3 — roots rest on the gravel)
 //   7  rocks (placed, PRD §3 — behind the school)
 //   8  tetra spines (PRD §2)
-//   9  bubble column (pool, painted in slot order)
-// The food layer joins here once it exists.
+//   9  dropped pellets (PRD §3 — food floats over the school)
+//   10 bubble column (pool, painted in slot order)
+//   11 shockwave rings (PRD §3 tap-glass — on the GLASS, in front
+//       of everything, incl. the bubbles)
+// Layers 9/11 draw nothing while the world carries no food/rings,
+// so a fresh boot's frame is byte-identical to the pre-food one.
 // ================================================================
 
 import type { World } from "../sim/world.ts";
@@ -24,6 +28,7 @@ import { lightPhaseAt } from "./lighting.ts";
 import { drawCausticShafts } from "./caustics.ts";
 import { BubbleColumn } from "./bubbles.ts";
 import { Substrate } from "./substrate.ts";
+import { drawPellets, drawShockwaves } from "./food.ts";
 
 export class Renderer {
   /** Per-instance tetra colour cache (src/render/tetras.ts builds
@@ -52,6 +57,8 @@ export class Renderer {
     drawKelp(ctx, width, height, world.kelp);
     drawRocks(ctx, width, height, world.rocks);
     drawTetras(ctx, width, height, world.agents, this.tetraColours);
+    drawPellets(ctx, width, height, world.pellets);
     this.bubbles.paint(ctx, width, height, world.time);
+    drawShockwaves(ctx, width, height, world.shockwaves);
   }
 }
