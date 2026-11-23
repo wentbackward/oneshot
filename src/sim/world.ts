@@ -59,6 +59,7 @@ import {
 } from "./constants.ts";
 import { KelpStrand } from "./kelp.ts";
 import { Angel, spawnAngels } from "./angels.ts";
+import { TAU, TORQUE_SMOOTHING, wrapPi } from "./angles.ts";
 import { stepPellet, type Pellet, type Shockwave } from "./pellets.ts";
 import { mulberry32 } from "./rng.ts";
 import { tailFrequency } from "./tail.ts";
@@ -114,11 +115,6 @@ const POP_RESEED_STRIDE = 1_000_003;
  *  hard as a cruising turn can be. */
 const ALIGNMENT_CRUISE_SPEED = FISH_MAX_SPEED;
 
-/** Per-step blend of the instantaneous turning torque into the
- *  smoothed one feeding the tail formula: 0.25 reacts in ≈ 4 steps
- *  without strobing on per-step force jitter. */
-const TORQUE_SMOOTHING = 0.25;
-
 /** How far a tetra SENSES its school (alignment + cohesion), tank
  *  units. Deliberately wider than NEIGHBOUR_RADIUS: a real school
  *  tracks dozens of metres of shoalmates, while separation stays
@@ -126,8 +122,6 @@ const TORQUE_SMOOTHING = 0.25;
  *  NEIGHBOUR_RADIUS internally, so feeding it the wider list keeps
  *  it exactly the #119 personal-repulsion force. */
 const SCHOOL_PERCEPTION_RADIUS = 180;
-
-const TAU = 2 * Math.PI;
 
 /** A schooling tetra: a position and a velocity in tank units,
  *  plus the articulated-tail state the renderer observes. */
@@ -1078,15 +1072,4 @@ export class World {
     this.grid.clear();
     for (const t of this.agents) this.grid.insert(t);
   }
-}
-
-/** Wrap a heading delta into [−π, π]: the shortest angular
- *  difference, so the torque measurement sees a U-turn as π, not
- *  2π. (Both endpoints can occur: ±π modulo 2π survives the
- *  branch cuts as-is.) */
-function wrapPi(angle: number): number {
-  let a = angle % TAU;
-  if (a > Math.PI) a -= TAU;
-  if (a < -Math.PI) a += TAU;
-  return a;
 }

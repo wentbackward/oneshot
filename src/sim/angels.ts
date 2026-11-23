@@ -60,9 +60,8 @@ import {
   TANK_WIDTH,
 } from "./constants.ts";
 import { mulberry32 } from "./rng.ts";
+import { TAU, TORQUE_SMOOTHING, wrapPi } from "./angles.ts";
 import { tailFrequency } from "./tail.ts";
-
-const TAU = 2 * Math.PI;
 
 /** Maximum steering acceleration in the base plane, tank units/s²:
  *  the angel's agility. */
@@ -111,21 +110,8 @@ const SPAWN_BASEY_HIGH = 0.8;
  *  everyone swims UNDER the cap, never over it. */
 const SPAWN_SPEED_MIN_FRACTION = 0.75;
 
-/** Per-step blend of the instantaneous turning torque into the
- *  smoothed one feeding the tail formula (same policy as the
- *  tetras: src/sim/world.ts). */
-const TORQUE_SMOOTHING = 0.25;
-
 /** A deterministic per-angel random draw (mulberry32 stream). */
 type Rng = () => number;
-
-/** Wrap a heading delta into [−π, π] (same policy as world.ts). */
-function wrapPi(angle: number): number {
-  let a = angle % TAU;
-  if (a > Math.PI) a -= TAU;
-  if (a < -Math.PI) a += TAU;
-  return a;
-}
 
 /** One grazing angelfish. The first eight fields form the same
  *  spine-fish shape as a Tetra (position, velocity, tail phase,

@@ -270,6 +270,16 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
     }
   };
 
+  // src/sim/angles.ts
+  var TAU = 2 * Math.PI;
+  var TORQUE_SMOOTHING = 0.25;
+  function wrapPi(angle) {
+    let a = angle % TAU;
+    if (a > Math.PI) a -= TAU;
+    if (a < -Math.PI) a += TAU;
+    return a;
+  }
+
   // src/sim/tail.ts
   var TAIL_FREQ_SPEED_GAIN = 0.04;
   var TAIL_FREQ_TORQUE_GAIN = 0.25;
@@ -278,7 +288,6 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
   }
 
   // src/sim/angels.ts
-  var TAU = 2 * Math.PI;
   var ANGEL_MAX_STEER = 120;
   var ANGEL_SEEK_GAIN = 4;
   var ANGEL_ARRIVE_RADIUS = 40;
@@ -292,13 +301,6 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
   var SPAWN_BASEY_LOW = 0.45;
   var SPAWN_BASEY_HIGH = 0.8;
   var SPAWN_SPEED_MIN_FRACTION = 0.75;
-  var TORQUE_SMOOTHING = 0.25;
-  function wrapPi(angle) {
-    let a = angle % TAU;
-    if (a > Math.PI) a -= TAU;
-    if (a < -Math.PI) a += TAU;
-    return a;
-  }
   var Angel = class {
     x;
     y;
@@ -896,9 +898,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
   var SPAWN_SPEED_MAX = 80;
   var POP_RESEED_STRIDE = 1000003;
   var ALIGNMENT_CRUISE_SPEED = FISH_MAX_SPEED;
-  var TORQUE_SMOOTHING2 = 0.25;
   var SCHOOL_PERCEPTION_RADIUS = 180;
-  var TAU2 = 2 * Math.PI;
   function worstRingDepth(rocks, cx, cy) {
     let worst = -Infinity;
     for (const rock of rocks) {
@@ -1180,10 +1180,10 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
      *  reseeded on (seed, startIndex) — deterministic per world. */
     spawnCohort(startIndex, count) {
       const rng = mulberry32(this.seed + POP_RESEED_STRIDE * startIndex);
-      const baseHeading = rng() * TAU2;
+      const baseHeading = rng() * TAU;
       for (let i = 0; i < count; i++) {
         const heading = baseHeading + (rng() * 2 - 1) * SPAWN_HEADING_JITTER;
-        const offAngle = rng() * TAU2;
+        const offAngle = rng() * TAU;
         const radius = SPAWN_CLUSTER_RADIUS * Math.sqrt(rng());
         const speed = SPAWN_SPEED_MIN + rng() * (SPAWN_SPEED_MAX - SPAWN_SPEED_MIN);
         this.agents.push({
@@ -1191,7 +1191,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
           y: TANK_HEIGHT / 2 + Math.sin(offAngle) * radius * SPAWN_CLUSTER_SQUASH,
           vx: Math.cos(heading) * speed,
           vy: Math.sin(heading) * speed,
-          phase: rng() * TAU2,
+          phase: rng() * TAU,
           torque: 0,
           heading
         });
@@ -1377,14 +1377,14 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
         vy = this.stripV.y;
         const nx = Math.hypot(vx, vy);
         const heading = Math.atan2(vy, vx);
-        const instantTorque = wrapPi2(heading - t.heading) / dt;
-        t.torque += TORQUE_SMOOTHING2 * (instantTorque - t.torque);
+        const instantTorque = wrapPi(heading - t.heading) / dt;
+        t.torque += TORQUE_SMOOTHING * (instantTorque - t.torque);
         t.x = x;
         t.y = y;
         t.vx = vx;
         t.vy = vy;
         t.heading = heading;
-        t.phase += TAU2 * tailFrequency(nx, t.torque) * dt;
+        t.phase += TAU * tailFrequency(nx, t.torque) * dt;
       }
       for (const a of this.angels) a.step(dt, this);
       if (this.pellets.length > 0) {
@@ -1623,15 +1623,9 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       for (const t of this.agents) this.grid.insert(t);
     }
   };
-  function wrapPi2(angle) {
-    let a = angle % TAU2;
-    if (a > Math.PI) a -= TAU2;
-    if (a < -Math.PI) a += TAU2;
-    return a;
-  }
 
   // src/render/scenery.ts
-  var TAU3 = 2 * Math.PI;
+  var TAU2 = 2 * Math.PI;
   var ROCK_LIGHT = "#93a0ad";
   var ROCK_DARK = "#49545f";
   var ROCK_SHEEN = "rgba(235, 244, 252, 0.18)";
@@ -1686,11 +1680,11 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       grad.addColorStop(0, ROCK_LIGHT);
       grad.addColorStop(1, ROCK_DARK);
       ctx.beginPath();
-      ctx.ellipse(cx, cy, rx, ry, 0, 0, TAU3);
+      ctx.ellipse(cx, cy, rx, ry, 0, 0, TAU2);
       ctx.fillStyle = grad;
       ctx.fill();
       ctx.beginPath();
-      ctx.ellipse(cx - rx * 0.2, cy - ry * 0.35, rx * 0.4, ry * 0.22, 0, 0, TAU3);
+      ctx.ellipse(cx - rx * 0.2, cy - ry * 0.35, rx * 0.4, ry * 0.22, 0, 0, TAU2);
       ctx.fillStyle = ROCK_SHEEN;
       ctx.fill();
     }
@@ -1704,7 +1698,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
   var TETRA_STROKE_WIDTH = 4;
   var TETRA_HEAD_RADIUS = 3.5;
   var ANGEL_HUE_OFFSET = 180;
-  var TAU4 = 2 * Math.PI;
+  var TAU3 = 2 * Math.PI;
   function tetraColour(cache, index, hueOffset = 0) {
     let c = cache[index];
     if (c === void 0) {
@@ -1744,7 +1738,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
     ctx.lineJoin = "round";
     ctx.stroke();
     ctx.beginPath();
-    ctx.arc(headX, headY, TETRA_HEAD_RADIUS, 0, TAU4);
+    ctx.arc(headX, headY, TETRA_HEAD_RADIUS, 0, TAU3);
     ctx.fillStyle = colourForFish;
     ctx.fill();
   }
@@ -1876,7 +1870,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
   var BUBBLE_RADIUS_MIN = 1.5;
   var BUBBLE_RADIUS_MAX = 5;
   var BUBBLE_STROKE = "rgba(230, 250, 255, 0.35)";
-  var TAU5 = 2 * Math.PI;
+  var TAU4 = 2 * Math.PI;
   function hash(unit2, salt) {
     const v = Math.sin(unit2 * 127.1 + salt * 311.7) * 43758.5453;
     return v - Math.floor(v);
@@ -1890,7 +1884,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
           radius: BUBBLE_RADIUS_MIN + (BUBBLE_RADIUS_MAX - BUBBLE_RADIUS_MIN) * hash(i, 3),
           speed: BUBBLE_RISE_MIN + (BUBBLE_RISE_MAX - BUBBLE_RISE_MIN) * hash(i, 2),
           offset: hash(i, 4),
-          phase0: hash(i, 5) * TAU5
+          phase0: hash(i, 5) * TAU4
         });
       }
     }
@@ -1905,10 +1899,10 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       for (let i = 0; i < this.slots.length; i++) {
         const s = this.slots[i];
         const rise = column / s.speed;
-        const x = s.lane * width + Math.sin(t / rise * TAU5 * BUBBLE_RISE_PERIODS + s.phase0) * BUBBLE_WOBBLE_AMP;
+        const x = s.lane * width + Math.sin(t / rise * TAU4 * BUBBLE_RISE_PERIODS + s.phase0) * BUBBLE_WOBBLE_AMP;
         const y = height + BUBBLE_MARGIN - (t * s.speed + s.offset * column) % column;
         ctx.beginPath();
-        ctx.arc(x, y, s.radius, 0, TAU5);
+        ctx.arc(x, y, s.radius, 0, TAU4);
         ctx.stroke();
       }
     }
@@ -1930,7 +1924,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
   var KELP_TIP_AMP = 1.6;
   var ROCK_RY_RATIO = 0.5;
   var TILE_OFFSETS = [0, -1];
-  var TAU6 = 2 * Math.PI;
+  var TAU5 = 2 * Math.PI;
   var Substrate = class {
     gravel = [];
     rocks = [];
@@ -1951,7 +1945,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
         this.rocks.push({ u: rng(), rx: 18 + 24 * rng(), ry: 8 + 12 * rng() });
       }
       for (let i = 0; i < SUBSTRATE_KELP_TUFTS; i++) {
-        this.kelp.push({ u: rng(), h: 0.06 + 0.07 * rng(), phase: rng() * TAU6 });
+        this.kelp.push({ u: rng(), h: 0.06 + 0.07 * rng(), phase: rng() * TAU5 });
       }
     }
     /** Paint the FAR gravel layer (drawn first, i.e. behind the
@@ -1968,7 +1962,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
         for (const copy of TILE_OFFSETS) {
           const x = s.u * tile + copy * tile;
           ctx.beginPath();
-          ctx.ellipse(x, y, s.rx, s.ry, 0, 0, TAU6);
+          ctx.ellipse(x, y, s.rx, s.ry, 0, 0, TAU5);
           ctx.fillStyle = s.fill;
           ctx.fill();
         }
@@ -1988,7 +1982,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
         for (const copy of TILE_OFFSETS) {
           const x = r.u * tile + copy * tile;
           ctx.beginPath();
-          ctx.ellipse(x, y, r.rx, r.ry, 0, 0, TAU6);
+          ctx.ellipse(x, y, r.rx, r.ry, 0, 0, TAU5);
           ctx.fillStyle = ROCK_FILL;
           ctx.fill();
         }

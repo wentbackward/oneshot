@@ -3876,3 +3876,14 @@ arcade physics).
   sites are unchanged. The HUD gains its `ANGEL` count row (the
   registration-point comment in src/ui/hud.ts had already reserved it
   for this ticket).
+
+## 2026-11-23 — Ticket #123 re-review fold: angular policy single-sourced in `src/sim/angles.ts`
+- **`TAU`, `wrapPi()` and `TORQUE_SMOOTHING` moved from being
+  duplicated in `world.ts`/`angels.ts` into one new leaf module
+  `src/sim/angles.ts` (named for the policy's subject — angular
+  wrap + torque blend — alongside the `rng.ts`/`tail.ts` leaves;
+  `rotation.ts` and `heading.ts` rejected: torque smoothing is the
+  third member and neither word covers it). Behavior-preserving:
+  identical constants and formula, no module-cycle (the leaf
+  imports nothing from `world.ts`/`angels.ts`), proven by the
+  unchanged determinism golden hashes.
