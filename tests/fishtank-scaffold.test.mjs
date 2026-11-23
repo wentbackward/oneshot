@@ -220,6 +220,10 @@ function pristineCopy() {
   try {
     mkdirSync(path.join(tmp, "scripts"), { recursive: true });
     cpSync(path.join(root, "src"), path.join(tmp, "src"), { recursive: true });
+    // assets/ + scripts/lib are builder inputs since ticket #137
+    // (the deterministic base64 embed feeds the page shell).
+    cpSync(path.join(root, "assets"), path.join(tmp, "assets"), { recursive: true });
+    cpSync(path.join(root, "scripts", "lib"), path.join(tmp, "scripts", "lib"), { recursive: true });
     copyFileSync(path.join(root, "scripts", "build-fishtank.mjs"), path.join(tmp, "scripts", "build-fishtank.mjs"));
     copyFileSync(htmlPath, path.join(tmp, "fishtank.html"));
     copyFileSync(path.join(root, "package.json"), path.join(tmp, "package.json"));

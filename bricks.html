@@ -467,6 +467,12 @@
 
 <script>
 "use strict";
+//__BRICKS_ASSETS_BEGIN__
+// Ticket #137 asset contract: deterministic base64 embed of
+// assets/bricks (sorted manifest order). Regenerate with:
+//   node scripts/embed-bricks-assets.mjs
+window.__BRICKS_ASSETS__ = [{"name":"ball","w":16,"h":16,"frames":1,"ph":1,"d":"iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAxElEQVR42rWTbQuCMBSF/f+/TFBh2MIxk7IRGIIEg0D6cOO53ySKYmtw4HDuubsvzqL4xylLI1W1k7q2CjjaV8kkGOOkbb1Ye1DA0Yh9TG6avZq77ijen6XvgwKORgzP28oYnDvJMFxkHK8SwqyAoxHD89IJ89EiVTCSNE03meeogKMRw4N3sxOWxM20SjUSluUuMT4UcDRiePCSs2mfZTEvlahK4rqKAo5GDA/ezRjJFySPkLzE5M+Y5SFlecpZfqZfzxOacS8fa9TYUgAAAABJRU5ErkJggg=="},{"name":"ball-trail","w":16,"h":16,"frames":1,"ph":1,"d":"iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA2UlEQVR42q2TIa4CQRBEJ1mDwGDWYtCr1nAA/DougMOtQ3KGtZyCC2BLcYIynKTIJE/wE35+8ncnqWRSU9Xd0z1Typclp5GzlrMBdd+UvxbGVs5OTienBx1c+2sgOSs5WwwHOYOcIxjgejSrb5nrwR7xSc4o5wJGuAHN9kcllNYjOMu5ypnk3MAEd0ZTte1n9h0lnhBW013OA9zhrmgOeJpChzsij2SrhqecF3jCTWgGPOvCmHqadSHTA2PAC+6G5ohns0iA2VeY18TZY1zkIc1+yot8pv9+5zerh23boPntQAAAAABJRU5ErkJggg=="},{"name":"bg","w":960,"h":600,"frames":1,"ph":1,"d":"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"},{"name":"brick-skin-a","w":64,"h":24,"frames":1,"ph":1,"d":"iVBORw0KGgoAAAANSUhEUgAAAEAAAAAYCAYAAABKtPtEAAAAZklEQVR42mO4luDzfyTiChUZMGYYDYDRAIAIbLLTG1F4NABGA2A0AAYmAL6+fogVjwbAcA8AQh6ld0CMBsBoAIwGwMAEACE8GgCjWWA0AEYDYDQARgNgNADoHwAwgZGGRwNgpAcAAKXPItQpjfyjAAAAAElFTkSuQmCC"},{"name":"brick-skin-b","w":64,"h":24,"frames":1,"ph":1,"d":"iVBORw0KGgoAAAANSUhEUgAAAEAAAAAYCAYAAABKtPtEAAAAYUlEQVR42mOI6Nv2fyRiJa8MMGYYDYDRAIAIWBXMGFF4NABGA2A0AOgbAK8/fMWLRwNgpAQAufKjATAaAKMBMFoIjgbAaBYYDYDRABgNgNFCcDQAaBMAMIGRhkcDYKQHAAAhKfFU6h3mfAAAAABJRU5ErkJggg=="},{"name":"debris-1","w":12,"h":12,"frames":1,"ph":1,"d":"iVBORw0KGgoAAAANSUhEUgAAAAwAAAAMCAYAAABWdVznAAAAMklEQVR42mNgoBb4sCXgA+00gBTDMMkaCGpCV0yWBpyacCnGqYmQBhRNJLmd5EgiBQAAEZp8TRkvaeAAAAAASUVORK5CYII="},{"name":"debris-2","w":12,"h":12,"frames":1,"ph":1,"d":"iVBORw0KGgoAAAANSUhEUgAAAAwAAAAMCAYAAABWdVznAAAAKElEQVR42mNgoBt4FuX2gSxNyJgsTQQNIUkxIU3U9Q9FAUDb+EHXAAD5t12FA9n9wQAAAABJRU5ErkJggg=="},{"name":"paddle","w":120,"h":14,"frames":1,"ph":1,"d":"iVBORw0KGgoAAAANSUhEUgAAAHgAAAAOCAYAAADkH9gOAAAAUklEQVR42u3YoQGAIBRFUbLZOZiA7DhmMjORGcPsJjoA0eTnhLPAu+2lrRwPcSUjLBL4vG4CmQLnPghEYIERGIERGIH5HHivjUAEXi0wvmh+6AXP07sjvg6CUwAAAABJRU5ErkJggg=="},{"name":"powerups","w":96,"h":16,"frames":6,"ph":1,"d":"iVBORw0KGgoAAAANSUhEUgAAAGAAAAAQCAYAAADpunr5AAAAiUlEQVR42u2Xuw3AIAxEmS5zZrBskA1oSJXGosFnMIneSYiG4/ewgVJQvo7zuj2FnQMAANAEALW2ZssIAOv1zEnpw7bf3t8DoERA9AI88NTxX8+SAwCAvt/WSh9SCvIAiExBXwQw5NstAtSIyL4DQiIAAMmXcOYr6C8pzA2AfwAfMQAAAAAIzdcDADBjDvKIO4AAAAAASUVORK5CYII="}];
+//__BRICKS_ASSETS_END__
 // ================================================================
 // BRICK BREAKER — campaign 2: shell, paddle, ball, lives, game over,
 // brick grid, ball-brick collision, scoring, level progression and
@@ -528,7 +534,11 @@
 // volume), and a start-screen ball-speed slider (50-150%, persisted
 // as an integer percent under its own named key) that beginRun()
 // snapshots: it scales each run's serve speed and growth ceiling
-// by the same factor
+// by the same factor; in-repo image assets (assets/bricks) are
+// embedded at build time as a marker-delimited base64 payload and
+// decoded to cached ImageBitmaps BEFORE the first frame (ticket
+// #137 asset contract — degrading to the procedural paint when no
+// decoder is available, e.g. the headless vm suites)
 // ================================================================
 
 // ---- Tunables (var: addressable as globals, e.g. from the console) ----
@@ -2704,6 +2714,46 @@ function renderLives() {
   }
 }
 
+// ---- Embedded image assets (ticket #137, asset contract in
+//      docs/DECISIONS.md) ----
+// The marker-delimited payload above (scripts/embed-bricks-assets.
+// mjs) is decoded ONCE, before the first frame, into the ASSETS
+// bitmap cache. When createImageBitmap/atob is missing (headless
+// vm suites) or a decode fails, bootAssets still fires onReady —
+// the game degrades to the procedural paint and stays playable.
+// Per-frame cost is a drawImage from the cache: no decodes, no
+// allocations, the 60 fps rule holds.
+var ASSET_PAYLOAD_TABLE = window.__BRICKS_ASSETS__ || [];
+var ASSETS = {}; // name -> ImageBitmap, populated at boot only
+function base64ToBytes(b64) {
+  try {
+    var bin = atob(b64);
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  } catch { return null; }
+}
+function bootAssets(onReady) {
+  var decode = window.createImageBitmap;
+  if (ASSET_PAYLOAD_TABLE.length === 0 || typeof decode !== "function" || typeof atob !== "function") {
+    onReady(); // no decoder / empty payload: synchronous fallback
+    return;
+  }
+  var jobs = [];
+  for (var i = 0; i < ASSET_PAYLOAD_TABLE.length; i += 1) {
+    (function (entry) {
+      var bytes = base64ToBytes(entry.d);
+      if (!bytes) { jobs.push(Promise.reject(new Error("asset payload undecodable: " + entry.name))); return; }
+      try {
+        jobs.push(decode(bytes.buffer).then(function (bitmap) { ASSETS[entry.name] = bitmap; }));
+      } catch { jobs.push(Promise.reject(new Error("decode threw: " + entry.name))); }
+    })(ASSET_PAYLOAD_TABLE[i]);
+  }
+  // One settlement per entry; a single failure only loses that
+  // bitmap — the loop still starts, on the procedural fallback.
+  Promise.all(jobs).catch(function () {}).then(onReady);
+}
+
 // ---- Frame loop ----
 // Per-frame order: resize -> update(dt) -> syncScore -> draw, so a
 // record overtaken inside update persists on the same frame it happens.
@@ -2751,8 +2801,18 @@ function update(dt) {
   for (var i = 0; i < bricks.length; i += 1) bricks[i].charged = false;
 }
 function draw() {
-  ctx.fillStyle = COLOR_BG;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // Arena background: the embedded bitmap (placeholder today,
+  // final art via the sourcing runbook) when a decoder produced
+  // one; the themed flat fill otherwise (headless vm boots).
+  // The placeholder pattern varies only vertically, so the
+  // 960×600 → 480×800 alleyway stretch shows no distortion.
+  var bg = ASSETS.bg;
+  if (bg) {
+    ctx.drawImage(bg, 0, 0, canvas.width, canvas.height);
+  } else {
+    ctx.fillStyle = COLOR_BG;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
   if (gameState === "start") return;
   drawBoundary();
   drawBricks();
@@ -2911,7 +2971,11 @@ renderLives();
 renderLeaderboards();
 buildCapsuleLegend();
 syncHud();
-requestAnimationFrame(frame);
+// Asset contract: the loop starts only once every embedded bitmap
+// has settled (or the fallback decided there is nothing to wait
+// for — that branch is synchronous, so headless boots register
+// the first frame immediately).
+bootAssets(function () { requestAnimationFrame(frame); });
 </script>
 <!-- One-shot hub back link: static markup only, no JS (the vm test suites
      boot this file — anything queried at boot needs a stub, so keep it inert). -->

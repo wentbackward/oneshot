@@ -251,11 +251,7 @@ function makeBricksCanvas(drawImages) {
   };
   return canvas;
 }
-function bootBricks(withDecoder) {
-  const bricksHtml = readFileSync(path.join(ROOT, "bricks.html"), "utf8");
-  const gameSource = bricksHtml.match(/<script>([\s\S]*?)<\/script>/)[1];
-  const drawImages = [];
-  const canvas = makeBricksCanvas(drawImages);
+function makeBricksEls(canvas) {
   const els = { game: canvas };
   for (const id of [
     "screen-start", "btn-start", "capsule-legend",
@@ -268,6 +264,14 @@ function bootBricks(withDecoder) {
     "gameover-final", "hud-score", "hud-level", "hiscore", "lives",
     "btn-reset-hiscore", "btn-fullscreen", "leaderboard-start", "leaderboard-gameover",
   ]) els[id] = makeBricksEl(id);
+  return els;
+}
+function bootBricks(withDecoder) {
+  const bricksHtml = readFileSync(path.join(ROOT, "bricks.html"), "utf8");
+  const gameSource = bricksHtml.match(/<script>([\s\S]*?)<\/script>/)[1];
+  const drawImages = [];
+  const canvas = makeBricksCanvas(drawImages);
+  const els = makeBricksEls(canvas);
   const fakeBitmaps = [];
   let rafCb = null;
   const sandbox = {
@@ -330,8 +334,7 @@ await checkAsync("bricks runtime: a failing decoder degrades to the procedural f
   const gameSource = bricksHtml.match(/<script>([\s\S]*?)<\/script>/)[1];
   const drawImages = [];
   const canvas = makeBricksCanvas(drawImages);
-  const els = { game: canvas };
-  for (const id of ["screen-start", "lives", "hud-score"]) els[id] = makeBricksEl(id);
+  const els = makeBricksEls(canvas);
   let rafCb = null;
   const sandbox = {
     localStorage: { getItem: () => null, setItem: () => {} },
