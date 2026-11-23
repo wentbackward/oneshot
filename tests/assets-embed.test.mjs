@@ -199,8 +199,12 @@ check("bricks.html: --check exits 0 on the committed tree and a one-byte asset m
 // to split the measurement from the bytes actually embedded.
 // ================================================================
 check("assetPayloadJson: the rawBytes budget and the serialized payload come from ONE read per file (a concurrently mutated tree cannot split them)", () => {
-  const tmp = mkdtempSync(path.join(os.tmpdir(), "assets-137-snapshot-"));
-  try {
+  // The reader below emulates a tree mutated right after the first
+  // read of each file: a second, later read of the same file returns
+  // different bytes. The contract under test is WITHIN a single call:
+  // whatever bytes a call measures are the bytes it embeds.
+  const fixture = (tag) => {
+    const tmp = mkdtempSync(path.join(os.tmpdir(), tag));
     const dir = path.join(tmp, "assets", "bricks");
     mkdirSync(dir, { recursive: true });
     const manifest = {
@@ -214,25 +218,46 @@ check("assetPayloadJson: the rawBytes budget and the serialized payload come fro
     };
     writeFileSync(path.join(dir, "manifest.json"), JSON.stringify(manifest));
     writeFileSync(path.join(dir, "solo.png"), Buffer.alloc(8, 0)); // reader below supersedes the on-disk bytes
-    const firstRead = Buffer.from([1, 2, 3]); // what the tree "was"
-    const laterRead = Buffer.from([9, 9, 9, 9]); // what a second, later read would see
-    const reads = new Map();
-    // Emulates a tree mutated right after the first read of each file.
-    const reader = (p) => {
-      const n = (reads.get(p) ?? 0) + 1;
-      reads.set(p, n);
-      return n === 1 ? firstRead : laterRead;
-    };
-    const { rawBytes } = loadGameAssets("bricks", tmp, reader);
-    assert(rawBytes === firstRead.length,
-      `rawBytes must come from the same snapshot as the payload, got ${rawBytes} for a ${firstRead.length}-byte first read`);
-    const payload = JSON.parse(assetPayloadJson("bricks", tmp, reader));
-    assert(Buffer.from(payload[0].d, "base64").equals(firstRead),
-      "the embedded base64 must be the bytes that were measured and validated — not a second, later read");
-    assert(reads.get(path.join(dir, "solo.png")) === 1,
-      "each asset file must be read exactly once per embed");
-  } finally {
-    rmSync(tmp, { recursive: true, force: true });
+    return { tmp, png: path.join(dir, "solo.png") };
+  };
+  const firstRead = Buffer.from([1, 2, 3]); // what the first read of a file sees
+  const laterRead = Buffer.from([9, 9, 9, 9]); // what any later read of the same file sees
+  const makeReader = (reads) => (p) => {
+    const n = (reads.get(p) ?? 0) + 1;
+    reads.set(p, n);
+    return n === 1 ? firstRead : laterRead;
+  };
+
+  // (a) The budget: rawBytes must derive from the bytes the SAME call
+  // validated and carried forward on the entries.
+  {
+    const { tmp, png } = fixture("assets-137-budget-");
+    try {
+      const reads = new Map();
+      const { rawBytes, entries } = loadGameAssets("bricks", tmp, makeReader(reads));
+      assert(rawBytes === entries.reduce((s, e) => s + e.bytes.length, 0),
+        "rawBytes must be the sum of the very buffers carried on the entries");
+      assert(entries[0].bytes.equals(firstRead), "the entry must carry the bytes of the one read");
+      assert(reads.get(png) === 1, "loadGameAssets must read each asset file exactly once");
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  }
+
+  // (b) The payload: a single assetPayloadJson call must embed the
+  // bytes of its one read — never the bytes of a second, later read
+  // of the same file.
+  {
+    const { tmp, png } = fixture("assets-137-payload-");
+    try {
+      const reads = new Map();
+      const payload = JSON.parse(assetPayloadJson("bricks", tmp, makeReader(reads)));
+      assert(Buffer.from(payload[0].d, "base64").equals(firstRead),
+        "the embedded base64 must be the bytes of the call's single read — not a second, later read");
+      assert(reads.get(png) === 1, "assetPayloadJson must read each asset file exactly once");
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
   }
 });
 
@@ -264,7 +289,7 @@ check("embed-bricks: the initial embed REFUSES (exit 1, file byte-untouched) whe
     const r = run(tmp, [embedScript(tmp)]);
     assert(r.code === 1, `an unterminated directive line must be refused with exit 1, got ${r.code}:\n${r.output}`);
     assert(r.stderr.length > 0, "the refusal must carry a diagnostic on stderr");
-    assert(readFileSync(htmlPath) === mangled,
+    assert(readFileSync(htmlPath, "utf8") === mangled,
       "the script must leave the file it cannot safely edit byte-for-byte untouched");
   } finally {
     rmSync(tmp, { recursive: true, force: true });
