@@ -40,6 +40,7 @@ import {
   ROCK_MAX,
   ROCK_PICK_SLACK,
   ROCK_RADIUS,
+  SAVE_MAX_TETRA,
   SHOCKWAVE_MAX_RINGS,
   SHOCKWAVE_RING_MAX_RADIUS,
   SHOCKWAVE_RING_SPEED,
@@ -92,6 +93,14 @@ const SPAWN_CLUSTER_SQUASH = 0.6;
 /** Fresh tetras cruise inside this speed band, tank units/s. */
 const SPAWN_SPEED_MIN = 40;
 const SPAWN_SPEED_MAX = 80;
+
+/** Population-top-up reseed stride: a school grown by
+ *  setTetraCount() past its spawn size draws each cohort from
+ *  `seed + POP_RESEED_STRIDE · (cohort index)`, so the top-up is a
+ *  deterministic function of (seed, current size) — the same
+ *  policy that keeps kelp placement reproducible
+ *  (KELP_SEED_STRIDE). */
+const POP_RESEED_STRIDE = 1_000_003;
 
 /** Alignment is a unit-scale heading average (its named clamp is 1);
  *  applying it at cruise speed turns it into Reynolds' "desired
@@ -237,6 +246,16 @@ export class World {
   time = 0;
   /** Seconds carried over between frames from an incomplete step. */
   acc = 0;
+  /** Total fixed steps taken since construction (telemetry, PRD §4;
+   *  lets a pinned-clock test assert exact step consumption). */
+  steps = 0;
+  /** Lighting-phase shift in simulation seconds (PRD §4 save/load):
+   *  the renderer resolves the palette at `time + offset`, so a
+   *  loaded layout can hold Day/Dusk/Night at a fresh t = 0. The
+   *  offset is a whole phase-table quantity (see
+   *  src/fishtank-storage.ts), keeping every boundary on a step
+   *  boundary. */
+  lightingPhaseOffset = 0;
   /** Numeric PRNG seed this world was built from: a plain number,
    *  not a stateful stream — the mulberry32 stream is (re)created
    *  from it at construction, and same seed ⇒ identical tank. */
@@ -246,13 +265,20 @@ export class World {
    *  hashes on it); every entry is a Tetra. */
   agents: Tetra[] = [];
   /** Neighbor grid (typed Tetra so queries hand back moving bodies
-   *  straight into the steering forces), rebuilt every fixed step
-   *  (PRD §1). The predator's isolation checks reuse it. */
+   *  straight into the steering forces). Populated at construction,
+   *  on every population change and at the END of every fixed step
+   *  (PRD §1) — so after any step or setTetraCount it holds the
+   *  CURRENT positions and telemetry (HUD utilization, PRD §4)
+   *  never reads a stale grid. During a step, queries see the
+   *  PREVIOUS step's end positions (the tetras act one step behind
+   *  their own motion — the predator's isolation checks reuse the
+   *  same view). */
   readonly grid: SpatialGrid<Tetra>;
   /** The apex predator (PRD §2, ticket #124): owned by the world,
    *  stepped after the tetras each fixed step. Null when the world
-   *  was built with `predator: false` (solver unit tests). */
-  readonly predator: ApexPredator | null;
+   *  was built without a predator (solver unit tests); save/load
+   *  (PRD §4) may add or remove it via setPredatorPresent(). */
+  predator: ApexPredator | null;
   /** Placed rocks (PRD §3): the dynamic circular obstacles. Fed to
    *  obstacleAvoidance() every step and enforced by a hard contact
    *  projection, so a removed rock leaves NO residual steering.
@@ -296,6 +322,43 @@ export class World {
     this.grid = new SpatialGrid(TANK_WIDTH, TANK_HEIGHT, GRID_CELL_SIZE);
     this.spawn(options.population ?? TETRA_COUNT);
     this.predator = options.predator === false ? null : new ApexPredator();
+    // FIRST grid population (derived state): nothing may read an
+    // empty grid before the first step — telemetry (PRD §4) reads
+    // occupancy from the very first frame, and step N's queries use
+    // the grid as left by the previous step, so a fresh world must
+    // start with it populated. From then on the end-of-step rebuild
+    // (and setTetraCount) keep it current.
+    this.rebuildGrid();
+  }
+
+  // ---------- population & predator (PRD §4 save/load) ----------
+
+  /** Grow or trim the tetra pool to exactly n (clamped into
+   *  [0, SAVE_MAX_TETRA]). Trimming splices the TAIL of the fixed
+   *  order; growing appends one deterministic cohort drawn from
+   *  `seed + POP_RESEED_STRIDE · startIndex`, so the same top-up
+   *  on same-seed worlds yields the same school (pinned by
+   *  tests/fishtank-save.test.mjs). Non-finite or fractional n is
+   *  refused (touches nothing). */
+  setTetraCount(n: number): void {
+    if (!Number.isInteger(n) || n < 0) return;
+    const target = Math.min(n, SAVE_MAX_TETRA);
+    if (target < this.agents.length) {
+      this.agents.length = target;
+      // The grid must not outlive the pool: a trimmed tail left in
+      // the grid would keep steering as a ghost for a step, and a
+      // grown cohort must be a neighbour from the NEXT step's
+      // queries — the same views the step-end rebuild maintains.
+      this.rebuildGrid();
+    } else if (target > this.agents.length) {
+      this.spawnCohort(this.agents.length, target - this.agents.length);
+      this.rebuildGrid();
+    }
+  }
+
+  /** Add or remove the apex predator (PRD §4 save/load). */
+  setPredatorPresent(present: boolean): void {
+    this.predator = present ? new ApexPredator() : null;
   }
 
   // ---------- placement tools (PRD §3) ----------
@@ -430,13 +493,21 @@ export class World {
     return null;
   }
 
-  /** Spawn n tetras as one loose cluster at the tank centre: a
-   *  shared base heading (jittered ±SPAWN_HEADING_JITTER) so the
-   *  school is born roughly aligned, with seeded random offsets and
-   *  speeds inside the cluster (uniform disk: the square-root keeps
-   *  the density flat, not rim-heavy). */
+  /** Spawn count tetras as one loose cluster at the tank centre
+   *  from a FRESH seeded stream: a shared base heading (jittered
+   *  ±SPAWN_HEADING_JITTER) so the school is born roughly aligned,
+   *  with seeded random offsets and speeds inside the cluster
+   *  (uniform disk: the square-root keeps the density flat, not
+   *  rim-heavy). */
   private spawn(count: number): void {
-    const rng = mulberry32(this.seed);
+    this.spawnCohort(0, count);
+  }
+
+  /** Append count tetras to the existing school (population
+   *  top-up): same cluster shape as spawn(), drawn from a stream
+   *  reseeded on (seed, startIndex) — deterministic per world. */
+  private spawnCohort(startIndex: number, count: number): void {
+    const rng = mulberry32(this.seed + POP_RESEED_STRIDE * startIndex);
     const baseHeading = rng() * TAU;
     for (let i = 0; i < count; i++) {
       const heading = baseHeading + (rng() * 2 - 1) * SPAWN_HEADING_JITTER;
@@ -487,17 +558,21 @@ export class World {
     return steps;
   }
 
-  /** One deterministic step of EXACTLY dt seconds: rebuild the
-   *  neighbor grid, then for every tetra (fixed array order)
-   *  compose the steering forces (including obstacle avoidance
-   *  around the placed rocks), clamp the speed, integrate and
+  /** One deterministic step of EXACTLY dt seconds: for every tetra
+   *  (fixed array order) compose the steering forces (including
+   *  obstacle avoidance around the placed rocks) against the grid
+   *  as left by the previous step, clamp the speed, integrate and
    *  keep the body INSIDE the tank (elastic reflection, a hard
    *  clamp) and hard-resolve it against every rock's collision
    *  radius together with the tank walls (bounded fixed point —
    *  see the resolution comment in the body), and advance its
    *  articulated tail at tailFrequency(speed, torque). Finally,
    *  advance every kelp strand under the ambient current, letting
-   *  the tetras drag the strands they swim through.
+   *  the tetras drag the strands they swim through, the predator
+   *  acts, and the neighbor grid is REBUILT LAST from the post-step
+   *  positions (see the inline comment) so post-step consumers —
+   *  the HUD's utilization telemetry (PRD §4) — read current
+   *  occupancy.
    *
    *  WELL-FORMEDNESS (enforced here, same policy as advance()): a
    *  non-finite dt (NaN, ±∞) or a dt <= 0 is refused — step() is a
@@ -509,7 +584,7 @@ export class World {
   step(dt: number): void {
     if (!Number.isFinite(dt) || dt <= 0) return;
     this.time += dt;
-    this.rebuildGrid();
+    this.steps += 1;
     for (const t of this.agents) {
       this.neighbours.length = 0;
       for (const n of this.grid.query(t.x, t.y, SCHOOL_PERCEPTION_RADIUS)) {
@@ -749,9 +824,18 @@ export class World {
       strand.step(dt, this.ambientCurrentX, this.agents);
     }
     // The predator acts AFTER the tetras: prey positions are
-    // current, and a capture splice only affects the NEXT step's
-    // tetra pass and grid rebuild.
+    // current, and a capture splice affects the grid only through
+    // the rebuild below.
     this.predator?.step(dt, this);
+    // FINAL grid rebuild: the grid now holds the POST-STEP
+    // positions, so a consumer reading it after the step (the HUD's
+    // utilization telemetry, PRD §4) sees current occupancy. Step
+    // N+1's queries then use these same end-of-step-N positions —
+    // exactly the view the former start-of-step rebuild handed out,
+    // so the sim's trajectory is bit-identical (pinned by the
+    // determinism/steering suites and the grid-freshness check in
+    // tests/fishtank-determinism.test.mjs).
+    this.rebuildGrid();
   }
 
   /** Count the rocks whose collision ring (r + ROCK_COLLIDE_PAD) the
@@ -952,9 +1036,15 @@ export class World {
     return lines.join("\n");
   }
 
-  /** Clear + re-insert every tetra: the O(1)-average neighbor
-   *  lookup the steering forces (PRD §2) consume each step. */
-  private rebuildGrid(): void {
+  /** Clear + re-insert every agent into the grid: the derived-state
+   *  refresh behind the O(1)-average neighbour lookups (PRD §2).
+   *  Maintained AUTOMATICALLY after construction, every
+   *  setTetraCount() and the end of every step — the grid always
+   *  holds current positions afterwards. Call it after poking the
+   *  agent pool or agent fields from OUTSIDE the world (test
+   *  scenarios) so the next step's queries see the poked
+   *  configuration. */
+  rebuildGrid(): void {
     this.grid.clear();
     for (const t of this.agents) this.grid.insert(t);
   }

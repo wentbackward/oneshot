@@ -3700,3 +3700,123 @@ arcade physics).
   after the predator line, so the fingerprint stays honest for
   worlds carrying food; a foodless world prints exactly what it
   always did (all pre-existing suites unaffected).
+## 2026-11-22 — Ticket #126: HUD telemetry, speed controls and save/load
+
+- **The HUD's species table lists the species the World currently
+  owns — tetras and the predator — not a hardcoded `ANGEL 0` row.**
+  The ticket's AC names "tetra/angel/predator", but the angelfish
+  species is ticket #123's scope (still open; no angel pool exists
+  in the World yet). `src/ui/hud.ts` keeps a one-row-per-species
+  registry (`SPECIES_ROWS`, id + live-count closure), so #123 adds
+  its row in one line without touching the HUD machinery.
+  Alternatives: ship a permanently-zero ANGEL row (misleading dead
+  UI, rejected) or implement the angelfish here (scope theft,
+  rejected).
+- **Lighting mode persists as the HOLDING phase name and is restored
+  via a new `World.lightingPhaseOffset` (whole phase-table starts,
+  derived once from the render layer's `LIGHT_PHASES`), which the
+  renderer adds to `world.time` when resolving the palette.** Save
+  captures the phase in effect at save time; a fresh world loading
+  it holds that same mode at t = 0, and the cycle resumes from
+  there. Alternatives: store the raw cycle time (couples the
+  payload to the clock, breaks if phase durations are tuned), or a
+  user-selectable mode picker (the PRD defines a CYCLE, not a
+  switch — out of scope).
+- **The payload stores kelp as ANCHORS, not verlet states, and the
+  tetra population as a COUNT.** The layout is user-placed state;
+  animals and strands are live processes a fresh world regrows
+  deterministically (seeded cohorts via `POP_RESEED_STRIDE`, seeded
+  strands). Pinning a million strand points would be the wrong
+  granularity for "tank layout". `setTetraCount` grows the school in
+  deterministic cohorts keyed on (seed, startIndex) so the same save
+  on same-seed worlds replays byte-identically (pinned by
+  tests/fishtank-save.test.mjs).
+- **Auto-save is triggered by successful toolbar placements/removals
+  (Toolbar.onChanged); there is no explicit Save/Load button.** The
+  PRD says the LAYOUT is persisted — it is restored automatically at
+  boot, so a manual save button would only ever fight the automatic
+  one. Alternatives: a periodic timer (writes churn, rejected) or
+  save-on-pagehide (invisible to the vm suites and to served static
+  hosting, rejected).
+- **Speed control multiplies the ALREADY-CLAMPED frame delta
+  (`advance(clampDelta(elapsed) * mult)`), never the fixed step.**
+  `FIXED_DT` stays exact; a 2x frame feeds exactly 2× the wall time.
+  Pause feeds 0 but the loop keeps updating its timestamp, so a
+  resume takes exactly one step — no catch-up burst. A `World.steps`
+  counter (also HUD/telemetry data) lets the pinned-clock test assert
+  exact step consumption, since a 1/60 s frame gap cannot be
+  represented exactly in millisecond rAF timestamps (per-frame budgets
+  may therefore wobble by at most one carried step — documented in
+  tests/fishtank-speed.test.mjs).
+- **Rejected saves fall back to the WHOLE default tank — never a
+  partial layout** (any one bad field rejects the payload wholesale),
+  mirroring the campaign-2 throwing-storage precedent; a throwing or
+  absent localStorage degrades the same way (save/load never
+  propagate). A hostile tetra count is capped at `SAVE_MAX_TETRA`
+  (2000) so a corrupted payload cannot ask for a million fish.
+
+## 2026-11-22 — Ticket #126 review fold: grid rebuilt at step END; public `World.rebuildGrid()` as the external-poke sync
+- **The neighbor grid is rebuilt at the END of `World.step()` (was
+  the start), plus on construction and on every `setTetraCount()`.**
+  Step N's queries still see end-of-step-N−1 positions — the exact
+  view the former start-of-step rebuild handed out — so trajectories
+  are bit-identical (the determinism/steering/rocks/predator suites
+  plus the new grid-freshness check in
+  tests/fishtank-determinism.test.mjs are the proof). Post-step
+  consumers (the HUD's utilization readout) now see CURRENT
+  occupancy instead of a one-step-stale grid. Alternatives: a second
+  (telemetry-only) grid (double memory, double rebuild cost per
+  step) or leaving the staleness (the HUD would keep lying by ~17 ms
+  and the hud suite's independent recompute would hold only by
+  seed/frame coincidence — rejected).
+- **Externally poked agent pools resync via the now-public
+  `World.rebuildGrid()` (test scenarios pushing/splicing
+  `world.agents` directly must call it).** Raw array mutation cannot
+  be observed by the World, and the app itself only ever changes the
+  pool through `setTetraCount()`/captures (both already maintained
+  internally); the only external pokers are the predator test
+  scenarios, which now call the sync explicitly where the old
+  start-of-step rebuild had hidden it. Alternatives: an unconditional
+  second rebuild at step start (2× per-step cost for a test-only
+  path — rejected) or rewriting those scenarios through
+  `setTetraCount()` alone (cannot express the arbitrary per-fish
+  poses the scenarios need — rejected).
+
+## 2026-11-23 — Rebase of #126 onto #121 (drop-food / tap-glass): two deliberate settlements
+
+- **The combined step order is: guard → tetra pass (incl. pellet
+  seeking) → pellet integration/culling → shockwave ring expansion/
+  retirement → kelp → predator → FINAL `rebuildGrid()`.** #126's
+  review-fold moved the grid rebuild from the START of `step()` to
+  its END so the HUD's utilization telemetry reads CURRENT
+  occupancy (see the #126 section above). The pellets and rings
+  integrate BETWEEN the tetra pass and the kelp (their #121 order)
+  and are NOT grid occupants — the grid indexes tetras only — so the
+  end-of-step rebuild sees exactly the post-step fish positions the
+  per-step grid-freshness test in
+  tests/fishtank-determinism.test.mjs ("the grid reflects live
+  positions at the end of EVERY step") pins, and the #121
+  byte-identical-trajectory pin ("a pellet outside the sense radius
+  alters the course not at all") keeps holding: moving the rebuild
+  to the end never changes WHICH positions step N queries (end of
+  step N-1), so both suites are the joint proof of the settlement.
+  Alternatives rejected: rebuilding the grid a SECOND time after the
+  pellet/ring updates (they insert nothing, so a pure allocation
+  churn with no semantic gain) or making pellets grid occupants
+  (already rejected in #121's section — it would muddy the grid's
+  species contract).
+- **Save/load treats pellets and shockwave rings as TRANSIENT: the
+  layout schema has no field for them and a save made while they are
+  live round-trips to a clean world.** `captureLayout` snapshots
+  rocks, kelp anchors, species counts and the holding lighting mode
+  only; the validator never sees pellet/ring data, so their absence
+  cannot be (and is not) a rejection trigger — the #126 review's
+  "one bad field rejects the WHOLE payload" policy applies to the
+  layout fields it does define. A restored world therefore never
+  resurrects a mid-sink flake or a half-expanded ring. Alternative
+  rejected: persisting live pellet/ring state (they are live
+  processes, not user-placed layout — the same anchors-not-verlet
+  reasoning the #126 section records for kelp strands). Guarded by
+  "a save made while pellets and shockwave rings are live round-
+  trips WITHOUT them (transient by design)" in
+  tests/fishtank-save.test.mjs.

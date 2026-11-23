@@ -115,10 +115,11 @@ export class ApexPredator {
 
   /** Advance the predator by exactly dt seconds against the world.
    *  Called by World.step AFTER the tetras have moved, so prey
-   *  positions are current (the neighbor grid is rebuilt at the
-   *  start of each step — the same one-step-stale view the tetras'
-   *  own steering uses). May mutate world.agents: a capture splices
-   *  the victim out. */
+   *  positions are current (the neighbor grid holds the previous
+   *  step's end positions — the same one-step-behind view the
+   *  tetras' own steering queries use this step). May mutate
+   *  world.agents: a capture splices the victim out, and the
+   *  step's final grid rebuild folds the splice in. */
   step(dt: number, world: World): void {
     this.hunger = Math.min(1, this.hunger + PREDATOR_HUNGER_RATE * dt);
 

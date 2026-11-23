@@ -1,8 +1,10 @@
 // ================================================================
 // Uniform spatial hash grid (PRD §1): O(1) average-case neighbor
 // queries so the simulation sustains 60 fps with hundreds of
-// entities. The World rebuilds it (clear + re-insert) each fixed
-// step; the grid never owns entity lifetime.
+// entities. The World rebuilds it (clear + re-insert) at
+// construction, on every population change and at the END of every
+// fixed step, so consumers always see current positions; the grid
+// never owns entity lifetime.
 //
 // Query contract: query(x, y, radius) returns every item with
 // Euclidean distance <= radius (a CLOSED ball) — radius 0 matches
@@ -48,6 +50,23 @@ export class SpatialGrid<T extends Positioned> {
     // They are compile-time advice only — there is no runtime null
     // handling anywhere in this class.
     this.cells = Array.from({ length: this.cols * this.rows }, () => []);
+  }
+
+  /** Total number of cells (cols × rows): the denominator of the
+   *  HUD's grid-utilization figure (PRD §4). */
+  get totalCells(): number {
+    return this.cols * this.rows;
+  }
+
+  /** How many cells currently hold at least one item (PRD §4
+   *  telemetry). One scan of the (small) cell array — 25 × 16 for
+   *  the default tank — with no allocation. */
+  countOccupiedCells(): number {
+    let n = 0;
+    for (const cell of this.cells) {
+      if (cell.length > 0) n += 1;
+    }
+    return n;
   }
 
   /** Drop every item (cell arrays themselves are reused: no

@@ -57,6 +57,24 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
 #toolbar button { color: #5a6b7d; background: rgba(5, 7, 15, .72); border: 1px solid #1c2430; border-radius: 6px; padding: 5px 9px; cursor: pointer; }
 #toolbar button:hover { color: #e8f2fb; border-color: #5a6b7d; }
 #toolbar button.selected { color: #7fe3ff; border-color: #3d8bb0; }
+
+/* Sim speed controls (PRD §4): one row under the toolbar. Same
+   button language; exactly one is .selected at a time (the 1x
+   default at boot). */
+#speed-controls { position: fixed; top: 44px; left: 10px; z-index: 10; display: flex; gap: 6px; font: 10px/1 monospace; letter-spacing: .15em; }
+#speed-controls button { color: #5a6b7d; background: rgba(5, 7, 15, .72); border: 1px solid #1c2430; border-radius: 6px; padding: 5px 9px; cursor: pointer; }
+#speed-controls button:hover { color: #e8f2fb; border-color: #5a6b7d; }
+#speed-controls button.selected { color: #7fe3ff; border-color: #3d8bb0; }
+
+/* Telemetry HUD (PRD §4): top-right, one toggle, panel below the
+   button. The .collapsed class (driven by src/ui/hud.ts) hides
+   the panel only — the toggle itself stays reachable. */
+#hud { position: fixed; top: 10px; right: 10px; z-index: 10; font: 10px/1.9 monospace; letter-spacing: .15em; text-align: right; }
+#hud-toggle { display: block; margin-left: auto; color: #5a6b7d; background: rgba(5, 7, 15, .72); border: 1px solid #1c2430; border-radius: 6px; padding: 5px 9px; cursor: pointer; }
+#hud-toggle:hover { color: #e8f2fb; border-color: #5a6b7d; }
+#hud-panel { margin-top: 6px; color: #9fb4c8; background: rgba(5, 7, 15, .72); border: 1px solid #1c2430; border-radius: 6px; padding: 6px 10px; }
+#hud-panel b { color: #e8f2fb; font-weight: normal; }
+#hud.collapsed #hud-panel { display: none; }
 `.trim();
 
 function renderPage(js) {
@@ -84,6 +102,24 @@ ${STYLE}
 <button id="tool-place-kelp" type="button">PLACE KELP</button>
 <button id="tool-remove" type="button">REMOVE</button>
 </nav>
+<!-- Sim speed controls: static markup (PRD §4 Pause/1x/2x/4x),
+     wired at boot by src/ui/speed.ts (null-guarded headless). -->
+<nav id="speed-controls" aria-label="simulation speed">
+<button id="speed-pause" type="button">PAUSE</button>
+<button id="speed-1x" class="selected" type="button">1&times;</button>
+<button id="speed-2x" type="button">2&times;</button>
+<button id="speed-4x" type="button">4&times;</button>
+</nav>
+<!-- Telemetry HUD: static markup (PRD §4), one toggle,
+     populated at boot and per frame by src/ui/hud.ts. -->
+<section id="hud" aria-label="telemetry">
+<button id="hud-toggle" type="button" aria-expanded="true">TELEMETRY</button>
+<div id="hud-panel">
+<span>FPS <b id="hud-fps">&ndash;</b></span><br>
+<span>TETRA <b id="hud-count-tetra">&ndash;</b></span> <span>PRED <b id="hud-count-predator">&ndash;</b></span><br>
+<span>GRID CELLS <b id="hud-grid">&ndash;/&ndash;</b></span>
+</div>
+</section>
 <!-- One-shot hub back link: static markup only, no JS (the vm suites
      boot this file — anything queried at boot needs a stub, so keep
      it inert, matching the other cabinets). -->
