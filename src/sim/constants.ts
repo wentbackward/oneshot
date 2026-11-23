@@ -100,8 +100,9 @@ export const PELLET_RADIUS = 5;
 export const PELLET_GRAVITY = 120;
 /** Linear drag coefficient (1/s) opposing the pellet's velocity in
  *  BOTH axes: the water's resistance. The integrator relaxes vy to
- *  the terminal PELLET_GRAVITY / PELLET_DRAG and vx to the ambient
- *  current over the same time scale. */
+ *  the terminal PELLET_GRAVITY / PELLET_DRAG and vx to the current's
+ *  equilibrium flow `currentX / PELLET_DRAG` (units/s) over the
+ *  same time scale. */
 export const PELLET_DRAG = 2;
 /** Terminal sink speed, tank units/s — the drag balance of gravity
  *  (PELLET_GRAVITY / PELLET_DRAG). The integrator approaches it from
@@ -128,8 +129,8 @@ export const SHOCKWAVE_RING_SPEED = 400;
  *  A ring lives SHOCKWAVE_RING_MAX_RADIUS / SHOCKWAVE_RING_SPEED =
  *  0.75 s of sim time. */
 export const SHOCKWAVE_RING_MAX_RADIUS = 300;
-/** Live rings the world keeps at most: rapid-fire taps retire the
- *  youngest instead of accumulating rings. */
+/** Live rings the world keeps at most: new rings are REFUSED at
+ *  the cap (the startle still fires — the scare is never denied). */
 export const SHOCKWAVE_MAX_RINGS = 16;
 
 // ---------- placement tools: rocks & kelp (PRD §3) ----------

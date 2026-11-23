@@ -153,10 +153,14 @@ export interface WorldOptions {
   seed?: number;
   /** How many tetras to spawn (defaults to TETRA_COUNT). */
   population?: number;
-  /** Horizontal ambient flow in tank units/s² (defaults to
-   *  AMBIENT_CURRENT_X; 0 = still water for the kelp settle tests).
-   *  Advects the kelp strands and the dropped food pellets — the
-   *  fish are not advected. */
+  /** Horizontal ambient flow, ONE dial with two consumer roles
+   *  (defaults to AMBIENT_CURRENT_X; 0 = still water for the kelp
+   *  settle tests). The kelp strands verlet it as a UNIFORM
+   *  ACCELERATION (tank units/s², entering their position as
+   *  current · dt²); the pellet integrator consumes the same value
+   *  as a FLOW VELOCITY (units/s), relaxing the pellet's vx to the
+   *  equilibrium `ambientCurrentX / PELLET_DRAG`. The fish are not
+   *  advected. */
   ambientCurrentX?: number;
   /** Whether the world owns the apex predator (defaults to true;
    *  the rock/kelp solver unit tests opt out so their lone tetra
@@ -265,8 +269,10 @@ export class World {
    *  SHOCKWAVE_MAX_RINGS by tapGlass(), retired by step() once a
    *  ring reaches SHOCKWAVE_RING_MAX_RADIUS. */
   readonly shockwaves: Shockwave[] = [];
-  /** Horizontal ambient flow (tank units/s²) driving the kelp
-   *  strands and advecting the dropped food pellets. */
+  /** Horizontal ambient flow. Dual role, dual units — kelp: a
+   *  uniform acceleration (tank units/s², see WorldOptions);
+   *  pellets: a flow velocity (units/s) whose drag equilibrium the
+   *  pellet's vx relaxes to (`ambientCurrentX / PELLET_DRAG`). */
   readonly ambientCurrentX: number;
   /** Reused neighbour scratch per step (allocation-free hot path):
    *  steering forces only READ the list, so one shared buffer is

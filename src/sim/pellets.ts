@@ -33,12 +33,13 @@ export interface Shockwave {
 
 /** Advance ONE pellet exactly dt seconds: gravity pulls it down,
  *  linear drag opposes the velocity in both axes, and the ambient
- *  horizontal current pulls vx toward the water's own flow
- *  (units/s — the water drifts, the pellet relaxes to it). The
- *  semi-implicit Euler form (update the velocity first) is stable
- *  for dt up to well past FIXED_DT and keeps the sink speed
- *  asymptotic to PELLET_TERMINAL_V from below. Mutates `p` in
- *  place; returns nothing. */
+ *  horizontal current relaxes vx toward the EQUILIBRIUM
+ *  `currentX / PELLET_DRAG` — e.g. the world's default
+ *  currentX = 40 settles the pellet at 20 u/s, half the dial itself
+ *  (units/s). The semi-implicit Euler form (update the velocity
+ *  first) is stable for dt up to well past FIXED_DT and keeps the
+ *  sink speed asymptotic to PELLET_TERMINAL_V from below. Mutates
+ *  `p` in place; returns nothing. */
 export function stepPellet(p: Pellet, dt: number, currentX: number): void {
   p.vy += (PELLET_GRAVITY - PELLET_DRAG * p.vy) * dt;
   p.vx += (currentX - PELLET_DRAG * p.vx) * dt;

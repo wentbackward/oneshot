@@ -676,8 +676,10 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
      *  SHOCKWAVE_MAX_RINGS by tapGlass(), retired by step() once a
      *  ring reaches SHOCKWAVE_RING_MAX_RADIUS. */
     shockwaves = [];
-    /** Horizontal ambient flow (tank units/s²) driving the kelp
-     *  strands and advecting the dropped food pellets. */
+    /** Horizontal ambient flow. Dual role, dual units — kelp: a
+     *  uniform acceleration (tank units/s², see WorldOptions);
+     *  pellets: a flow velocity (units/s) whose drag equilibrium the
+     *  pellet's vx relaxes to (`ambientCurrentX / PELLET_DRAG`). */
     ambientCurrentX;
     /** Reused neighbour scratch per step (allocation-free hot path):
      *  steering forces only READ the list, so one shared buffer is

@@ -3663,11 +3663,15 @@ arcade physics).
   the tools should act WHERE the user points).
 - **Pellet horizontal current REUSES the world's `ambientCurrentX`**
   (default AMBIENT_CURRENT_X = 40 u/s): the pellet's vx relaxes to
-  the water's own flow over the same drag time scale as the sink
-  speed. A still-water world (`ambientCurrentX: 0`, already a
-  WorldOption for the kelp settle tests) gives a perfectly vertical
-  drift — no new option needed. Alternative rejected: a dedicated
-  PELLET_CURRENT_X constant (duplicate dial for the same water).
+  the equilibrium `AMBIENT_CURRENT_X / PELLET_DRAG` (20 u/s at the
+  default drag of 2) over the same time scale as the sink speed. A
+  still-water world (`ambientCurrentX: 0`, already a WorldOption for
+  the kelp settle tests) gives a perfectly vertical drift — no new
+  option needed. Alternative rejected: a dedicated PELLET_CURRENT_X
+  constant (duplicate dial for the same water). Note this dial is
+  consumed with TWO unit meanings: kelp verlets it as an
+  acceleration (u/s²), the pellet integrator as a flow velocity
+  (u/s) — made explicit in the WorldOptions/field docs.
 - **Uneaten pellets dissolve on the substrate** (cull once
   `y + PELLET_RADIUS >= TANK_HEIGHT`): the tank never accumulates
   flake litter, and the PELLET_MAX cap then bounds LIVE pellets, not
@@ -3687,9 +3691,10 @@ arcade physics).
   dead pellets are compacted in place after the loop (the field
   stays `readonly`, array identity stable, like rocks/kelp).
 - **Shockwave rings are a capped array** (SHOCKWAVE_MAX_RINGS = 16,
-  each ring lives MAX_RADIUS/SPEED = 0.75 s): rapid taps retire new
-  rings at the cap while the startle still fires — the scare is the
-  tool, the ring is cosmetics. Fade alpha is a pure function of
+  each ring lives MAX_RADIUS/SPEED = 0.75 s): new rings are REFUSED
+  at the cap (a ring is never displaced, none retires early) while
+  the startle of a refused tap still fires — the scare is the tool,
+  the ring is cosmetics. Fade alpha is a pure function of
   radius (no separate age channel to desynchronize from the sim).
 - **`serializeState()` gains `F:` (pellet) and `S:` (ring) lines**
   after the predator line, so the fingerprint stays honest for
