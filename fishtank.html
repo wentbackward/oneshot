@@ -67,7 +67,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
 <button id="hud-toggle" type="button" aria-expanded="true">TELEMETRY</button>
 <div id="hud-panel">
 <span>FPS <b id="hud-fps">&ndash;</b></span><br>
-<span>TETRA <b id="hud-count-tetra">&ndash;</b></span> <span>PRED <b id="hud-count-predator">&ndash;</b></span><br>
+<span>TETRA <b id="hud-count-tetra">&ndash;</b></span> <span>ANGEL <b id="hud-count-angel">&ndash;</b></span> <span>PRED <b id="hud-count-predator">&ndash;</b></span><br>
 <span>GRID CELLS <b id="hud-grid">&ndash;/&ndash;</b></span>
 </div>
 </section>
@@ -102,6 +102,12 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
   var PREDATOR_CAPTURE_RADIUS = 28;
   var PREDATOR_REST_STEPS = 240;
   var PREDATOR_WAYPOINT_TOLERANCE = 48;
+  var ANGEL_COUNT = 6;
+  var ANGEL_CRUISE_SPEED = 60;
+  var ANGEL_BOB_AMP = 14;
+  var ANGEL_BOB_OMEGA = 1.5;
+  var ANGEL_FORAGE_RADIUS = 160;
+  var ANGEL_SEED_STRIDE = 2000003;
   var PELLET_MAX = 64;
   var PELLET_RADIUS = 5;
   var PELLET_GRAVITY = 120;
@@ -264,12 +270,14 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
     }
   };
 
-  // src/sim/pellets.ts
-  function stepPellet(p, dt, currentX) {
-    p.vy += (PELLET_GRAVITY - PELLET_DRAG * p.vy) * dt;
-    p.vx += (currentX - PELLET_DRAG * p.vx) * dt;
-    p.x += p.vx * dt;
-    p.y += p.vy * dt;
+  // src/sim/angles.ts
+  var TAU = 2 * Math.PI;
+  var TORQUE_SMOOTHING = 0.25;
+  function wrapPi(angle) {
+    let a = angle % TAU;
+    if (a > Math.PI) a -= TAU;
+    if (a < -Math.PI) a += TAU;
+    return a;
   }
 
   // src/sim/tail.ts
@@ -277,6 +285,237 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
   var TAIL_FREQ_TORQUE_GAIN = 0.25;
   function tailFrequency(speed, torque) {
     return TAIL_FREQ_SPEED_GAIN * Math.abs(speed) + TAIL_FREQ_TORQUE_GAIN * Math.abs(torque);
+  }
+
+  // src/sim/angels.ts
+  var ANGEL_MAX_STEER = 120;
+  var ANGEL_SEEK_GAIN = 4;
+  var ANGEL_ARRIVE_RADIUS = 40;
+  var GRAZE_ORBIT_RADIUS = 90;
+  var GRAZE_ORBIT_SPEED_FRACTION = 0.5;
+  var GRAZE_RADIAL_GAIN = 1.5;
+  var WANDER_RATE = 0.9;
+  var WANDER_FREQ_MIN = 0.25;
+  var WANDER_FREQ_SPREAD = 0.75;
+  var SPAWN_X_MARGIN = 80;
+  var SPAWN_BASEY_LOW = 0.45;
+  var SPAWN_BASEY_HIGH = 0.8;
+  var SPAWN_SPEED_MIN_FRACTION = 0.75;
+  var Angel = class {
+    x;
+    y;
+    vx;
+    vy;
+    /** Accumulated tail phase in radians (advances at
+     *  tailFrequency(speed, torque), the tetra renderer's input). */
+    phase;
+    /** Smoothed turning torque, rad/s — the tail formula's input. */
+    torque;
+    /** Heading (radians) at the end of the previous step. */
+    heading;
+    /** Base altitude: the bob oscillates AROUND this, and ALL
+     *  steering physics runs on (x, baseY) — y itself is rendered
+     *  as baseY + ANGEL_BOB_AMP · sin(bobPhase). */
+    baseY;
+    /** Base-plane velocities (x and baseY); the rendered velocity is
+     *  (baseVx, baseVy + bob velocity). */
+    baseVx;
+    baseVy;
+    /** Bob oscillator phase in radians (advances by
+     *  ANGEL_BOB_OMEGA · dt each step). */
+    bobPhase;
+    /** This angel's cruise speed, tank units/s — always ≤
+     *  ANGEL_CRUISE_SPEED (fixed at spawn). */
+    cruiseSpeed;
+    /** Wander oscillator: angular rate (rad/s) and phase offset. */
+    wanderFreq;
+    wanderPhase;
+    /** Unbounded cruise heading (radians): the wander integrates
+     *  into it; only its cosine is used (cruise is horizontal). */
+    cruiseHeading;
+    /** Orbit direction (±1) of the graze ring, fixed at spawn so the
+     *  circle keeps one handedness. */
+    orbitDir;
+    constructor(x, baseY, cruiseHeading, cruiseSpeed, bobPhase, wanderFreq, wanderPhase, orbitDir) {
+      this.x = x;
+      this.baseY = baseY;
+      this.cruiseHeading = cruiseHeading;
+      this.cruiseSpeed = cruiseSpeed;
+      this.bobPhase = bobPhase;
+      this.wanderFreq = wanderFreq;
+      this.wanderPhase = wanderPhase;
+      this.orbitDir = orbitDir;
+      this.baseVx = Math.cos(cruiseHeading) * cruiseSpeed;
+      this.baseVy = 0;
+      this.y = baseY + ANGEL_BOB_AMP * Math.sin(bobPhase);
+      this.vx = this.baseVx;
+      this.vy = this.baseVy + ANGEL_BOB_AMP * ANGEL_BOB_OMEGA * Math.cos(bobPhase);
+      this.phase = 0;
+      this.torque = 0;
+      this.heading = Math.atan2(this.vy, this.vx);
+    }
+    /** Advance this angel by exactly dt seconds against the world.
+     *  Called by World.step AFTER the tetras (prey/food state is
+     *  current). May set a live pellet's per-step claim flag on an
+     *  in-contact eat — the same single-consume mechanism the tetra
+     *  pass uses (later consumers in the same fixed step see the
+     *  flag and pass). */
+    step(dt, world) {
+      this.bobPhase += ANGEL_BOB_OMEGA * dt;
+      const bobVy = ANGEL_BOB_AMP * ANGEL_BOB_OMEGA * Math.cos(this.bobPhase);
+      let pellet = null;
+      let pelletD = Infinity;
+      if (world.pellets.length > 0) {
+        for (const p of world.pellets) {
+          if (p.dead) continue;
+          const d = Math.hypot(p.x - this.x, p.y - this.y);
+          if (d <= PELLET_SENSE_RADIUS && d < pelletD) {
+            pelletD = d;
+            pellet = p;
+          }
+        }
+      }
+      let eating = false;
+      let dvx = 0;
+      let dvy = 0;
+      if (pellet !== null) {
+        if (pelletD <= PELLET_EAT_RADIUS) {
+          pellet.dead = true;
+          eating = true;
+        } else {
+          const dx = pellet.x - this.x;
+          const dy = pellet.y - this.baseY;
+          const d = Math.max(Math.hypot(dx, dy), 1e-9);
+          const arrive = Math.min(1, d / ANGEL_ARRIVE_RADIUS);
+          const speed2 = this.cruiseSpeed * (0.5 + 0.5 * arrive);
+          dvx = dx / d * speed2;
+          dvy = dy / d * speed2;
+        }
+      }
+      if (pellet === null) {
+        const kelp = world.kelp;
+        if (kelp.length > 0) {
+          let baseX = kelp[0].anchorX;
+          let baseD = Infinity;
+          for (const strand of kelp) {
+            const d2 = Math.hypot(strand.anchorX - this.x, TANK_HEIGHT - this.baseY);
+            if (d2 < baseD) {
+              baseD = d2;
+              baseX = strand.anchorX;
+            }
+          }
+          const dx = baseX - this.x;
+          const dy = TANK_HEIGHT - this.baseY;
+          const d = Math.max(Math.hypot(dx, dy), 1e-9);
+          if (d > ANGEL_FORAGE_RADIUS) {
+            dvx = dx / d * this.cruiseSpeed;
+            dvy = dy / d * this.cruiseSpeed;
+          } else {
+            const ux = (this.x - baseX) / d;
+            const uy = (this.baseY - TANK_HEIGHT) / d;
+            const pull = (GRAZE_ORBIT_RADIUS - d) * GRAZE_RADIAL_GAIN;
+            const orbitSpeed = this.cruiseSpeed * GRAZE_ORBIT_SPEED_FRACTION;
+            dvx = this.orbitDir * -uy * orbitSpeed + ux * pull;
+            dvy = this.orbitDir * ux * orbitSpeed + uy * pull;
+            const m = Math.hypot(dvx, dvy);
+            if (m > this.cruiseSpeed) {
+              dvx *= this.cruiseSpeed / m;
+              dvy *= this.cruiseSpeed / m;
+            }
+          }
+        } else {
+          this.cruiseHeading += WANDER_RATE * Math.sin(this.wanderFreq * world.time + this.wanderPhase) * dt;
+          dvx = Math.cos(this.cruiseHeading) * this.cruiseSpeed;
+          dvy = 0;
+        }
+      }
+      const gain = pellet !== null && !eating ? ANGEL_SEEK_GAIN : 1;
+      let ax = gain * (dvx - this.baseVx);
+      let ay = gain * (dvy - this.baseVy);
+      if (eating) {
+        ax = 0;
+        ay = 0;
+      } else {
+        const a = Math.hypot(ax, ay);
+        if (a > ANGEL_MAX_STEER) {
+          ax *= ANGEL_MAX_STEER / a;
+          ay *= ANGEL_MAX_STEER / a;
+        }
+      }
+      this.baseVx += ax * dt;
+      this.baseVy += ay * dt;
+      let vx = this.baseVx;
+      let vy = this.baseVy + bobVy;
+      const speed = Math.hypot(vx, vy);
+      if (speed > ANGEL_CRUISE_SPEED) {
+        const s = ANGEL_CRUISE_SPEED / speed;
+        vx *= s;
+        vy *= s;
+        this.baseVx = vx;
+        this.baseVy = vy - bobVy;
+      }
+      let x = this.x + this.baseVx * dt;
+      if (x < 0) {
+        x = -x;
+        this.baseVx = -this.baseVx;
+      } else if (x > TANK_WIDTH) {
+        x = 2 * TANK_WIDTH - x;
+        this.baseVx = -this.baseVx;
+      }
+      let baseY = this.baseY + this.baseVy * dt;
+      if (baseY < ANGEL_BOB_AMP) {
+        baseY = ANGEL_BOB_AMP;
+        if (this.baseVy < 0) this.baseVy = 0;
+      } else if (baseY > TANK_HEIGHT - ANGEL_BOB_AMP) {
+        baseY = TANK_HEIGHT - ANGEL_BOB_AMP;
+        if (this.baseVy > 0) this.baseVy = 0;
+      }
+      this.x = x;
+      this.baseY = baseY;
+      this.y = baseY + ANGEL_BOB_AMP * Math.sin(this.bobPhase);
+      this.vx = this.baseVx;
+      this.vy = this.baseVy + bobVy;
+      const finalSpeed = Math.hypot(this.vx, this.vy);
+      const heading = finalSpeed > 1e-6 ? Math.atan2(this.vy, this.vx) : this.heading;
+      const instantTorque = wrapPi(heading - this.heading) / dt;
+      this.torque += TORQUE_SMOOTHING * (instantTorque - this.torque);
+      this.heading = heading;
+      this.phase += TAU * tailFrequency(finalSpeed, this.torque) * dt;
+    }
+  };
+  function spawnAngels(worldSeed, count) {
+    if (!Number.isInteger(count) || count < 0) return [];
+    const rng = mulberry32(worldSeed + ANGEL_SEED_STRIDE);
+    const angels = [];
+    for (let i = 0; i < count; i++) {
+      const x = SPAWN_X_MARGIN + rng() * (TANK_WIDTH - 2 * SPAWN_X_MARGIN);
+      const baseY = TANK_HEIGHT * (SPAWN_BASEY_LOW + (SPAWN_BASEY_HIGH - SPAWN_BASEY_LOW) * rng());
+      const cruiseHeading = rng() * Math.PI;
+      const cruiseSpeed = ANGEL_CRUISE_SPEED * (SPAWN_SPEED_MIN_FRACTION + (1 - SPAWN_SPEED_MIN_FRACTION) * rng());
+      const bobPhase = rng() * TAU;
+      const wanderFreq = WANDER_FREQ_MIN + WANDER_FREQ_SPREAD * rng();
+      const wanderPhase = rng() * TAU;
+      const orbitDir = rng() < 0.5 ? -1 : 1;
+      angels.push(new Angel(
+        x,
+        baseY,
+        cruiseHeading,
+        cruiseSpeed,
+        bobPhase,
+        wanderFreq,
+        wanderPhase,
+        orbitDir
+      ));
+    }
+    return angels;
+  }
+
+  // src/sim/pellets.ts
+  function stepPellet(p, dt, currentX) {
+    p.vy += (PELLET_GRAVITY - PELLET_DRAG * p.vy) * dt;
+    p.vx += (currentX - PELLET_DRAG * p.vx) * dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
   }
 
   // src/sim/steering.ts
@@ -659,9 +898,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
   var SPAWN_SPEED_MAX = 80;
   var POP_RESEED_STRIDE = 1000003;
   var ALIGNMENT_CRUISE_SPEED = FISH_MAX_SPEED;
-  var TORQUE_SMOOTHING = 0.25;
   var SCHOOL_PERCEPTION_RADIUS = 180;
-  var TAU = 2 * Math.PI;
   function worstRingDepth(rocks, cx, cy) {
     let worst = -Infinity;
     for (const rock of rocks) {
@@ -714,7 +951,9 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
     seed;
     /** The tetra school, in fixed iteration order. Named `agents` to
      *  stay the stable per-world surface (the #119 determinism test
-     *  hashes on it); every entry is a Tetra. */
+     *  hashes on it); every entry is a Tetra. The angelfish live in
+     *  their OWN pool (world.angels) and are NOT in the grid — they
+     *  compose no inter-fish forces, so no tetra ever senses one. */
     agents = [];
     /** Neighbor grid (typed Tetra so queries hand back moving bodies
      *  straight into the steering forces). Populated at construction,
@@ -739,6 +978,12 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
     /** Placed kelp strands (PRD §3): verlet chains anchored at the
      *  substrate, capped at KELP_MAX by placeKelp(). */
     kelp = [];
+    /** Grazing angelfish (PRD §2's second behaviour, #123): slow
+     *  independent cruisers — their own pool, iterated in fixed
+     *  order AFTER the tetras each fixed step, NOT in the grid (no
+     *  inter-fish forces at all) and outside the predator's prey
+     *  scan. Spawned from `seed + ANGEL_SEED_STRIDE`. */
+    angels = [];
     /** Live (uneaten, unsettled) dropped pellets (PRD §3): capped at
      *  PELLET_MAX by dropFood(), stepped by the pure stepPellet()
      *  integrator, consumed by the nearest in-contact tetra. */
@@ -772,6 +1017,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       this.ambientCurrentX = options.ambientCurrentX ?? AMBIENT_CURRENT_X;
       this.grid = new SpatialGrid(TANK_WIDTH, TANK_HEIGHT, GRID_CELL_SIZE);
       this.spawn(options.population ?? TETRA_COUNT);
+      this.angels = spawnAngels(this.seed, options.angels ?? ANGEL_COUNT);
       this.predator = options.predator === false ? null : new ApexPredator();
       this.rebuildGrid();
     }
@@ -1140,6 +1386,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
         t.heading = heading;
         t.phase += TAU * tailFrequency(nx, t.torque) * dt;
       }
+      for (const a of this.angels) a.step(dt, this);
       if (this.pellets.length > 0) {
         for (const p of this.pellets) {
           if (p.dead) continue;
@@ -1329,7 +1576,8 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
     }
     /** Fixed-precision snapshot of the whole sim state: clock first,
      *  then one `x,y,vx,vy` line per tetra at 6 decimals, then one
-     *  `P:` line for the predator (state, pose, hunger, route
+     *  `A:` line per angelfish (same shape — #123), then one `P:` line
+     *  for the predator (state, pose, hunger, route
      *  progress, rest window, feed count — the line is absent when
      *  the world was built without a predator (unit-test worlds),
      *  then one `F:` line per live pellet (x, y, vx, vy) and one
@@ -1344,6 +1592,9 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       const lines = [this.time.toFixed(6)];
       for (const t of this.agents) {
         lines.push(`${t.x.toFixed(6)},${t.y.toFixed(6)},${t.vx.toFixed(6)},${t.vy.toFixed(6)}`);
+      }
+      for (const a of this.angels) {
+        lines.push(`A:${a.x.toFixed(6)},${a.y.toFixed(6)},${a.vx.toFixed(6)},${a.vy.toFixed(6)}`);
       }
       const p = this.predator;
       if (p !== null) {
@@ -1372,12 +1623,6 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       for (const t of this.agents) this.grid.insert(t);
     }
   };
-  function wrapPi(angle) {
-    let a = angle % TAU;
-    if (a > Math.PI) a -= TAU;
-    if (a < -Math.PI) a += TAU;
-    return a;
-  }
 
   // src/render/scenery.ts
   var TAU2 = 2 * Math.PI;
@@ -1452,23 +1697,24 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
   var TETRA_TAIL_WAVE_NUMBER = 0.9;
   var TETRA_STROKE_WIDTH = 4;
   var TETRA_HEAD_RADIUS = 3.5;
+  var ANGEL_HUE_OFFSET = 180;
   var TAU3 = 2 * Math.PI;
-  function tetraColour(cache, index) {
+  function tetraColour(cache, index, hueOffset = 0) {
     let c = cache[index];
     if (c === void 0) {
-      c = `hsl(${index * 47 % 360}, 82%, 66%)`;
+      c = `hsl(${(index * 47 + hueOffset) % 360}, 82%, 66%)`;
       cache[index] = c;
     }
     return c;
   }
-  function drawTetras(ctx, width, height, tetras, colours) {
+  function drawTetras(ctx, width, height, fish, colours, hueOffset = 0) {
     const sx = width / TANK_WIDTH;
     const sy = height / TANK_HEIGHT;
-    for (let i = 0; i < tetras.length; i++) {
-      drawTetra(ctx, tetras[i], i, sx, sy, colours);
+    for (let i = 0; i < fish.length; i++) {
+      drawTetra(ctx, fish[i], i, sx, sy, colours, hueOffset);
     }
   }
-  function drawTetra(ctx, t, index, sx, sy, colours) {
+  function drawTetra(ctx, t, index, sx, sy, colours, hueOffset) {
     const speed = Math.hypot(t.vx, t.vy);
     const hx = speed > 0 ? t.vx / speed : 1;
     const hy = speed > 0 ? t.vy / speed : 0;
@@ -1476,7 +1722,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
     const py = hx;
     const headX = t.x * sx;
     const headY = t.y * sy;
-    const colourForFish = tetraColour(colours, index);
+    const colourForFish = tetraColour(colours, index, hueOffset);
     const tailSpan = TETRA_SPINE_SEGMENTS - 1;
     ctx.beginPath();
     ctx.moveTo(headX, headY);
@@ -1799,8 +2045,11 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
   var Renderer = class {
     /** Per-instance tetra colour cache (src/render/tetras.ts builds
      *  the render layer with NO module-level state — the only mutable
-     *  render state a Renderer owns). */
+     *  render state a Renderer owns). The angels keep a SEPARATE
+     *  cache: they reuse the tetra spine renderer with a hue offset
+     *  (#123), so per-index colours must not bleed across species. */
     tetraColours = [];
+    angelColours = [];
     /** The pooled bubble emitter (src/render/bubbles.ts): built once
      *  per Renderer, recycled in place every frame. */
     bubbles = new BubbleColumn();
@@ -1822,6 +2071,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
       drawSurfaceRipples(ctx, width, world.time);
       drawKelp(ctx, width, height, world.kelp);
       drawRocks(ctx, width, height, world.rocks);
+      drawTetras(ctx, width, height, world.angels, this.angelColours, ANGEL_HUE_OFFSET);
       drawTetras(ctx, width, height, world.agents, this.tetraColours);
       drawPellets(ctx, width, height, world.pellets);
       this.bubbles.paint(ctx, width, height, world.time);
@@ -2004,6 +2254,7 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
   // src/ui/hud.ts
   var SPECIES_ROWS = [
     { id: "hud-count-tetra", count: (w) => w.agents.length },
+    { id: "hud-count-angel", count: (w) => w.angels.length },
     { id: "hud-count-predator", count: (w) => w.predator !== null ? 1 : 0 }
   ];
   var HUD_ROOT_ID = "hud";

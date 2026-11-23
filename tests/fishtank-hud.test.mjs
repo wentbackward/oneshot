@@ -100,7 +100,7 @@ function makeCtx() {
 
 const HUD_IDS = [
   "hud", "hud-toggle", "hud-panel",
-  "hud-fps", "hud-count-tetra", "hud-count-predator", "hud-grid",
+  "hud-fps", "hud-count-tetra", "hud-count-angel", "hud-count-predator", "hud-grid",
 ];
 const SPEED_IDS = ["speed-pause", "speed-1x", "speed-2x", "speed-4x"];
 const TOOL_IDS = ["tool-place-rock", "tool-place-kelp", "tool-remove"];
@@ -210,7 +210,7 @@ check("the page carries exactly one hud toggle (the single collapse control)", (
 });
 
 check("the telemetry panel markup carries the fps, per-species count and grid-utilization fields", () => {
-  for (const id of ["hud-panel", "hud-fps", "hud-count-tetra", "hud-count-predator", "hud-grid"]) {
+  for (const id of ["hud-panel", "hud-fps", "hud-count-tetra", "hud-count-angel", "hud-count-predator", "hud-grid"]) {
     const hits = html.match(new RegExp(`id="${id}"`, "g")) ?? [];
     assert(hits.length === 1, `the page must carry exactly one #${id}, found ${hits.length}`);
   }
@@ -227,9 +227,12 @@ check("the HUD's per-species counts equal the world's live pools", () => {
   g.frameAt(0);
   g.tick(90); // let the school swim (and the HUD refresh)
   const tetras = g.q("FISH_TANK_WORLD.agents.length");
+  const angels = g.q("FISH_TANK_WORLD.angels.length");
   const predator = g.q("FISH_TANK_WORLD.predator !== null ? 1 : 0");
   assert(g.els.get("hud-count-tetra").textContent === String(tetras),
     `the displayed tetra count must equal the live pool (${tetras}), got "${g.els.get("hud-count-tetra").textContent}"`);
+  assert(g.els.get("hud-count-angel").textContent === String(angels),
+    `the displayed angel count must equal the live pool (${angels}), got "${g.els.get("hud-count-angel").textContent}"`);
   assert(g.els.get("hud-count-predator").textContent === String(predator),
     `the displayed predator count must equal the live pool (${predator}), got "${g.els.get("hud-count-predator").textContent}"`);
 });

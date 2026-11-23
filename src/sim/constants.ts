@@ -1,4 +1,5 @@
-// =========================================================// Simulation constants — named tuning values for the fishtank
+// =========================================================
+// Simulation constants — named tuning values for the fishtank
 // fixed-timestep engine (PRD §1).
 // =========================================================
 /** Fixed physics timestep in seconds: the world always advances in
@@ -86,6 +87,43 @@ export const PREDATOR_REST_STEPS = 240;
  *  units — generous against the 340 u/s × 1/60 s ≈ 5.7-unit step,
  *  tight enough to make each stop individually attributable. */
 export const PREDATOR_WAYPOINT_TOLERANCE = 48;
+
+// ---------- grazing angelfish (PRD §2's second behaviour, #123) ----------
+
+/** Default angel population the app boots with: a handful of large
+ *  independents — deliberately far below the tetra school's
+ *  TETRA_COUNT. Pinned by tests/fishtank-angels.test.mjs. */
+export const ANGEL_COUNT = 6;
+
+/** Speed CEILING a live angel never exceeds, tank units/s (the
+ *  criterion of PRD §2's "slower" cruisers — sampled at every step
+ *  by tests/fishtank-angels.test.mjs). Well under TETRA_MAX_SPEED. */
+export const ANGEL_CRUISE_SPEED = 60;
+
+/** Vertical bob amplitude, tank units: an angel's rendered y is
+ *  `baseY + ANGEL_BOB_AMP · sin(bobPhase)` — a sinusoid that never
+ *  leaves the band baseY ± ANGEL_BOB_AMP (pinned over a 600-step
+ *  quiescent soak in tests/fishtank-angels.test.mjs). */
+export const ANGEL_BOB_AMP = 14;
+
+/** Vertical bob angular rate, rad/s: one full bob every ~4.2 s of
+ *  sim time, so the vertical velocity flips sign several times
+ *  inside the 600-step (10 s) soak the bob test watches. */
+export const ANGEL_BOB_OMEGA = 1.5;
+
+/** Foraging radius around a kelp strand's base (anchor on the
+ *  substrate), tank units: an angel with any kelp present stays
+ *  inside this radius of the nearest base at least 70 % of the
+ *  time over a seeded 600-step soak (pinned by
+ *  tests/fishtank-angels.test.mjs). Generous: the angel actually
+ *  hovers on a tighter graze ring (see src/sim/angels.ts). */
+export const ANGEL_FORAGE_RADIUS = 160;
+
+/** Per-world spawn reseed stride for the angel pool: all angels
+ *  draw from `worldSeed + ANGEL_SEED_STRIDE`, so same seed ⇒ the
+ *  same independents (same policy as the tetra cohorts and the
+ *  kelp strands). */
+export const ANGEL_SEED_STRIDE = 2_000_003;
 // ---------- dropped food & tap-glass (PRD §3, #121) ----------
 
 /** Tank capacity: at most this many live (uneaten, unsettled)

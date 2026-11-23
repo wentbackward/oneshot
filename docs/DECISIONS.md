@@ -3820,3 +3820,70 @@ arcade physics).
   "a save made while pellets and shockwave rings are live round-
   trips WITHOUT them (transient by design)" in
   tests/fishtank-save.test.mjs.
+
+## 2026-11-22 — Ticket #123: grazing angelfish with foraging and food seeking
+
+- **Angels live in their OWN pool (`world.angels`), not in the tetra
+  `agents` array and not in the spatial grid.** The independence
+  criterion (no cohesion between angels) is cheapest and most honest
+  as "no inter-fish term exists at all": one extra fixed-order loop
+  in `World.step` (after the tetras, before the pellet pass) and no
+  grid entry, so the grid's species contract, the grid-freshness
+  recompute in tests/fishtank-determinism.test.mjs and the tetra
+  steering all stay untouched. Consequences: angels are not startle
+  targets (the PRD scopes startle to the school), are not predator
+  prey (the scan reads `world.agents`), do not drag kelp and do not
+  steer around rocks — none of it is in the ticket. Alternatives
+  rejected: a `species` flag inside `agents` (would split every tetra
+  loop, pollute the grid view and complicate the save schema) and a
+  second spatial grid (no query ever needed it).
+- **The bob is kinematic, layered on top of base-plane steering:
+  `y = baseY + ANGEL_BOB_AMP·sin(bobPhase)`**, all steering
+  (cruise/forage/seek) runs on `(x, baseY)`, and the cruise ceiling
+  is enforced on the COMPOSED (rendered) speed. This makes the
+  "y oscillates within baseY ± ANGEL_BOB_AMP" criterion exact rather
+  statistical — a force-driven oscillator could not guarantee the
+  band. Cost: `baseVx/baseVy` alongside the rendered `vx/vy` (the
+  base-plane pair is re-derived after the composed clamp so the
+  state never drifts from what is drawn).
+- **Food seeking is a high-priority force with an arrive profile:
+  steer gain 4 (τ ≈ 0.25 s), desired speed ramps from full cruise to
+  half cruise inside a 40-unit ball around the pellet.** The first
+  cut (gain 1, constant full speed) failed the 120-step unit test for
+  a physical reason: a pellet at terminal sink speed (60 u/s — the
+  angel's own ceiling) evades a diagonal intercept forever (observed
+  pursuit standoff ≈ 42 u vs the 16-unit eat radius), and full-momentum
+  arrival overshoots the eat window (observed miss at 18.8 u). The
+  arrive ramp removes the overshoot; the tests pin the criterion in
+  still water with the angels below the flake, the same nose-to-nose
+  geometry the tetra pellet test uses. The gain-1 steering on cruise
+  and forage keeps the species' slow, unhurried read.
+- **Angels are excluded from the tank save schema and from
+  `serializeState()` tail fields.** The save schema (version 1)
+  persists species counts as tetra/predator; adding an angel count
+  would bump the schema version and re-validate hostile payloads —
+  a PRD §4 concern for a later ticket, so a saved tank regrows its
+  ANGEL_COUNT independents from the world seed like the kelp strands.
+  `serializeState()` DOES gain one `A:x,y,vx,vy` line per angel
+  (determinism hashes must cover the new trajectories; tail scalars
+  omitted on the same "pure function of history" rationale as the
+  tetras). tests/fishtank-determinism.test.mjs line-count and
+  shape checks were extended in the same change.
+- **Rendering: angels reuse `drawTetras` verbatim, with a per-species
+  colour cache and a 180° hue offset**, painted between the rocks and
+  the tetra school (big slow fish behind the star). The renderer
+  gains `hueOffset` as a defaulted trailing parameter — tetra call
+  sites are unchanged. The HUD gains its `ANGEL` count row (the
+  registration-point comment in src/ui/hud.ts had already reserved it
+  for this ticket).
+
+## 2026-11-23 — Ticket #123 re-review fold: angular policy single-sourced in `src/sim/angles.ts`
+- **`TAU`, `wrapPi()` and `TORQUE_SMOOTHING` moved from being
+  duplicated in `world.ts`/`angels.ts` into one new leaf module
+  `src/sim/angles.ts` (named for the policy's subject — angular
+  wrap + torque blend — alongside the `rng.ts`/`tail.ts` leaves;
+  `rotation.ts` and `heading.ts` rejected: torque smoothing is the
+  third member and neither word covers it). Behavior-preserving:
+  identical constants and formula, no module-cycle (the leaf
+  imports nothing from `world.ts`/`angels.ts`), proven by the
+  unchanged determinism golden hashes.

@@ -33,34 +33,46 @@ const TETRA_STROKE_WIDTH = 4;
 /** Head dot radius in canvas px. */
 const TETRA_HEAD_RADIUS = 3.5;
 
+/** Palette shift (degrees) for the angelfish, which reuse this
+ *  spine renderer (PRD §2 spine reuse, #123): a ~half-wheel offset
+ *  keeps the independents visibly distinct from the tetra school.
+ *  Exported — the Renderer picks it at the call site. */
+export const ANGEL_HUE_OFFSET = 180;
+
 const TAU = 2 * Math.PI;
 
 /** Cached body-colour lookup (index-deterministic: no per-frame
  *  string churn in the hot path — the cache only grows). The cache
  *  ARRAY IS OWNED BY THE CALLER (a Renderer instance) so the render
- *  layer carries no module-level state. */
-export function tetraColour(cache: string[], index: number): string {
+ *  layer carries no module-level state. `hueOffset` shifts the
+ *  palette (angels reuse this renderer with a complementary hue,
+ *  #123); 0 keeps the historical tetra colours. */
+export function tetraColour(cache: string[], index: number, hueOffset = 0): string {
   let c = cache[index];
   if (c === undefined) {
-    c = `hsl(${(index * 47) % 360}, 82%, 66%)`;
+    c = `hsl(${(index * 47 + hueOffset) % 360}, 82%, 66%)`;
     cache[index] = c;
   }
   return c;
 }
 
-/** Paint every tetra of the school, mapping tank units to the
- *  current canvas (stretch: the tank aspect is fixed, the canvas
- *  is the viewport). `colours` is the caller's per-fish colour
- *  cache (owned by the Renderer instance). */
-export function drawTetras(ctx: CanvasRenderingContext2D, width: number, height: number, tetras: Tetra[], colours: string[]): void {
+/** Paint a spine school, mapping tank units to the current canvas
+ *  (stretch: the tank aspect is fixed, the canvas is the viewport).
+ *  `colours` is the caller's per-fish colour cache (owned by the
+ *  Renderer instance), `hueOffset` the palette shift (see
+ *  tetraColour). Every swimmer must carry the spine-fish shape
+ *  (position, velocity, tail phase) — the angelfish pool qualifies
+ *  and is painted by exactly this function (PRD §2 spine reuse,
+ *  #123). */
+export function drawTetras(ctx: CanvasRenderingContext2D, width: number, height: number, fish: Tetra[], colours: string[], hueOffset = 0): void {
   const sx = width / TANK_WIDTH;
   const sy = height / TANK_HEIGHT;
-  for (let i = 0; i < tetras.length; i++) {
-    drawTetra(ctx, tetras[i]!, i, sx, sy, colours);
+  for (let i = 0; i < fish.length; i++) {
+    drawTetra(ctx, fish[i]!, i, sx, sy, colours, hueOffset);
   }
 }
 
-function drawTetra(ctx: CanvasRenderingContext2D, t: Tetra, index: number, sx: number, sy: number, colours: string[]): void {
+function drawTetra(ctx: CanvasRenderingContext2D, t: Tetra, index: number, sx: number, sy: number, colours: string[], hueOffset: number): void {
   const speed = Math.hypot(t.vx, t.vy);
   const hx = speed > 0 ? t.vx / speed : 1; // unit heading (defensive: sim guarantees speed > 0)
   const hy = speed > 0 ? t.vy / speed : 0;
@@ -68,7 +80,7 @@ function drawTetra(ctx: CanvasRenderingContext2D, t: Tetra, index: number, sx: n
   const py = hx;
   const headX = t.x * sx;
   const headY = t.y * sy;
-  const colourForFish = tetraColour(colours, index);
+  const colourForFish = tetraColour(colours, index, hueOffset);
   const tailSpan = TETRA_SPINE_SEGMENTS - 1;
   ctx.beginPath();
   ctx.moveTo(headX, headY);

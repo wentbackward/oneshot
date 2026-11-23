@@ -549,17 +549,18 @@ check("AC3: the bubble pool recycles without spawning — every one of 1001 fram
     if (f === 0) g.frameAt(0);
     else g.tick(1, (f - 1) * FRAME_MS);
     const arcs = g.state.events.slice(from).filter((ev) => ev.kind === "arc");
-    // Each live tetra paints exactly one head arc (drawTetras walks
-    // world.agents), bubbles are painted last, in slot order — so the
-    // frame's arc count pins the pool size given the live agent count
-    // (read through the world seam, not the compile-time school size:
-    // a mid-window predation must not fail this audit) and its last
+    // Each live tetra and each live angel paints exactly one head
+    // arc (drawTetras walks world.angels THEN world.agents), bubbles
+    // are painted last, in slot order — so the frame's arc count
+    // pins the pool size given the live head count (read through the
+    // world seams, not the compile-time species sizes: a mid-window
+    // predation must not fail this audit) and its last
     // BUBBLE_POOL_SIZE entries are the recycled slots.
-    const live = g.q("FISH_TANK_WORLD.agents.length");
+    const live = g.q("FISH_TANK_WORLD.agents.length") + g.q("FISH_TANK_WORLD.angels.length");
     assert(Number.isInteger(live) && live >= 0,
-      `frame ${f}: live agent count came back ${live}, not a non-negative integer`);
+      `frame ${f}: live head count came back ${live}, not a non-negative integer`);
     assert(arcs.length === live + BUBBLE_POOL_SIZE,
-      `frame ${f}: expected ${live} tetra heads + ${BUBBLE_POOL_SIZE} pooled bubbles arcs, got ${arcs.length}`);
+      `frame ${f}: expected ${live} fish heads + ${BUBBLE_POOL_SIZE} pooled bubbles arcs, got ${arcs.length}`);
     for (let i = 0; i < BUBBLE_POOL_SIZE; i++) {
       const [x, y, r] = arcs[live + i].args;
       assert(Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(r),
@@ -582,11 +583,12 @@ check("AC3: rising bubbles wobble sinusoidally in x — >= 1 full wobble period 
     if (f === 0) g.frameAt(0);
     else g.tick(1, (f - 1) * FRAME_MS);
     const arcs = g.state.events.slice(from).filter((ev) => ev.kind === "arc");
-    // Live tetra heads lead, the pooled bubbles trail in slot order
-    // (agents read live — see the pool-recycle check above).
-    const live = g.q("FISH_TANK_WORLD.agents.length");
+    // Fish heads lead (angels first, then tetras — see the
+    // pool-recycle check above), the pooled bubbles trail in slot
+    // order (head counts read live).
+    const live = g.q("FISH_TANK_WORLD.agents.length") + g.q("FISH_TANK_WORLD.angels.length");
     assert(Number.isInteger(live) && live >= 0,
-      `frame ${f}: live agent count came back ${live}, not a non-negative integer`);
+      `frame ${f}: live head count came back ${live}, not a non-negative integer`);
     assert(arcs.length === live + BUBBLE_POOL_SIZE, `frame ${f}: pool released ${arcs.length - live} bubbles`);
     for (let i = 0; i < BUBBLE_POOL_SIZE; i++) lanes[i].push(arcs[live + i].args); // [x, y, r]
   }

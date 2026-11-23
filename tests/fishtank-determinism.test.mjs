@@ -46,12 +46,18 @@ const stateHash = (w) => createHash("sha256").update(w.serializeState()).digest(
 /** Full raw snapshot INCLUDING the tail state (phase, torque,
  *  heading), which serializeState() deliberately omits: the dt-
  *  refusal tests must prove even the tail scalars survive an
- *  illegal step untouched. */
+ *  illegal step untouched. The angelfish pool is included on the
+ *  same basis (#123). */
 const fullSnapshot = (w) => JSON.stringify({
   time: w.time,
   acc: w.acc,
   agents: w.agents.map((t) => ({
     x: t.x, y: t.y, vx: t.vx, vy: t.vy, phase: t.phase, torque: t.torque, heading: t.heading,
+  })),
+  angels: w.angels.map((a) => ({
+    x: a.x, y: a.y, baseY: a.baseY, baseVx: a.baseVx, baseVy: a.baseVy,
+    bobPhase: a.bobPhase, cruiseHeading: a.cruiseHeading,
+    phase: a.phase, torque: a.torque, heading: a.heading,
   })),
 });
 
@@ -188,8 +194,10 @@ check("serialized state uses fixed 6-decimal precision for every coordinate", ()
   const w = new World({ seed: 55 });
   w.step(FIXED_DT);
   const lines = w.serializeState().split("\n");
-  // Clock line + one state line per agent + one predator line (#124).
-  assert(lines.length === w.agents.length + 2, "clock line + one state line per agent + one predator line");
+  // Clock line + one state line per agent + one per angelfish
+  // (#123) + one predator line (#124).
+  assert(lines.length === w.agents.length + w.angels.length + 2,
+    "clock line + one state line per agent + one per angel + one predator line");
   const agentLines = lines.slice(1, 1 + w.agents.length); // first line is the clock
   for (const line of agentLines) {
     const fields = line.split(",");
@@ -198,6 +206,19 @@ check("serialized state uses fixed 6-decimal precision for every coordinate", ()
       assert(SERIALIZED_FIELD_RE.test(f),
         `coordinate field must be raw fixed-decimal (/-?\\d+\\.\\d{0,6}/), got "${f}"`);
       assert(Number.isFinite(Number(f)), `state must be finite, got "${f}"`);
+    }
+  }
+  // The angelfish lines: `A:x,y,vx,vy` — same shape, tagged prefix
+  // (they carry the same 4 fixed-decimal fields).
+  const angelLines = lines.slice(1 + w.agents.length, 1 + w.agents.length + w.angels.length);
+  for (const line of angelLines) {
+    assert(line.startsWith("A:"), `angel line must carry the A: tag, got "${line}"`);
+    const fields = line.slice(2).split(",");
+    assert(fields.length === 4, `angel line must carry x,y,vx,vy, got "${line}"`);
+    for (const f of fields) {
+      assert(SERIALIZED_FIELD_RE.test(f),
+        `angel coordinate field must be raw fixed-decimal, got "${f}"`);
+      assert(Number.isFinite(Number(f)), `angel state must be finite, got "${f}"`);
     }
   }
   // The predator line: `P:<state>:x,y,vx,vy,hunger,waypointIndex,restRemaining,fedCount`

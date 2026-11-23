@@ -14,7 +14,11 @@
 // (src/sim/predator.ts) patrols a named waypoint loop, stalks
 // isolated tetras once hunger crosses the threshold, and rests for
 // a fixed window after each feed; the World steps it after the
-// tetras so it always acts on current prey positions.
+// tetras so it always acts on current prey positions. The grazing
+// angelfish (the second behaviour, ticket #123 — src/sim/angels.ts)
+// are slow independent cruisers with a vertical bob: no inter-fish
+// forces at all, own pool, stepped after the tetras and before the
+// pellet pass, rendered by the same spine renderer as the tetras.
 //
 // Determinism contract:
 //  - every random draw goes through a seeded mulberry32 stream;
@@ -26,6 +30,7 @@
 // ================================================================
 
 import {
+  ANGEL_COUNT,
   AMBIENT_CURRENT_X,
   FIXED_DT,
   KELP_MAX,
@@ -53,6 +58,8 @@ import {
   TETRA_MIN_SPEED,
 } from "./constants.ts";
 import { KelpStrand } from "./kelp.ts";
+import { Angel, spawnAngels } from "./angels.ts";
+import { TAU, TORQUE_SMOOTHING, wrapPi } from "./angles.ts";
 import { stepPellet, type Pellet, type Shockwave } from "./pellets.ts";
 import { mulberry32 } from "./rng.ts";
 import { tailFrequency } from "./tail.ts";
@@ -108,11 +115,6 @@ const POP_RESEED_STRIDE = 1_000_003;
  *  hard as a cruising turn can be. */
 const ALIGNMENT_CRUISE_SPEED = FISH_MAX_SPEED;
 
-/** Per-step blend of the instantaneous turning torque into the
- *  smoothed one feeding the tail formula: 0.25 reacts in ≈ 4 steps
- *  without strobing on per-step force jitter. */
-const TORQUE_SMOOTHING = 0.25;
-
 /** How far a tetra SENSES its school (alignment + cohesion), tank
  *  units. Deliberately wider than NEIGHBOUR_RADIUS: a real school
  *  tracks dozens of metres of shoalmates, while separation stays
@@ -120,8 +122,6 @@ const TORQUE_SMOOTHING = 0.25;
  *  NEIGHBOUR_RADIUS internally, so feeding it the wider list keeps
  *  it exactly the #119 personal-repulsion force. */
 const SCHOOL_PERCEPTION_RADIUS = 180;
-
-const TAU = 2 * Math.PI;
 
 /** A schooling tetra: a position and a velocity in tank units,
  *  plus the articulated-tail state the renderer observes. */
@@ -175,6 +175,11 @@ export interface WorldOptions {
    *  the rock/kelp solver unit tests opt out so their lone tetra
    *  cannot be captured mid-scenario). */
   predator?: boolean;
+  /** How many angelfish to spawn (defaults to ANGEL_COUNT).
+   *  Independent cruisers — see src/sim/angels.ts. A non-integer
+   *  or negative count is refused (empty pool), mirroring
+   *  setTetraCount's refusal. */
+  angels?: number;
 }
 
 /** Worst collision-ring violation depth at (cx, cy) over ALL rocks:
@@ -262,7 +267,9 @@ export class World {
   readonly seed: number;
   /** The tetra school, in fixed iteration order. Named `agents` to
    *  stay the stable per-world surface (the #119 determinism test
-   *  hashes on it); every entry is a Tetra. */
+   *  hashes on it); every entry is a Tetra. The angelfish live in
+   *  their OWN pool (world.angels) and are NOT in the grid — they
+   *  compose no inter-fish forces, so no tetra ever senses one. */
   agents: Tetra[] = [];
   /** Neighbor grid (typed Tetra so queries hand back moving bodies
    *  straight into the steering forces). Populated at construction,
@@ -287,6 +294,12 @@ export class World {
   /** Placed kelp strands (PRD §3): verlet chains anchored at the
    *  substrate, capped at KELP_MAX by placeKelp(). */
   readonly kelp: KelpStrand[] = [];
+  /** Grazing angelfish (PRD §2's second behaviour, #123): slow
+   *  independent cruisers — their own pool, iterated in fixed
+   *  order AFTER the tetras each fixed step, NOT in the grid (no
+   *  inter-fish forces at all) and outside the predator's prey
+   *  scan. Spawned from `seed + ANGEL_SEED_STRIDE`. */
+  readonly angels: Angel[] = [];
   /** Live (uneaten, unsettled) dropped pellets (PRD §3): capped at
    *  PELLET_MAX by dropFood(), stepped by the pure stepPellet()
    *  integrator, consumed by the nearest in-contact tetra. */
@@ -321,6 +334,7 @@ export class World {
     this.ambientCurrentX = options.ambientCurrentX ?? AMBIENT_CURRENT_X;
     this.grid = new SpatialGrid(TANK_WIDTH, TANK_HEIGHT, GRID_CELL_SIZE);
     this.spawn(options.population ?? TETRA_COUNT);
+    this.angels = spawnAngels(this.seed, options.angels ?? ANGEL_COUNT);
     this.predator = options.predator === false ? null : new ApexPredator();
     // FIRST grid population (derived state): nothing may read an
     // empty grid before the first step — telemetry (PRD §4) reads
@@ -782,6 +796,12 @@ export class World {
       t.heading = heading;
       t.phase += TAU * tailFrequency(nx, t.torque) * dt;
     }
+    // Grazing angelfish (PRD §2, #123): after the tetras, before
+    // the pellet pass — an angel's in-contact claim lands on the
+    // same per-step `dead` flag, so a pellet is consumed at most
+    // once per step across BOTH species, and a pellet claimed
+    // earlier this step is skipped by everything below it.
+    for (const a of this.angels) a.step(dt, this);
     // Dropped food (PRD §3): the survivors (not claimed this step)
     // integrate under drag + the ambient horizontal current; wall-
     // contained in x, culled once eaten or settled onto the substrate
@@ -1004,7 +1024,8 @@ export class World {
 
   /** Fixed-precision snapshot of the whole sim state: clock first,
    *  then one `x,y,vx,vy` line per tetra at 6 decimals, then one
-   *  `P:` line for the predator (state, pose, hunger, route
+   *  `A:` line per angelfish (same shape — #123), then one `P:` line
+   *  for the predator (state, pose, hunger, route
    *  progress, rest window, feed count — the line is absent when
    *  the world was built without a predator (unit-test worlds),
    *  then one `F:` line per live pellet (x, y, vx, vy) and one
@@ -1019,6 +1040,9 @@ export class World {
     const lines = [this.time.toFixed(6)];
     for (const t of this.agents) {
       lines.push(`${t.x.toFixed(6)},${t.y.toFixed(6)},${t.vx.toFixed(6)},${t.vy.toFixed(6)}`);
+    }
+    for (const a of this.angels) {
+      lines.push(`A:${a.x.toFixed(6)},${a.y.toFixed(6)},${a.vx.toFixed(6)},${a.vy.toFixed(6)}`);
     }
     const p = this.predator;
     if (p !== null) {
@@ -1048,15 +1072,4 @@ export class World {
     this.grid.clear();
     for (const t of this.agents) this.grid.insert(t);
   }
-}
-
-/** Wrap a heading delta into [−π, π]: the shortest angular
- *  difference, so the torque measurement sees a U-turn as π, not
- *  2π. (Both endpoints can occur: ±π modulo 2π survives the
- *  branch cuts as-is.) */
-function wrapPi(angle: number): number {
-  let a = angle % TAU;
-  if (a > Math.PI) a -= TAU;
-  if (a < -Math.PI) a += TAU;
-  return a;
 }

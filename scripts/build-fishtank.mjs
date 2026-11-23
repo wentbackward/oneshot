@@ -116,7 +116,7 @@ ${STYLE}
 <button id="hud-toggle" type="button" aria-expanded="true">TELEMETRY</button>
 <div id="hud-panel">
 <span>FPS <b id="hud-fps">&ndash;</b></span><br>
-<span>TETRA <b id="hud-count-tetra">&ndash;</b></span> <span>PRED <b id="hud-count-predator">&ndash;</b></span><br>
+<span>TETRA <b id="hud-count-tetra">&ndash;</b></span> <span>ANGEL <b id="hud-count-angel">&ndash;</b></span> <span>PRED <b id="hud-count-predator">&ndash;</b></span><br>
 <span>GRID CELLS <b id="hud-grid">&ndash;/&ndash;</b></span>
 </div>
 </section>
