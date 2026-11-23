@@ -15,7 +15,10 @@
 //    trajectory stays byte-identical to a pellet-free twin world);
 //  - competition: several in-sense tetras consume ONE pellet exactly
 //    once (a double-consume in one step would drop the count by 2,
-//    which is impossible by construction and pinned here).
+//    which is impossible by construction and pinned here);
+//  - the ring cap: 17 rapid taps hold the live ring count exactly at
+//    SHOCKWAVE_MAX_RINGS (the 17th ring is refused, none is displaced)
+//    while the 17th tap's startle still fires.
 //
 // Harness: stock node with flag-free .ts type-stripping imports the
 // real src/sim sources; every world is seeded (no network, no
@@ -33,6 +36,7 @@ import {
   PELLET_MAX,
   PELLET_SENSE_RADIUS,
   PELLET_TERMINAL_V,
+  SHOCKWAVE_MAX_RINGS,
   STARTLE_RADIUS,
   TANK_HEIGHT,
   TANK_WIDTH,
@@ -225,6 +229,28 @@ check("tapGlass: an out-of-range tap startles from the CLAMPED epicentre — rin
     "one shockwave ring must be spawned for an uncapped tap");
   assert(w.shockwaves[0].x === TANK_WIDTH && w.shockwaves[0].y === 500,
     `the ring's epicentre must sit at the clamped point (got ${w.shockwaves[0].x}, ${w.shockwaves[0].y})`);
+});
+
+// ================================================================
+// Criterion (review should-fix #4): rapid taps must be REFUSED at
+// the SHOCKWAVE_MAX_RINGS cap (no 17th ring, nothing displaced) —
+// while the startle of the refused tap still fires in full.
+// ================================================================
+check("tapGlass: at the SHOCKWAVE_MAX_RINGS cap a new tap is refused — no extra ring, but the startle still fires", () => {
+  const w = new World({ seed: 31, population: 1, predator: false });
+  const t = w.agents[0];
+  // Park the lone tetra exactly on the epicentre so EVERY tap's
+  // startle has a victim; no steps between taps, so no ring can
+  // retire and the cap binds after exactly SHOCKWAVE_MAX_RINGS taps.
+  t.x = TANK_WIDTH / 2; t.y = TANK_HEIGHT / 2; t.vx = 0; t.vy = 0;
+  let startledLast = 0;
+  for (let i = 0; i < SHOCKWAVE_MAX_RINGS + 1; i++) {
+    startledLast = w.tapGlass(TANK_WIDTH / 2, TANK_HEIGHT / 2);
+  }
+  assert(w.shockwaves.length === SHOCKWAVE_MAX_RINGS,
+    `the ring count must stop exactly at SHOCKWAVE_MAX_RINGS (${SHOCKWAVE_MAX_RINGS}); the 17th tap must be refused, not displace a ring — got ${w.shockwaves.length}`);
+  assert(startledLast === 1,
+    `the tap REFUSED at the cap must still startle the in-radius tetra (got ${startledLast})`);
 });
 
 // ---------- summary ----------
