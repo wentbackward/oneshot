@@ -462,8 +462,8 @@ const BRICKS = [
 
 const LICENSE_TXT = (game) => [
   `Asset provenance — assets/${game}`,
-  "====================================="
-, "All current entries are PLACEHOLDERS generated in-repo by",
+  "=====================================",
+  "All current entries are PLACEHOLDERS generated in-repo by",
   "scripts/generate-placeholders.mjs (deterministic, no external",
   "sources) and dedicated to the public domain (CC0-1.0).",
   "",
