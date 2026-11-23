@@ -25,7 +25,9 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -79,7 +81,7 @@ const run = (cwd, argv) => {
 };
 const flushMicrotasks = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-const countOccurences = (haystack, needle) => haystack.split(needle).length - 1;
+const countOccurrences = (haystack, needle) => haystack.split(needle).length - 1;
 
 /** Extract the single-line JSON array assigned to
  *  window.__<GAME>_ASSETS__ inside a marker-delimited block. */
@@ -87,8 +89,8 @@ function extractEmbedded(html, game) {
   const globalName = `window.__${game.toUpperCase()}_ASSETS__`;
   const beginMarker = `//__${game.toUpperCase()}_ASSETS_BEGIN__`;
   const endMarker = `//__${game.toUpperCase()}_ASSETS_END__`;
-  assert(countOccurences(html, beginMarker) === 1, `exactly one ${beginMarker} expected, got ${countOccurences(html, beginMarker)}`);
-  assert(countOccurences(html, endMarker) === 1, `exactly one ${endMarker} expected, got ${countOccurences(html, endMarker)}`);
+  assert(countOccurrences(html, beginMarker) === 1, `exactly one ${beginMarker} expected, got ${countOccurrences(html, beginMarker)}`);
+  assert(countOccurrences(html, endMarker) === 1, `exactly one ${endMarker} expected, got ${countOccurrences(html, endMarker)}`);
   const begin = html.indexOf(beginMarker);
   const end = html.indexOf(endMarker);
   assert(end > begin, "the BEGIN marker must precede the END marker");
@@ -147,7 +149,7 @@ function tmpTree() {
   mkdirSync(path.join(tmp, "scripts"), { recursive: true });
   cpSync(path.join(ROOT, "src"), path.join(tmp, "src"), { recursive: true });
   cpSync(path.join(ROOT, "assets"), path.join(tmp, "assets"), { recursive: true });
-  for (const f of ["build-fishtank.mjs", "embed-bricks-assets.mjs"]) {
+  for (const f of ["build-fishtank.mjs", "embed-bricks-assets.mjs", "generate-placeholders.mjs"]) {
     copyFileSync(path.join(ROOT, "scripts", f), path.join(tmp, "scripts", f));
   }
   cpSync(path.join(ROOT, "scripts", "lib"), path.join(tmp, "scripts", "lib"), { recursive: true });
@@ -218,6 +220,47 @@ check("fishtank.html: a one-byte asset mutation makes build --check exit non-zer
     writeFileSync(target, buf);
     const r = run(tmp, [path.join(tmp, "scripts", "build-fishtank.mjs"), "--check"]);
     assert(r.code !== 0, `build --check must fail after a one-byte asset mutation, got 0:\n${r.output}`);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+// ================================================================
+// Placeholder generator: the committed assets/ tree is a BYTE
+// GOLDEN of scripts/generate-placeholders.mjs. Regenerating into a
+// fresh copy must reproduce every file byte for byte — this pins
+// the generator AND the PNG encoder (a future zlib/toolchain bump
+// that changes deflateSync output fails here, forcing a deliberate
+// asset re-commit instead of silent drift).
+// ================================================================
+const listFiles = (dir) => {
+  const out = [];
+  const walk = (d) => {
+    for (const name of readdirSync(d).sort()) {
+      const p = path.join(d, name);
+      if (statSync(p).isDirectory()) walk(p);
+      else out.push(path.relative(dir, p));
+    }
+  };
+  walk(dir);
+  return out.sort();
+};
+
+check("assets/: regenerating the placeholders into a fresh tree is byte-identical to the committed assets/", () => {
+  const tmp = tmpTree();
+  try {
+    const r = run(tmp, [path.join(tmp, "scripts", "generate-placeholders.mjs"), tmp]);
+    assert(r.code === 0, `the generator must succeed against a foreign out dir, got ${r.code}:\n${r.output}`);
+    const rootFiles = listFiles(path.join(ROOT, "assets"));
+    const tmpFiles = listFiles(path.join(tmp, "assets"));
+    assert(JSON.stringify(rootFiles) === JSON.stringify(tmpFiles),
+      `the regenerated tree has a different file set (${rootFiles.length} vs ${tmpFiles.length} files)`);
+    for (const rel of rootFiles) {
+      const committed = readFileSync(path.join(ROOT, "assets", rel));
+      const regenerated = readFileSync(path.join(tmp, "assets", rel));
+      assert(committed.equals(regenerated),
+        `assets/${rel} is not byte-identical after regeneration (${committed.byteLength} vs ${regenerated.byteLength} bytes)`);
+    }
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
@@ -556,10 +599,12 @@ await checkAsync("fishtank runtime: a zero-height frame with the gravel texture 
 });
 
 // ----------------------------------------------------------------
-// Unused-import sweep: the codec import above proves the integrity
-// suite's decode path; make sure this file does not leak a
-// dangling reference if the payload ever carries a corrupt entry.
-check("embedded payloads: every `d` payload round-trips base64 → PNG → identical bytes (decode validity inside the shipped files)", () => {
+// Decode validity inside the shipped files: every embedded `d`
+// payload must survive base64 → PNG decode and land on exactly the
+// dimensions its own payload header declares (truncated/corrupt
+// base64 or a header↔pixel mismatch would drop the slot in a
+// real browser decode; the codec import doubles as the guard).
+check("embedded payloads: every `d` payload round-trips base64 → PNG → the dimensions its payload header declares (decode validity inside the shipped files)", () => {
   for (const game of GAMES) {
     const html = readFileSync(path.join(ROOT, `${game}.html`), "utf8");
     for (const emb of extractEmbedded(html, game)) {
