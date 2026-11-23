@@ -102,7 +102,17 @@ if (html.includes("//__BRICKS_ASSETS_BEGIN__")) {
     console.error("cannot locate the \"use strict\" directive for the initial embed");
     process.exit(1);
   }
-  const after = html.indexOf("\n", idx) + 1;
+  const newline = html.indexOf("\n", idx);
+  if (newline === -1) {
+    // The directive is the file's last line WITHOUT a trailing
+    // newline: the insertion point is ambiguous (we cannot tell where
+    // the script continues), so we refuse with a clear error instead
+    // of guessing. This script must never be able to destroy the
+    // file it edits.
+    console.error("refusing the initial embed: the \"use strict\" directive has no terminating newline — the insertion point is ambiguous; fix the file and re-run");
+    process.exit(1);
+  }
+  const after = newline + 1;
   out = html.slice(0, after) + freshBlock + "\n" + html.slice(after);
 }
 writeFileSync(OUTPUT, out);
