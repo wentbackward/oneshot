@@ -676,7 +676,8 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
      *  SHOCKWAVE_MAX_RINGS by tapGlass(), retired by step() once a
      *  ring reaches SHOCKWAVE_RING_MAX_RADIUS. */
     shockwaves = [];
-    /** Horizontal ambient flow (tank units/s²) driving the kelp. */
+    /** Horizontal ambient flow (tank units/s²) driving the kelp
+     *  strands and advecting the dropped food pellets. */
     ambientCurrentX;
     /** Reused neighbour scratch per step (allocation-free hot path):
      *  steering forces only READ the list, so one shared buffer is
@@ -724,13 +725,18 @@ html, body { height: 100%; overflow: hidden; background: #06121e; }
      *  is refused, but the scare itself is never refused) and startle
      *  the school at the cursor. Returns the number of startled
      *  tetras (the startleAt() report); non-finite coordinates are
-     *  rejected — a no-op reporting 0, touching nothing. */
+     *  rejected — a no-op reporting 0, touching nothing. The
+     *  coordinates are clamped to the tank ONCE and the SAME clamped
+     *  pair drives both the ring's visible epicentre and the
+     *  startle, so the two can never disagree. */
     tapGlass(x, y) {
       if (!Number.isFinite(x) || !Number.isFinite(y)) return 0;
+      const cx = clampX(x);
+      const cy = clampY(y);
       if (this.shockwaves.length < SHOCKWAVE_MAX_RINGS) {
-        this.shockwaves.push({ x: clampX(x), y: clampY(y), radius: 0 });
+        this.shockwaves.push({ x: cx, y: cy, radius: 0 });
       }
-      return this.startleAt(x, y);
+      return this.startleAt(cx, cy);
     }
     /** Place a rock at (x, y): a circle of ROCK_RADIUS clamped fully
      *  inside the tank. Returns the rock, or null when the tank is

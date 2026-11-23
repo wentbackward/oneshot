@@ -33,6 +33,7 @@ import {
   PELLET_MAX,
   PELLET_SENSE_RADIUS,
   PELLET_TERMINAL_V,
+  STARTLE_RADIUS,
   TANK_HEIGHT,
   TANK_WIDTH,
 } from "../src/sim/constants.ts";
@@ -196,6 +197,34 @@ check("contact boundary: the eat radius is the named PELLET_EAT_RADIUS and is re
     "PELLET_EAT_RADIUS must be a positive finite constant");
   assert(PELLET_EAT_RADIUS < PELLET_SENSE_RADIUS,
     "the eat radius must sit inside the sense radius");
+});
+
+// ================================================================
+// Criterion (review should-fix #1): an out-of-range tapGlass() tap
+// must clamp BOTH the visible ring's epicentre AND the startle's
+// epicentre to the same point — a tetra inside STARTLE_RADIUS of
+// the clamped point (but outside the radius of the raw point) must
+// be startled, and the ring must sit at the clamped coordinate.
+// ================================================================
+check("tapGlass: an out-of-range tap startles from the CLAMPED epicentre — ring and scare agree", () => {
+  const w = new World({ seed: 29, population: 1, predator: false });
+  const t = w.agents[0];
+  // Near the right wall: 60 units inside the tank — inside
+  // STARTLE_RADIUS (140) of the clamped wall point, but 160 units
+  // from the raw epicentre TANK_WIDTH + 100 (OUTSIDE the radius).
+  t.x = TANK_WIDTH - 60; t.y = 500; t.vx = 0; t.vy = 0;
+  const rawX = TANK_WIDTH + 100;
+  const rawD = Math.hypot(t.x - rawX, t.y - 500);
+  const clampD = Math.hypot(t.x - TANK_WIDTH, t.y - 500);
+  assert(rawD > STARTLE_RADIUS && clampD <= STARTLE_RADIUS,
+    `test setup: raw d=${rawD} must be out, clamped d=${clampD} in`);
+  const startled = w.tapGlass(rawX, 500);
+  assert(startled === 1,
+    `the tetra within STARTLE_RADIUS of the clamped epicentre must be startled (got ${startled})`);
+  assert(w.shockwaves.length === 1,
+    "one shockwave ring must be spawned for an uncapped tap");
+  assert(w.shockwaves[0].x === TANK_WIDTH && w.shockwaves[0].y === 500,
+    `the ring's epicentre must sit at the clamped point (got ${w.shockwaves[0].x}, ${w.shockwaves[0].y})`);
 });
 
 // ---------- summary ----------

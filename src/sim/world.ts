@@ -155,7 +155,8 @@ export interface WorldOptions {
   population?: number;
   /** Horizontal ambient flow in tank units/s² (defaults to
    *  AMBIENT_CURRENT_X; 0 = still water for the kelp settle tests).
-   *  Drives the kelp strands only — the fish are not advected. */
+   *  Advects the kelp strands and the dropped food pellets — the
+   *  fish are not advected. */
   ambientCurrentX?: number;
   /** Whether the world owns the apex predator (defaults to true;
    *  the rock/kelp solver unit tests opt out so their lone tetra
@@ -264,7 +265,8 @@ export class World {
    *  SHOCKWAVE_MAX_RINGS by tapGlass(), retired by step() once a
    *  ring reaches SHOCKWAVE_RING_MAX_RADIUS. */
   readonly shockwaves: Shockwave[] = [];
-  /** Horizontal ambient flow (tank units/s²) driving the kelp. */
+  /** Horizontal ambient flow (tank units/s²) driving the kelp
+   *  strands and advecting the dropped food pellets. */
   readonly ambientCurrentX: number;
   /** Reused neighbour scratch per step (allocation-free hot path):
    *  steering forces only READ the list, so one shared buffer is
@@ -316,13 +318,18 @@ export class World {
    *  is refused, but the scare itself is never refused) and startle
    *  the school at the cursor. Returns the number of startled
    *  tetras (the startleAt() report); non-finite coordinates are
-   *  rejected — a no-op reporting 0, touching nothing. */
+   *  rejected — a no-op reporting 0, touching nothing. The
+   *  coordinates are clamped to the tank ONCE and the SAME clamped
+   *  pair drives both the ring's visible epicentre and the
+   *  startle, so the two can never disagree. */
   tapGlass(x: number, y: number): number {
     if (!Number.isFinite(x) || !Number.isFinite(y)) return 0;
+    const cx = clampX(x);
+    const cy = clampY(y);
     if (this.shockwaves.length < SHOCKWAVE_MAX_RINGS) {
-      this.shockwaves.push({ x: clampX(x), y: clampY(y), radius: 0 });
+      this.shockwaves.push({ x: cx, y: cy, radius: 0 });
     }
-    return this.startleAt(x, y);
+    return this.startleAt(cx, cy);
   }
 
   /** Place a rock at (x, y): a circle of ROCK_RADIUS clamped fully
