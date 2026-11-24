@@ -235,11 +235,12 @@ await check("AC3: the four tiers read as distinct materials — distinct base fi
   const g = bootArt();
   await g.ready();
   g.q("startGame()");
-  const f = g.frame();
+  g.q("level = 2; spawnLevel(); draw();"); // level 2 carries all four tiers incl. fixed (X)
+  const f = g.events;
   const fills = [];
   for (let tier = 0; tier < 4; tier += 1) {
     const i = g.q(`bricks.findIndex((b) => b.active && b.tier === ${tier})`);
-    assert(i >= 0, `level 1 must carry an active tier-${tier} brick`);
+    assert(i >= 0, `level 2 must carry an active tier-${tier} brick`);
     const rect = g.q(`[bricks[${i}].x, bricks[${i}].y]`);
     const fill = f.find((ev) => ev.t === "fillRect" && ev.args[0] === rect[0] && ev.args[1] === rect[1]);
     fills.push(fill?.style);
