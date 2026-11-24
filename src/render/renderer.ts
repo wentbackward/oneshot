@@ -27,7 +27,8 @@
 //   10 tetra spines (PRD §2) + their body sprites (#139)
 //   11 the predator (ticket #139 — its first visual): the same
 //       articulated-spine recipe upscaled to its body, its body
-//       sprite riding the spine, tail phase render-owned
+//       sprite riding the spine, tail phase render-owned and
+//       scaled by the predator's current swimming speed
 //   12 dropped pellets (PRD §3 — food floats over the school)
 //   13 bubble column (pool, painted in slot order; bubble SPRITES
 //       when decoded, arcs as the fallback, #139)
@@ -47,6 +48,7 @@
 // ================================================================
 
 import type { World } from "../sim/world.ts";
+import { PREDATOR_PATROL_SPEED } from "../sim/constants.ts";
 import { drawKelp, drawRocks } from "./scenery.ts";
 import { ANGEL_HUE_OFFSET, drawPredator, drawTetras } from "./tetras.ts";
 import { drawBackdrop, drawSurfaceRipples } from "./water.ts";
@@ -70,12 +72,26 @@ const BACKGROUND_TEXTURE_ALPHA = 0.35;
 export const GRAVEL_TEXTURE_BAND = 0.055;
 const GRAVEL_TEXTURE_ALPHA = 0.3;
 
-/** Render-owned tail phase for the predator's spine, rad of
- *  phase per sim second: the predator's sim state carries no
- *  phase (src/sim is untouched by #139), so the spine's
- *  undulation is advanced in the Renderer by sim-time deltas —
- *  a paused sim freezes it like every other layer. */
-const PREDATOR_TAIL_OMEGA = 7;
+/** The predator's render-owned tail undulation at PATROL SPEED,
+ *  rad of phase per sim second — the cruise baseline the visual
+ *  was tuned to. */
+const PREDATOR_TAIL_OMEGA_AT_PATROL = 7;
+
+/** Render-owned predator tail omega as a pure function of the
+ *  predator's current speed (tank units/s): LINEAR in speed —
+ *  PRD §2 requires the undulation frequency to scale dynamically
+ *  with swimming speed for every fish, and this is the same
+ *  speed-proportional rule the tetras/angels run through
+ *  tailFrequency's speed gain (src/sim/tail.ts). A zero-speed
+ *  predator idles at zero rad/s (its lowest real speed is
+ *  PREDATOR_REST_SPEED, so it always beats); the turning-torque
+ *  term of tailFrequency is outside render's reach — the sim
+ *  state exposes no torque, and the observer contract forbids
+ *  inventing it. Exported — the render-contract tests pin the
+ *  speed-scaling, not the spine geometry. */
+export function predatorTailOmega(speed: number): number {
+  return (PREDATOR_TAIL_OMEGA_AT_PATROL / PREDATOR_PATROL_SPEED) * speed;
+}
 
 export class Renderer {
   /** Per-instance tetra colour cache (src/render/tetras.ts builds
@@ -106,9 +122,9 @@ export class Renderer {
    *  is the identity pass-through, so the frame uses the neutral
    *  table itself. */
   private readonly phaseTables: Record<string, Record<string, ArtTexture>> = {};
-  /** The predator's render-owned tail phase (see PREDATOR_TAIL_
-   *  OMEGA above) and the last rendered sim time it diffs against
-   *  (null before the first frame). */
+  /** The predator's render-owned tail phase (see
+   *  predatorTailOmega above) and the last rendered sim time it
+   *  diffs against (null before the first frame). */
   private predatorPhase = 0;
   private lastRenderTime: number | null = null;
 
@@ -136,9 +152,13 @@ export class Renderer {
     drawTetras(ctx, width, height, world.angels, this.angelColours, ANGEL_HUE_OFFSET, "angel-body", textures);
     drawTetras(ctx, width, height, world.agents, this.tetraColours, 0, "tetra-body", textures);
     // The predator's spine phase advances by SIM TIME (a paused
-    // sim freezes it); the world's clock is the ground truth.
-    if (this.lastRenderTime !== null) {
-      this.predatorPhase += (world.time - this.lastRenderTime) * PREDATOR_TAIL_OMEGA;
+    // sim freezes it) at an omega scaled by its CURRENT SPEED —
+    // PRD §2's speed-scaled undulation, render-owned (#139);
+    // the world's clock is the ground truth.
+    const dt = this.lastRenderTime === null ? 0 : world.time - this.lastRenderTime;
+    const pred = world.predator;
+    if (dt !== 0 && pred !== null) {
+      this.predatorPhase += dt * predatorTailOmega(Math.hypot(pred.vx, pred.vy));
     }
     this.lastRenderTime = world.time;
     drawPredator(ctx, width, height, world.predator, this.predatorPhase, textures);

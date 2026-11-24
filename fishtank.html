@@ -1775,7 +1775,7 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
     const sx = width / TANK_WIDTH;
     const sy = height / TANK_HEIGHT;
     const bodyTex = sprite === "" ? void 0 : textures[sprite];
-    const headFraction = HEAD_FRACTIONS[sprite] ?? 0.25;
+    const headFraction = sprite === "" ? 0 : HEAD_FRACTIONS[sprite];
     for (let i = 0; i < fish.length; i++) {
       drawTetra(ctx, fish[i], i, sx, sy, colours, hueOffset, bodyTex, headFraction);
     }
@@ -2206,7 +2206,10 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
   var BACKGROUND_TEXTURE_ALPHA = 0.35;
   var GRAVEL_TEXTURE_BAND = 0.055;
   var GRAVEL_TEXTURE_ALPHA = 0.3;
-  var PREDATOR_TAIL_OMEGA = 7;
+  var PREDATOR_TAIL_OMEGA_AT_PATROL = 7;
+  function predatorTailOmega(speed) {
+    return PREDATOR_TAIL_OMEGA_AT_PATROL / PREDATOR_PATROL_SPEED * speed;
+  }
   var Renderer = class {
     /** Per-instance tetra colour cache (src/render/tetras.ts builds
      *  the render layer with NO module-level state — the only mutable
@@ -2236,9 +2239,9 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
      *  is the identity pass-through, so the frame uses the neutral
      *  table itself. */
     phaseTables = {};
-    /** The predator's render-owned tail phase (see PREDATOR_TAIL_
-     *  OMEGA above) and the last rendered sim time it diffs against
-     *  (null before the first frame). */
+    /** The predator's render-owned tail phase (see
+     *  predatorTailOmega above) and the last rendered sim time it
+     *  diffs against (null before the first frame). */
     predatorPhase = 0;
     lastRenderTime = null;
     /** Paint one frame of the given world state. The scene ambient is
@@ -2262,8 +2265,10 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
       drawRocks(ctx, width, height, world.rocks, textures);
       drawTetras(ctx, width, height, world.angels, this.angelColours, ANGEL_HUE_OFFSET, "angel-body", textures);
       drawTetras(ctx, width, height, world.agents, this.tetraColours, 0, "tetra-body", textures);
-      if (this.lastRenderTime !== null) {
-        this.predatorPhase += (world.time - this.lastRenderTime) * PREDATOR_TAIL_OMEGA;
+      const dt = this.lastRenderTime === null ? 0 : world.time - this.lastRenderTime;
+      const pred = world.predator;
+      if (dt !== 0 && pred !== null) {
+        this.predatorPhase += dt * predatorTailOmega(Math.hypot(pred.vx, pred.vy));
       }
       this.lastRenderTime = world.time;
       drawPredator(ctx, width, height, world.predator, this.predatorPhase, textures);

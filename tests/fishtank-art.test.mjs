@@ -40,8 +40,8 @@ import { fileURLToPath } from "node:url";
 import { TETRA_SPINE_SEGMENTS } from "../src/render/tetras.ts";
 import { BUBBLE_POOL_SIZE } from "../src/render/bubbles.ts";
 import { CAUSTICS_TILE_CELL } from "../src/render/caustics.ts";
-import { GRAVEL_TEXTURE_BAND } from "../src/render/renderer.ts";
-import { KELP_SEGMENTS, ROCK_RADIUS, TANK_WIDTH } from "../src/sim/constants.ts";
+import { GRAVEL_TEXTURE_BAND, predatorTailOmega } from "../src/render/renderer.ts";
+import { KELP_SEGMENTS, PREDATOR_PATROL_SPEED, PREDATOR_REST_SPEED, PREDATOR_STALK_SPEED, ROCK_RADIUS, TANK_WIDTH } from "../src/sim/constants.ts";
 import { LIGHT_DAY, LIGHT_DUSK, LIGHT_NIGHT } from "../src/render/lighting.ts";
 import { PHASE_TINTS, bakeTintVariant } from "../src/render/tinting.ts";
 
@@ -492,6 +492,28 @@ check("bakeTintVariant degrades to null — a bitmap without usable dimensions o
     "a dimensionless bitmap must return null, not throw");
   assert(bakeTintVariant({ width: 2, height: 1 }, PHASE_TINTS.LIGHT_DUSK, () => null) === null,
     "no surface facility must return null, not throw");
+});
+
+// ================================================================
+// PRD §2 (review should-fix): the predator's tail undulation
+// frequency scales dynamically with swimming speed — the same
+// speed-proportional rule the tetras/angels run through
+// tailFrequency's speed gain, render-owned because the predator's
+// sim state is frozen by this ticket.
+// ================================================================
+
+check("predator tail omega scales with swimming speed: zero at rest, strictly increasing, patrol-speed baseline kept, stalk beats harder", () => {
+  assert(predatorTailOmega(0) === 0,
+    "a stationary predator must idle at zero rad/s, like tailFrequency(0, 0) — not beat at a constant");
+  const ladder = [PREDATOR_REST_SPEED, 150, PREDATOR_PATROL_SPEED, PREDATOR_STALK_SPEED, 600];
+  for (let i = 1; i < ladder.length; i++) {
+    assert(predatorTailOmega(ladder[i]) > predatorTailOmega(ladder[i - 1]),
+      `omega must be strictly increasing in speed (regression it prevents: a CONSTANT tail omega):
+       ${ladder[i - 1]} u/s → ${ladder[i]} u/s gave equal/less omega`);
+  }
+  const atPatrol = predatorTailOmega(PREDATOR_PATROL_SPEED);
+  assert(atPatrol >= 5 && atPatrol <= 9,
+    `the cruise (patrol-speed) baseline must stay in its tuned band [5, 9] rad/s, got ${atPatrol}`);
 });
 
 // ---------- run ----------

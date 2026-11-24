@@ -4074,6 +4074,16 @@ stays synthesized Web Audio everywhere. The contract:
   every other layer. Reason: the alternative (deriving phase from
   `world.time` directly) would pop whenever the speed changed;
   integrating sim-time deltas keeps it continuous AND freeze-safe.
+  The omega is SCALED BY THE PREDATOR'S CURRENT SPEED (review
+  should-fix; PRD §2: the undulation frequency must scale
+  dynamically with swimming speed for each fish): `predatorTailOmega`
+  is linear in speed — 7 rad/s at patrol speed, the tuned cruise
+  baseline — the same speed-proportional rule the tetras/angels run
+  through `tailFrequency`'s speed gain; the turning-torque term is
+  outside render's reach (the sim state exposes no torque, and the
+  observer contract forbids inventing it). Speed is
+  `hypot(pred.vx, pred.vy)` — a pure observation of sim state, so
+  freeze-safety and the determinism goldens are untouched.
 - **Body sprites anchor at the spine head, flip on direction.** Each
   species' placeholder art faces LEFT (eye dot at the left, tail at
   the right), so a right-travelling swimmer receives one horizontal
@@ -4082,7 +4092,12 @@ stays synthesized Web Audio everywhere. The contract:
   length is the spine length × `BODY_SPRITE_OVERSCALE` (1.6) so a fish
   reads bigger, not identical, once textured. One swim frame per species
   is the ticket's accepted placeholder baseline (swim/eat/startle
-  frames arrive with the final art, data-only).
+  frames arrive with the final art, data-only). The slot→head-fraction
+  table is typed against the `BodySpriteSlot` union (the three fish-
+  body slots in the manifest): a mistyped slot name is a COMPILE
+  ERROR, never a silent `?? 0.25` fallback onto another species'
+  geometry (review should-fix; the `"predator-body"!` non-null
+  assertion that the `string`-keyed table forced went with it).
 - **Pebbles render at the collision circle's FULL width (2r), keeping
   their own aspect for height** — the ticket's "render at full r"
   option: the pebble now matches the collision body's horizon instead of

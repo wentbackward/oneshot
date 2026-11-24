@@ -64,11 +64,20 @@ const TAU = 2 * Math.PI;
  *  once textured. One named knob for every species. */
 export const BODY_SPRITE_OVERSCALE = 1.6;
 
+/** The fishtank's fish-body sprite slots
+ *  (assets/fishtank/manifest.json): tetra, angelfish and the
+ *  apex predator each carry ONE body slot. Typing the head-
+ *  fraction table against this union makes a mistyped slot name
+ *  a COMPILE ERROR — never a silent fallback onto another
+ *  species' geometry. */
+export type BodySpriteSlot = "tetra-body" | "angel-body" | "predator-body";
+
 /** The head's x within the sprite sheet, as a fraction of the
  *  sheet width measured from the LEFT (head) edge — placeholder
- *  geometry (the eye dot's position), per species. The sprite is
- *  anchored so this fraction sits on the spine's head point. */
-const HEAD_FRACTIONS: Record<string, number> = {
+ *  geometry (the eye dot's position), per slot. The sprite is
+ *  anchored so this fraction sits on the spine's head point.
+ *  Exhaustive over BodySpriteSlot: no default, no fallback. */
+const HEAD_FRACTIONS: Record<BodySpriteSlot, number> = {
   "tetra-body": 0.25,
   "angel-body": 0.15,
   "predator-body": 0.15,
@@ -143,13 +152,16 @@ export function drawTetras(
   fish: Tetra[],
   colours: string[],
   hueOffset = 0,
-  sprite = "tetra-body",
+  sprite: BodySpriteSlot | "" = "tetra-body",
   textures: Record<string, ArtTexture> = {},
 ): void {
   const sx = width / TANK_WIDTH;
   const sy = height / TANK_HEIGHT;
   const bodyTex = sprite === "" ? undefined : textures[sprite];
-  const headFraction = HEAD_FRACTIONS[sprite] ?? 0.25;
+  // sprite === "" carries no body at all, so its head fraction is
+  // never read — 0 keeps the branch exhaustive without pretending
+  // a geometry.
+  const headFraction = sprite === "" ? 0 : HEAD_FRACTIONS[sprite];
   for (let i = 0; i < fish.length; i++) {
     drawTetra(ctx, fish[i]!, i, sx, sy, colours, hueOffset, bodyTex, headFraction);
   }
@@ -228,8 +240,10 @@ function traceSpine(
 // the predator's sim state carries no phase (src/sim is untouched
 // by the ticket, and the spine-observer contract forbids
 // inventing sim state) — so the Renderer advances it by sim-time
-// deltas each frame; a paused sim freezes it, like every other
-// layer in this module.
+// deltas each frame at an omega scaled by the predator's current
+// speed (PRD §2 — the same speed-proportional rule the school
+// runs through tailFrequency); a paused sim freezes it, like
+// every other layer in this module.
 // ================================================================
 
 /** Predator body length in tank units (~1.7× the tetra's — the
@@ -276,6 +290,6 @@ export function drawPredator(
   ctx.fill();
   const tex = textures["predator-body"];
   if (tex !== undefined) {
-    drawBodySprite(ctx, headX, headY, pred.vx, pred.vy, Math.min(sx, sy), PREDATOR_BODY_LENGTH, tex, HEAD_FRACTIONS["predator-body"]!);
+    drawBodySprite(ctx, headX, headY, pred.vx, pred.vy, Math.min(sx, sy), PREDATOR_BODY_LENGTH, tex, HEAD_FRACTIONS["predator-body"]);
   }
 }
