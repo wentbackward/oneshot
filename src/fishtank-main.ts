@@ -119,7 +119,16 @@ function initFishtank(win: Window, doc: Document): World {
     };
     win.requestAnimationFrame(frame);
   };
-  decodeAllAssets(assetCache, startLoop);
+  // Ticket #139 three-phase tinting: AFTER the decodes settle,
+  // the phase art tables are baked ONCE (dusk + night; day is the
+  // identity pass-through) before the loop starts — the frame
+  // then only reads finished tables. A boot without a decoder
+  // settles synchronously with an empty cache: no bake work, the
+  // first frames remain exactly the procedural ones.
+  decodeAllAssets(assetCache, () => {
+    renderer.bakePhaseTints();
+    startLoop();
+  });
   return world;
 }
 

@@ -9,7 +9,9 @@
 // ================================================================
 
 import { TANK_HEIGHT, TANK_WIDTH, type Rock } from "../sim/world.ts";
+import { KELP_SEGMENTS } from "../sim/constants.ts";
 import type { KelpStrand } from "../sim/kelp.ts";
+import type { ArtTexture } from "./tinting.ts";
 
 const TAU = 2 * Math.PI;
 
@@ -24,11 +26,19 @@ const ROCK_SHEEN = "rgba(235, 244, 252, 0.18)";
  *  stick. BLADE THICKNESS IS CONSTANT DEVICE PX BY DESIGN — the
  *  kelp keeps a constant on-screen weight at any viewport/zoom,
  *  deliberately unlike the rocks, whose bodies stretch with the
- *  tank → canvas mapping like everything else. */
+ *  tank → canvas mapping like everything else. When the kelp-strip
+ *  art slot carries a bitmap (ticket #139) the textured quads
+ *  REPLACE these strokes; the quads keep the same constant
+ *  device-px weight (KELP_QUAD_HALF_WIDTH below). */
 const KELP_DARK = "#2c6e46";
 const KELP_LIGHT = "#5aa873";
 const KELP_WIDTH_DARK = 7; // canvas px (constant, see above)
 const KELP_WIDTH_LIGHT = 2.5; // canvas px (constant, see above)
+
+/** Half-blade of a textured kelp quad, canvas px (the procedural
+ *  blade's 7 px width halved — the art replaces the stroke, not
+ *  the scale). */
+export const KELP_QUAD_HALF_WIDTH = 3.5;
 
 /** Walk a strand's points as a smoothed polyline (quadratic
  *  curves through segment midpoints) — shared by the blade and
@@ -54,15 +64,25 @@ function traceStrand(
 /** Paint every kelp strand (Renderer.render calls this ahead of
  *  the rocks and the fish — the fixed back-to-front z-order: the
  *  kelp sits at the BACK of the scene, in front of nothing but
- *  the water backdrop). */
+ *  the water backdrop). When the frame's art table carries the
+ *  kelp-strip texture (ticket #139) each strand is painted as
+ *  textured quads riding its verlet bones (KELP_SEGMENTS of them
+ *  — the physics is untouched); without the asset the strand
+ *  falls back to the procedural strokes. */
 export function drawKelp(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
   strands: readonly KelpStrand[],
+  textures: Record<string, ArtTexture> = {},
 ): void {
   const sx = width / TANK_WIDTH;
   const sy = height / TANK_HEIGHT;
+  const strip = textures["kelp-strip"];
+  if (strip !== undefined && strip.width > 0 && strip.height > 0) {
+    for (const strand of strands) drawKelpQuads(ctx, strand, sx, sy, strip);
+    return;
+  }
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   for (const strand of strands) {
@@ -77,24 +97,78 @@ export function drawKelp(
   }
 }
 
-/** Paint every placed rock: a smooth rounded river stone. Placement
- *  is anywhere in the tank (placeRock imposes no substrate band), so
- *  the shading sells an ADRIFT stone — NOT a pebble sitting on
- *  gravel: the radial highlight is light from above, and the 0.78x
- *  vertical squash is a deliberate stylised foreshortening, not a
- *  contact shadow. Collision is the FULL rock.r circle (a slightly
- *  generous read on the squashed silhouette — deliberate: the fish
- *  should skirt the stone, and physics never disagrees with the
- *  drawn body in a direction the eye can test). */
+/** One strand as KELP_SEGMENTS textured quads: segment i of the
+ *  verlet chain gets row i of the strip (source rect) mapped onto
+ *  the quad between points i and i+1 — the art RIDES the bones;
+ *  nothing here touches the physics. Each quad is one
+ *  save/translate/rotate/drawImage/restore with local scalars
+ *  only (allocation-free; a collapsed segment paints nothing). */
+function drawKelpQuads(
+  ctx: CanvasRenderingContext2D,
+  strand: KelpStrand,
+  sx: number,
+  sy: number,
+  strip: ArtTexture,
+): void {
+  const pts = strand.points;
+  const srcRow = strip.height / KELP_SEGMENTS; // source strip height per segment
+  for (let i = 0; i + 1 < pts.length; i += 1) {
+    const a = pts[i]!;
+    const b = pts[i + 1]!;
+    const ax = a.x * sx;
+    const ay = a.y * sy;
+    const dx = b.x * sx - ax;
+    const dy = b.y * sy - ay;
+    const len = Math.hypot(dx, dy);
+    if (!(len > 1e-3)) continue; // collapsed segment: no quad to paint
+    ctx.save();
+    ctx.translate(ax + dx / 2, ay + dy / 2);
+    ctx.rotate(Math.atan2(dy, dx));
+    ctx.drawImage(strip, 0, i * srcRow, strip.width, srcRow, -len / 2, -KELP_QUAD_HALF_WIDTH, len, KELP_QUAD_HALF_WIDTH * 2);
+    ctx.restore();
+  }
+}
+
+/** Paint every placed rock. Without the pebble art (headless
+ *  boots, missing asset) a rock is a smooth rounded river stone:
+ *  placement is anywhere in the tank (placeRock imposes no
+ *  substrate band), so the shading sells an ADRIFT stone — NOT a
+ *  pebble sitting on gravel: the radial highlight is light from
+ *  above, and the 0.78x vertical squash is a deliberate
+ *  stylised foreshortening, not a contact shadow. Collision is
+ *  the FULL rock.r circle (a slightly generous read on the
+ *  squashed silhouette — deliberate: the fish should skirt the
+ *  stone, and physics never disagrees with the drawn body in a
+ *  direction the eye can test). With the pebble art (ticket
+ *  #139, alternating the two variants by placement order) the
+ *  sprite replaces the procedural stone at the collision
+ *  circle's FULL WIDTH (2r — the ticket's "render at full r"
+ *  option: the pebble now matches the collision body's horizon
+ *  instead of the old 0.78x-squashed ellipse), keeping its own
+ *  aspect for height — the silhouette thus stays slightly
+ *  SHORTER than the circle's 2r top-to-bottom: the fish skirt a
+ *  circle a hair more generous than the drawn caps, the same
+ *  deliberate generosity as the procedural stone's read. */
 export function drawRocks(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
   rocks: readonly Rock[],
+  textures: Record<string, ArtTexture> = {},
 ): void {
   const sx = width / TANK_WIDTH;
   const sy = height / TANK_HEIGHT;
-  for (const rock of rocks) {
+  for (let i = 0; i < rocks.length; i += 1) {
+    const rock = rocks[i]!;
+    const pebble = i % 2 === 0 ? textures["pebble-1"] : textures["pebble-2"];
+    if (pebble !== undefined && pebble.width > 0 && pebble.height > 0) {
+      const cx = rock.x * sx;
+      const cy = rock.y * sy;
+      const wpx = rock.r * 2 * sx; // the collision circle's full width
+      const hpx = wpx * (pebble.height / pebble.width); // the sprite's own aspect (see doc)
+      ctx.drawImage(pebble, cx - wpx / 2, cy - hpx / 2, wpx, hpx);
+      continue;
+    }
     const cx = rock.x * sx;
     const cy = rock.y * sy;
     const rx = rock.r * sx;

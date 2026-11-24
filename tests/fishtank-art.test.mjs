@@ -57,21 +57,39 @@ const MANIFEST = JSON.parse(readFileSync(path.join(root, "assets", "fishtank", "
 const SLOT = {};
 for (const entry of MANIFEST.entries) SLOT[entry.name] = entry;
 
-// ---------- tiny test harness (house style) ----------
+// ---------- tiny test harness (house style, ordered async-aware) ----------
+// Decoder boots settle their decodes on the microtask queue (the
+// boot's real Promise chain), so checks are awaited IN ORDER by
+// runAll — output stays sequential and deterministic.
 let passed = 0;
 let failed = 0;
+const queue = [];
 function check(name, fn) {
-  try {
-    fn();
-    passed += 1;
-    console.log(`ok   - ${name}`);
-  } catch (err) {
-    failed += 1;
-    console.error(`FAIL - ${name}\n       ${err.message}`);
+  queue.push([name, fn]);
+}
+async function runAll() {
+  for (const [name, fn] of queue) {
+    try {
+      await fn();
+      passed += 1;
+      console.log(`ok   - ${name}`);
+    } catch (err) {
+      failed += 1;
+      console.error(`FAIL - ${name}\n       ${err.message}`);
+    }
   }
+  console.log(`\n${passed} passed, ${failed} failed`);
+  process.exit(failed === 0 ? 0 : 1);
 }
 function assert(cond, msg) {
   if (!cond) throw new Error(msg);
+}
+
+/** Flush the isolate's microtask queue (the vm's Promise settles
+ *  land there): the decode chain finishes and the loop registers
+ *  before the first frame is driven. */
+function flushMicrotasks() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 // ---------- vm stubs with a recording 2d context ----------
@@ -87,7 +105,7 @@ const PLAIN_METHODS = [
 ];
 
 function makeRecordingCtx(state) {
-  const gradient = () => ({ addColorStop: () => state.emit("stop", {}) });
+  const gradient = () => ({ addColorStop: (pos, color) => state.emit("stop", { pos, color }) });
   const target = {
     canvas: state.canvas,
     createLinearGradient: () => gradient(),
@@ -126,23 +144,29 @@ function makeCanvas(state) {
   return canvas;
 }
 
-/** The stubbed decode: the boot hands base64 bytes through
- *  (no Blob in the sandbox, so the raw ArrayBuffer arrives) and
- *  the decoder reads the PNG IHDR dimensions — the fake bitmap
- *  therefore carries the slot's REAL width/height, which the
- *  slot-draw math (gravel band, sprite aspect) depends on. The
- *  thenable settles SYNCHRONOUSLY: it exercises the decode path
- *  without deferring the loop registration to a microtask (this
- *  suite drives frames synchronously). */
+/** The stubbed decode: the boot hands over base64-derived bytes
+ *  — a Blob where the sandbox carries one (Node ≥ 24 vm contexts
+ *  do), else a raw ArrayBuffer — and the decoder reads the PNG
+ *  IHDR dimensions either way, so the fake bitmap carries the
+ *  slot's REAL width/height, which the slot-draw math (gravel
+ *  band, sprite aspect) depends on. A genuine Promise settle
+ *  (the boot's .then/.catch chain needs it) — boot() flushes the
+ *  microtask queue before returning. */
 function makeStubDecoder() {
-  return (buf) => {
-    const b = new Uint8Array(buf);
-    const fake = { fakeBitmap: true, width: b.readUInt32BE(16), height: b.readUInt32BE(20) };
-    return { then: (fn) => fn(fake) };
+  // PNG IHDR: big-endian uint32 widths at byte 16, heights at 20.
+  // Read per-byte: this toolchain's V8 build ships typed arrays
+  // without the byte-access methods (no readUInt32BE).
+  const pngDim = (u8, at) => u8[at] * 16777216 + u8[at + 1] * 65536 + u8[at + 2] * 256 + u8[at + 3];
+  const dims = async (buf) => {
+    // Duck-typed: only a Blob exposes arrayBuffer(); an ArrayBuffer
+    // (and a Uint8Array view) does not — read the bytes either way.
+    const bytes = new Uint8Array(typeof buf.arrayBuffer === "function" ? await buf.arrayBuffer() : buf);
+    return { fakeBitmap: true, width: pngDim(bytes, 16), height: pngDim(bytes, 20) };
   };
+  return (buf) => Promise.resolve().then(() => dims(buf));
 }
 
-function boot(width, height, enabledKinds, withDecoder) {
+async function boot(width, height, enabledKinds, withDecoder = true) {
   const state = {
     events: [],
     enabled: new Set(enabledKinds),
@@ -176,6 +200,7 @@ function boot(width, height, enabledKinds, withDecoder) {
   }
   vm.createContext(sandbox);
   vm.runInContext(gameSource, sandbox);
+  if (withDecoder) await flushMicrotasks(); // decodes settle, loop registers
 
   function frameAt(ms) {
     const cb = rafCb;
@@ -232,16 +257,16 @@ function hasPredator(g) {
 // AC1: every art slot renders — and nothing else draws bitmaps
 // ================================================================
 
-check("headless contract: without a decoder the frame carries zero bitmap draws (the procedural frame is unchanged)", () => {
-  const g = boot(W, H, ["drawImage"]);
+check("headless contract: without a decoder the frame carries zero bitmap draws (the procedural frame is unchanged)", async () => {
+  const g = await boot(W, H, ["drawImage"], false); // no decoder: the headless contract
   g.frame(0);
   g.tick(4, 0);
   assert(g.state.events.length === 0,
     `no drawImage may appear when nothing decoded, recorded ${g.state.events.length}`);
 });
 
-check("every art slot renders every frame: the frame's bitmap draws are exactly 1 background + gravel band + caustics-tile grid + one body sprite per live swimmer + the pooled bubbles", () => {
-  const g = boot(W, H, ["drawImage"]);
+check("every art slot renders every frame: the frame's bitmap draws are exactly 1 background + gravel band + caustics-tile grid + one body sprite per live swimmer + the pooled bubbles", async () => {
+  const g = await boot(W, H, ["drawImage"]);
   const { gravel, caustics } = expectedBitmapDraws();
   assert(gravel > 0 && caustics > 0, "test setup: band/tile counts must be positive");
   for (let f = 0; f < 120; f++) {
@@ -262,8 +287,8 @@ check("every art slot renders every frame: the frame's bitmap draws are exactly 
 // AC1: fish ride their spines with sprites — direction via flip
 // ================================================================
 
-check("direction via flip: exactly the right-travelling swimmers (vx >= 0; the placeholder art faces LEFT) receive one horizontal mirror per frame", () => {
-  const g = boot(W, H, ["scale"]);
+check("direction via flip: exactly the right-travelling swimmers (vx >= 0; the placeholder art faces LEFT) receive one horizontal mirror per frame", async () => {
+  const g = await boot(W, H, ["scale"]);
   let framesSeen = 0;
   let leftSwimFrames = 0;
   for (let f = 0; f < 150; f++) {
@@ -273,9 +298,12 @@ check("direction via flip: exactly the right-travelling swimmers (vx >= 0; the p
       g.frameAt(f * 17);
       const scales = g.state.events.slice(from).filter((ev) => ev.kind === "scale");
       const mirrors = scales.filter((ev) => ev.args[0] === -1 && ev.args[1] === 1);
-      const allScalesAreMirrors = scales.length === mirrors.length;
-      assert(allScalesAreMirrors,
-        `frame ${f}: a scale that is not the direction mirror appeared (${JSON.stringify(scales.find((ev) => ev.args[0] !== -1 || ev.args[1] !== 1))})`);
+      // Every scale in the frame is EITHER the direction mirror
+      // (scale(-1, 1)) OR the sprite's positive uniform draw scale
+      // (scale(k, k), k > 0) — nothing else scales anything.
+      const foreign = scales.find((ev) => !((ev.args[0] === -1 && ev.args[1] === 1) || (ev.args[0] === ev.args[1] && ev.args[0] > 0)));
+      assert(foreign === undefined,
+        `frame ${f}: a scale that is neither the mirror nor a uniform draw scale appeared (${JSON.stringify(foreign)})`);
       const right = swimmers(g).filter(([vx]) => vx >= 0).length + (hasPredator(g) && g.q("FISH_TANK_WORLD.predator.vx >= 0") ? 1 : 0);
       assert(mirrors.length === right,
         `frame ${f}: ${mirrors.length} horizontal mirrors but ${right} swimmers travel right (art faces left — every right-traveller must be mirrored, and nothing else)`);
@@ -291,7 +319,7 @@ check("direction via flip: exactly the right-travelling swimmers (vx >= 0; the p
 // AC1: the hybrid spine — the predator's first visual
 // ================================================================
 
-check("the predator rides its spine: one more 7-point spine path AND one more body sprite than a predator-less world, and both vanish together when the predator is absent", () => {
+check("the predator rides its spine: one more 7-point spine path AND one more body sprite than a predator-less world, and both vanish together when the predator is absent", async () => {
   const spinePathCount = (slice) => {
     const paths = [];
     let current = null;
@@ -301,7 +329,7 @@ check("the predator rides its spine: one more 7-point spine path AND one more bo
     }
     return paths.filter((pts) => pts.length === TETRA_SPINE_SEGMENTS).length;
   };
-  const g = boot(W, H, ["beginPath", "moveTo", "lineTo", "drawImage"]);
+  const g = await boot(W, H, ["beginPath", "moveTo", "lineTo", "drawImage"]);
   assert(hasPredator(g), "test setup: the default world owns a predator");
   const withPred = (() => {
     const from = g.state.events.length;
@@ -331,8 +359,8 @@ check("the predator rides its spine: one more 7-point spine path AND one more bo
 // kelp quads ride the verlet bones
 // ================================================================
 
-check("placed rocks draw pebble sprites at the collision circle's full width (2r) with the sprite's own aspect, alternating the two variants", () => {
-  const g = boot(W, H, ["drawImage"]);
+check("placed rocks draw pebble sprites at the collision circle's full width (2r) with the sprite's own aspect, alternating the two variants", async () => {
+  const g = await boot(W, H, ["drawImage"]);
   const base = (() => {
     const from = g.state.events.length;
     g.frameAt(0);
@@ -354,8 +382,8 @@ check("placed rocks draw pebble sprites at the collision circle's full width (2r
   }
 });
 
-check("placed kelp strands draw exactly KELP_SEGMENTS textured quads each (the verlet bones carry the art; the physics is untouched)", () => {
-  const g = boot(W, H, ["drawImage"]);
+check("placed kelp strands draw exactly KELP_SEGMENTS textured quads each (the verlet bones carry the art; the physics is untouched)", async () => {
+  const g = await boot(W, H, ["drawImage"]);
   const base = (() => {
     const from = g.state.events.length;
     g.frameAt(0);
@@ -376,8 +404,8 @@ check("placed kelp strands draw exactly KELP_SEGMENTS textured quads each (the v
 // pin the tint math
 // ================================================================
 
-check("the art slots keep drawing in DAY, DUSK and NIGHT (phase offset set through the world seam)", () => {
-  const g = boot(W, H, ["drawImage", "stop"]);
+check("the art slots keep drawing in DAY, DUSK and NIGHT (phase offset set through the world seam)", async () => {
+  const g = await boot(W, H, ["drawImage", "stop"]);
   const { gravel, caustics } = expectedBitmapDraws();
   const ambient = (slice) => {
     const stops = [];
@@ -466,6 +494,5 @@ check("bakeTintVariant degrades to null — a bitmap without usable dimensions o
     "no surface facility must return null, not throw");
 });
 
-// ---------- summary ----------
-console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed === 0 ? 0 : 1);
+// ---------- run ----------
+runAll();

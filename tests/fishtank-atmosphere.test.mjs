@@ -105,21 +105,39 @@ for (const entry of MANIFEST.entries) SLOT[entry.name] = entry;
  *  count) is the ground truth in every audit below. */
 const FRAME_MS = 17;
 
-// ---------- tiny test harness (house style) ----------
+// ---------- tiny test harness (house style, ordered async-aware) ----------
+// Decoder boots settle their decodes on the microtask queue (the
+// boot's real Promise chain), so checks are awaited IN ORDER by
+// runAll — output stays sequential and deterministic.
 let passed = 0;
 let failed = 0;
+const queue = [];
 function check(name, fn) {
-  try {
-    fn();
-    passed += 1;
-    console.log(`ok   - ${name}`);
-  } catch (err) {
-    failed += 1;
-    console.error(`FAIL - ${name}\n       ${err.message}`);
+  queue.push([name, fn]);
+}
+async function runAll() {
+  for (const [name, fn] of queue) {
+    try {
+      await fn();
+      passed += 1;
+      console.log(`ok   - ${name}`);
+    } catch (err) {
+      failed += 1;
+      console.error(`FAIL - ${name}\n       ${err.message}`);
+    }
   }
+  console.log(`\n${passed} passed, ${failed} failed`);
+  process.exit(failed === 0 ? 0 : 1);
 }
 function assert(cond, msg) {
   if (!cond) throw new Error(msg);
+}
+
+/** Flush the isolate's microtask queue (the vm's Promise settles
+ *  land there): the decode chain finishes and the loop registers
+ *  before the first frame is driven. */
+function flushMicrotasks() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 // ---------- vm stubs with a recording 2d context ----------
@@ -184,7 +202,7 @@ function makeCanvas(state) {
 
 // Boot the REAL bundled script from the committed fishtank.html,
 // enabling the named event kinds on the recording context.
-function boot(width, height, enabledKinds) {
+async function boot(width, height, enabledKinds) {
   const state = {
     events: [],
     enabled: new Set(enabledKinds),
@@ -213,18 +231,24 @@ function boot(width, height, enabledKinds) {
     document: { getElementById: (id) => (id === "game" ? canvas : null) },
     // Ticket #139: the art path runs in this suite — the stubbed
     // decode reads the slot's REAL dimensions from the PNG IHDR
-    // (the boot hands over raw bytes; there is no Blob in the
-    // sandbox) and settles SYNCHRONOUSLY, so the rAF loop is
-    // registered by the time the first frame is driven.
+    // (big-endian uint32 widths at byte 16, heights at 20, read
+    // per-byte: this toolchain's V8 build has no typed-array
+    // byte-access methods). The boot hands over a Blob where the
+    // sandbox carries one (Node ≥ 24 vm contexts do), else a raw
+    // ArrayBuffer — the stub reads the bytes either way (only a
+    // Blob exposes arrayBuffer()). Settles as a real Promise;
+    // boot() flushes the microtask queue before returning, so the
+    // loop is registered by the time the first frame is driven.
     atob: (s) => Buffer.from(s, "base64").toString("binary"),
-    createImageBitmap: (buf) => {
-      const b = new Uint8Array(buf);
-      const fake = { fakeBitmap: true, width: b.readUInt32BE(16), height: b.readUInt32BE(20) };
-      return { then: (fn) => fn(fake) };
+    createImageBitmap: async (buf) => {
+      const bytes = new Uint8Array(typeof buf.arrayBuffer === "function" ? await buf.arrayBuffer() : buf);
+      const dim = (at) => bytes[at] * 16777216 + bytes[at + 1] * 65536 + bytes[at + 2] * 256 + bytes[at + 3];
+      return { fakeBitmap: true, width: dim(16), height: dim(20) };
     },
   };
   vm.createContext(sandbox);
   vm.runInContext(gameSource, sandbox);
+  await flushMicrotasks(); // decodes settle, the loop registers
 
   function frameAt(ms) {
     const cb = rafCb;
@@ -282,7 +306,7 @@ function paletteName(surface, depth) {
 // LIGHT_DUSK, LIGHT_NIGHT) in order, each holding its named
 // duration of SIM TIME (+/- 1 step)
 // ================================================================
-check("AC1: over one full cycle the ambient walks LIGHT_DAY -> LIGHT_DUSK -> LIGHT_NIGHT in order, each phase held for its named sim-time duration (+/- 1 step)", () => {
+check("AC1: over one full cycle the ambient walks LIGHT_DAY -> LIGHT_DUSK -> LIGHT_NIGHT in order, each phase held for its named sim-time duration (+/- 1 step)", async () => {
   for (const [label, duration] of [
     ["DAY", DAY_DURATION], ["DUSK", DUSK_DURATION], ["NIGHT", NIGHT_DURATION],
   ]) {
@@ -297,7 +321,7 @@ check("AC1: over one full cycle the ambient walks LIGHT_DAY -> LIGHT_DUSK -> LIG
   // recorded ambient must equal the palette holding at the world
   // clock it rendered at, and each phase must begin within one step
   // of its named sim-time boundary.
-  const g = boot(640, 360, ["stop"]);
+  const g = await boot(640, 360, ["stop"]);
   const rows = []; // { t, name } per rendered frame
   const record = (fromIdx) => {
     const [surface, depth] = ambientPair(g.state, fromIdx);
@@ -363,8 +387,8 @@ check("AC1: over one full cycle the ambient walks LIGHT_DAY -> LIGHT_DUSK -> LIG
     `the wrap to LIGHT_DAY must land at t = ${CYCLE_DURATION}s (+/- 1 step), first post-lap DAY at t = ${firstDayAfterLap.t}s`);
 });
 
-check("AC1: pausing the sim (zero steps) freezes the lighting phase and its ambient fills", () => {
-  const g = boot(640, 360, ["stop"]);
+check("AC1: pausing the sim (zero steps) freezes the lighting phase and its ambient fills", async () => {
+  const g = await boot(640, 360, ["stop"]);
   g.frameAt(0);
   const intoDuskSteps = Math.round((DAY_DURATION + DUSK_DURATION / 2) / FIXED_DT); // ~ t = 52.5 s
   g.tick(intoDuskSteps - 1, 0);
@@ -434,9 +458,9 @@ function shaftTranslate(slice, k) {
   return place.args[0]; // translate(x, y)
 }
 
-check("AC2: every frame issues the caustic shaft gradient draws, each placed by its own translate", () => {
+check("AC2: every frame issues the caustic shaft gradient draws, each placed by its own translate", async () => {
   assert(CAUSTIC_SHAFTS >= 2, `test setup: expected several shafts, got ${CAUSTIC_SHAFTS}`);
-  const g = boot(800, 600, ["gradient", "stop", "translate"]);
+  const g = await boot(800, 600, ["gradient", "stop", "translate"]);
   g.marks = [0];
   g.frameAt(0);
   g.marks.push(g.state.events.length);
@@ -462,8 +486,8 @@ check("AC2: every frame issues the caustic shaft gradient draws, each placed by 
   }
 });
 
-check("AC2 (review should-fix): the sawtooth sweep wrap is masked — a shaft at the wrap paints at zero alpha, the fade only attenuates, and mid-sweep the shaft reaches its caustic base alpha", () => {
-  const g = boot(800, 600, ["gradient", "stop"]);
+check("AC2 (review should-fix): the sawtooth sweep wrap is masked — a shaft at the wrap paints at zero alpha, the fade only attenuates, and mid-sweep the shaft reaches its caustic base alpha", async () => {
+  const g = await boot(800, 600, ["gradient", "stop"]);
   const parseAlpha = (color) => Number(color.slice(color.lastIndexOf(", ") + 2, -1));
   const firstShaftStop = (slice, k) => {
     const grads = [];
@@ -507,8 +531,8 @@ check("AC2 (review should-fix): the sawtooth sweep wrap is masked — a shaft at
     `shaft 0 peaked at alpha ${peak} < caustic base ${LIGHT_DAY.causticBaseAlpha} — the fade never fully reopened mid-sweep`);
 });
 
-check("AC2: the shaft phase advances proportionally to sim time — a 2 x FIXED_DT gap advances exactly twice one step's increment", () => {
-  const g = boot(800, 600, ["gradient", "translate"]);
+check("AC2: the shaft phase advances proportionally to sim time — a 2 x FIXED_DT gap advances exactly twice one step's increment", async () => {
+  const g = await boot(800, 600, ["gradient", "translate"]);
   const EPS = 1e-9;
   const drive = () => {
     const from = g.state.events.length;
@@ -555,8 +579,8 @@ check("AC2: the shaft phase advances proportionally to sim time — a 2 x FIXED_
     `two frames 2 x FIXED_DT apart must advance the phase by exactly twice one step's increment (2 x ${oneStep}px = ${2 * oneStep}px, recorded ${twoStep}px)`);
 });
 
-check("AC2: pausing the sim freezes the shaft phase (the sweep is sim-time driven, not wall-clock driven)", () => {
-  const g = boot(800, 600, ["gradient", "translate"]);
+check("AC2: pausing the sim freezes the shaft phase (the sweep is sim-time driven, not wall-clock driven)", async () => {
+  const g = await boot(800, 600, ["gradient", "translate"]);
   g.frameAt(0);
   g.tick(5, 0);
   const from = g.state.events.length;
@@ -587,10 +611,10 @@ check("AC2: pausing the sim freezes the shaft phase (the sweep is sim-time drive
 // to sprites; the geometric invariant is unchanged)
 // ================================================================
 
-check("AC3: the bubble pool recycles without spawning — every one of 1001 frames releases exactly BUBBLE_POOL_SIZE bubble sprites with stable per-slot size", () => {
+check("AC3: the bubble pool recycles without spawning — every one of 1001 frames releases exactly BUBBLE_POOL_SIZE bubble sprites with stable per-slot size", async () => {
   assert(Number.isInteger(BUBBLE_POOL_SIZE) && BUBBLE_POOL_SIZE > 0,
     `BUBBLE_POOL_SIZE must be a named positive integer, got ${BUBBLE_POOL_SIZE}`);
-  const g = boot(800, 600, ["drawImage"]);
+  const g = await boot(800, 600, ["drawImage"]);
   const widths = new Array(BUBBLE_POOL_SIZE).fill(null);
   for (let f = 0; f <= 1000; f++) {
     const from = g.state.events.length;
@@ -619,9 +643,9 @@ check("AC3: the bubble pool recycles without spawning — every one of 1001 fram
   }
 });
 
-check("AC3: rising bubbles wobble sinusoidally in x — >= 1 full wobble period per rise, amplitude within BUBBLE_WOBBLE_AMP (recorded sprite centers)", () => {
+check("AC3: rising bubbles wobble sinusoidally in x — >= 1 full wobble period per rise, amplitude within BUBBLE_WOBBLE_AMP (recorded sprite centers)", async () => {
   const H = 600;
-  const g = boot(800, H, ["drawImage"]);
+  const g = await boot(800, H, ["drawImage"]);
   const FRAMES = 2000; // ~34 s of sim: every pool slot completes >= 2 full rises
   const lanes = new Array(BUBBLE_POOL_SIZE).fill(null).map(() => []);
   for (let f = 0; f < FRAMES; f++) {
@@ -713,8 +737,8 @@ const CAUSTICS_ROWS = Math.floor(VIEW_H / CAUSTICS_TILE_CELL) + 2;
 const CAUSTICS_COLS = Math.floor(VIEW_W / CAUSTICS_TILE_CELL) + 2;
 const CAUSTICS_DRAWS = CAUSTICS_ROWS * CAUSTICS_COLS;
 
-check("AC4: every frame's bitmap draws are exactly the documented art slots — 1 background + gravel band + caustics-tile grid + one body sprite per live swimmer + the pooled bubbles (nothing missing, nothing extra)", () => {
-  const g = boot(VIEW_W, VIEW_H, ["drawImage"]);
+check("AC4: every frame's bitmap draws are exactly the documented art slots — 1 background + gravel band + caustics-tile grid + one body sprite per live swimmer + the pooled bubbles (nothing missing, nothing extra)", async () => {
+  const g = await boot(VIEW_W, VIEW_H, ["drawImage"]);
   const FRAMES = 120;
   for (let f = 0; f < FRAMES; f++) {
     const from = g.state.events.length;
@@ -728,10 +752,10 @@ check("AC4: every frame's bitmap draws are exactly the documented art slots — 
   }
 });
 
-check("AC4: the caustics-tile grid is seamless-animated — its scroll phase advances PROPORTIONALLY TO SIM TIME (a 2 x FIXED_DT gap advances exactly twice one step's increment), recorded from the tile positions", () => {
+check("AC4: the caustics-tile grid is seamless-animated — its scroll phase advances PROPORTIONALLY TO SIM TIME (a 2 x FIXED_DT gap advances exactly twice one step's increment), recorded from the tile positions", async () => {
   assert(CAUSTICS_TILE_DRIFT > 0, "test setup: the tile must scroll");
   const EPS = 1e-9;
-  const g = boot(VIEW_W, VIEW_H, ["drawImage"]);
+  const g = await boot(VIEW_W, VIEW_H, ["drawImage"]);
   // Tile (1, 0) — the second column of the grid — sits at
   // CAUSTICS_TILE_CELL - offset(t); the recorded x is the phase.
   const tileX = (slice) => slice.filter((ev) => ev.kind === "drawImage")
@@ -759,7 +783,7 @@ check("AC4: the caustics-tile grid is seamless-animated — its scroll phase adv
   }
 });
 
-check("AC4: gravel and top-decor parallax layers render every frame with their named draw counts, and the near layer drifts faster than the far layer", () => {
+check("AC4: gravel and top-decor parallax layers render every frame with their named draw counts, and the near layer drifts faster than the far layer", async () => {
   assert(Number.isInteger(SUBSTRATE_GRAVEL_COUNT) && SUBSTRATE_GRAVEL_COUNT > 0, "gravel count must be a named positive constant");
   assert(
     SUBSTRATE_DECOR_ROCKS + SUBSTRATE_KELP_TUFTS >= 2 && SUBSTRATE_GRAVEL_COUNT >= 2,
@@ -767,7 +791,7 @@ check("AC4: gravel and top-decor parallax layers render every frame with their n
   );
   assert(SUBSTRATE_NEAR_DRIFT > SUBSTRATE_FAR_DRIFT > 0,
     `parallax requires the NEAR layer to drift faster (near ${SUBSTRATE_NEAR_DRIFT} <= far ${SUBSTRATE_FAR_DRIFT})`);
-  const g = boot(800, 600, ["translate", "ellipse", "beginPath", "fill", "stroke"]);
+  const g = await boot(800, 600, ["translate", "ellipse", "beginPath", "fill", "stroke"]);
   const FRAMES = 120;
   const frames = [];
   for (let f = 0; f < FRAMES; f++) {
@@ -802,7 +826,7 @@ check("AC4: gravel and top-decor parallax layers render every frame with their n
   }
   // Parallax rates: audit the drifts on a fresh boot so the sim-
   // time bookkeeping stays local.
-  const h = boot(800, 600, ["translate"]);
+  const h = await boot(800, 600, ["translate"]);
   const drift = [];
   const collect = (fromIdx) => {
     const pair = h.state.events.slice(fromIdx).filter((ev) => ev.kind === "translate");
@@ -832,6 +856,5 @@ check("AC4: gravel and top-decor parallax layers render every frame with their n
   }
 });
 
-// ---------- summary ----------
-console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed === 0 ? 0 : 1);
+// ---------- run ----------
+runAll();
