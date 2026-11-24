@@ -2793,7 +2793,7 @@ function bootAssets(onReady) {
 // drawImage over a precomputed table — zero per-frame allocation, the
 // 60 fps rule holds.
 var BRICK_SKIN_NAMES = ["brick-skin-a", "brick-skin-b"]; // per tier: multi-hit A/B only
-var BRICK_SKIN_ALPHA = 0.5;           // full-hp texture opacity; fades with wear
+var BRICK_SKIN_ALPHA = 0.5;           // peak texture opacity; opacity grows with damage taken, zero at full hp
 // Sheet frame per capsule kind: E=expand, B=blast, S=sticky, U=invuln,
 // M=multiplier, X=extra; life and multiball keep the bare themed fill.
 var CAPSULE_ICON_FRAMES = [0, 5, 2, -1, 4, 3, -1, 1];
@@ -2802,6 +2802,7 @@ var BALL_TRAIL_LAG = 0.025;           // simulated seconds of travel per ghost s
 var BALL_TRAIL_LENGTH = 3;
 var BALL_TRAIL_SIZES = [14, 11, 8];   // ghost diameters, canvas px
 var BALL_TRAIL_ALPHAS = [0.30, 0.16, 0.08];
+var TRAIL_MIN_SPEED_PX = 1;           // canvas px/s floor; below it the ghosts pile onto the ball
 
 // Debris (ticket #138): a brick kill bursts a handful of shards from a
 // FIXED pool — cached debris bitmaps drifting on sim time, each
@@ -2983,12 +2984,15 @@ function drawBricks() {
     ctx.fillRect(b.x, b.y, b.w, b.h);
     var dmg = tier.hp - b.hp;
     // Material skin (ticket #138): the multi-hit tiers A/B overlay
-    // their cached texture at an opacity proportional to REMAINING
-    // hp — each hit fades the material, exposes a deeper wear ramp
-    // AND adds a crack line, so every stage reads at a glance. Tier
-    // C/fixed stay bare themed fills (no placeholder texture for
-    // them); the theme gate keeps flat-palette themes procedural.
-    if (ART_ON && b.tier < 2 && tier.hp > 0) {
+    // their cached texture at an opacity proportional to hp LOST —
+    // opacity grows with damage taken, zero at full hp — so each hit
+    // exposes a deeper wear ramp AND adds a crack line, and every
+    // stage reads at a glance. The guard skips the draw at full hp:
+    // an alpha-0 drawImage is an invisible per-frame GPU fill for
+    // nothing. Tier C/fixed stay bare themed fills (no placeholder
+    // texture for them); the theme gate keeps flat-palette themes
+    // procedural.
+    if (ART_ON && dmg > 0 && b.tier < 2 && tier.hp > 0) {
       var skin = ASSETS[BRICK_SKIN_NAMES[b.tier]];
       if (skin) {
         ctx.globalAlpha = BRICK_SKIN_ALPHA * (tier.hp - b.hp) / tier.hp;
@@ -3119,7 +3123,7 @@ function drawBalls() {
     var speed = 0;
     if (trail) {
       speed = Math.hypot(b.vx, b.vy);
-      if (speed > 1) {
+      if (speed > TRAIL_MIN_SPEED_PX) {
         var nx = b.vx / speed;
         var ny = b.vy / speed;
         for (var g = 0; g < BALL_TRAIL_LENGTH; g += 1) {
