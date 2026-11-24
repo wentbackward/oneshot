@@ -3997,3 +3997,44 @@ stays synthesized Web Audio everywhere. The contract:
   triggers this. Alternative considered: fall back to EOF — rejected because
   an unterminated last line signals a mangled file whose structure no longer
   matches what the block assumes, so guessing is worse than refusing.
+
+## 2026-11-23 — Ticket #138: placeholder art slots — where the pixels went
+
+- **Art is theme-gated (classic only): a per-theme `art` flag feeds one
+  `ART_ON` mirror written by `applyTheme()`**, so the classic theme draws the
+  cached placeholder bitmaps (bg, A/B brick skins, paddle, ball/trail, power-up
+  icons, debris) and neon/minimal keep their flat procedural palettes. Reason:
+  the placeholder set is tuned to the classic palette, and fixed-colour bitmaps
+  would fight the themed palettes — it was actively hurting legibility (the
+  dark bg bitmap painted over the *minimal* light arena, nearly burying its
+  dark-grey bricks). Alternatives: tint bitmaps per theme at theme-change
+  (offscreen pass + per-theme caches — complexity a placeholder that gets
+  replaced in full will never earn), or ship per-theme placeholder sets
+  (three asset sets to source/review for stand-ins).
+- **Power-up icon mapping: the 6-frame sheet covers six of the eight kinds —
+  E→expand, B→blast, S→sticky, U→invulnerable ("unbreakable"),
+  M→multiplier, X→extra; LIFE and MULTIBALL keep the bare themed fill**
+  (`CAPSULE_ICON_FRAMES`, `-1` = no frame). Reason: the lettered placeholders
+  are the only glyph identity available, and inventing letters the sheet does
+  not paint would be fiction. The capsule colour stays the legend's anchor, so
+  an un-lettered capsule is still identifiable. Alternative: extend the sheet
+  to 8 frames — changes the #137 asset golden (generator + integrity + embed)
+  for two icons final art will replace anyway.
+- **Debris: a kill bursts 4 shards from a fixed 32-slot pool**
+  (deterministic per-kill scramble for angle/speed — NOT the `random` hook, so
+  pinned-determinism suites see reproducible bursts; round-robin cursor means
+  a kill flood saturates the pool, never grows it; shards expire after
+  0.5 s sim time and a fresh run drains the pool). Purely decorative: no
+  collision, no score, no behaviour coupling. Alternative: no burst at all —
+  rejected because the ticket names the debris slot as one that must render.
+- **Ball trail: three cached ghosts at fixed FRACTIONS of the ball's own
+  speed** (0.025 s of travel per step) rather than a recorded position history:
+  zero extra state or allocation, the wake lengthens with speed (it sells
+  pace, which the ticket asks the arena to preserve), and a parked serve
+  (zero velocity) naturally wears none. Alternative: a ring buffer of past
+  positions per ball — more faithful motion blur, but pooled-array machinery
+  for a placeholder.
+- **Arena background stays the single 960×600 stretch** (vertical-only
+  placeholder pattern) for both stage aspects; the alleyway portrait stretch
+  is unchanged behaviour from #137. Final art must keep the vertical-only
+  pattern or ship a portrait variant (runbook).
