@@ -23,7 +23,8 @@
 //   AC2 theme gate:     neon drops every slot to the procedural paint,
 //                       classic restores the bitmaps (no stale pointers)
 //   AC1/AC2 debris:     a kill bursts pooled shard sprites that expire,
-//                       the pool never grows, and a fresh run drains it
+//                       the pool never grows, and every board spawn
+//                       drains it
 //   AC2 boot-only:      60 frames of live play add ZERO re-decodes
 //
 // No network. Hermetic: node + vm only.
@@ -84,14 +85,14 @@ function makeEl() {
   return el;
 }
 function bootArt() {
-  const events = []; // { t, args, alpha, style }
-  const state = { fillStyle: "", strokeStyle: "", globalAlpha: 1 };
+  const events = []; // { t, args, alpha, style, stroke, lw }
+  const state = { fillStyle: "", strokeStyle: "", lineWidth: 1, globalAlpha: 1 };
   const recorded = new Set(["drawImage", "fillRect", "stroke"]);
   const ctx = new Proxy({}, {
     get(_t, prop) {
       if (typeof prop === "symbol") return undefined;
       if (recorded.has(prop)) {
-        return (...args) => events.push({ t: prop, args, alpha: state.globalAlpha, style: state.fillStyle });
+        return (...args) => events.push({ t: prop, args, alpha: state.globalAlpha, style: state.fillStyle, stroke: state.strokeStyle, lw: state.lineWidth });
       }
       return () => {};
     },
@@ -205,6 +206,12 @@ await check("AC1/AC3: a 3-hp brick renders THREE distinct damage states (fill st
   g.q("startGame()");
   const idx = g.q("bricks.findIndex((b) => b.active && b.tier === 0)");
   assert(idx >= 0, "the board must carry an active tier-A brick");
+  // Cracks are counted by their own ink — the tier's deepest wear
+  // shade stroked at CRACK_LINE_W — never by subtracting a assumed
+  // number of boundary strokes (a third wall stroke must not flip
+  // this test, nor mask a missing crack).
+  const crackW = g.q("CRACK_LINE_W");
+  const crackInk = g.q("BRICK_TIERS[0].ramp[BRICK_TIERS[0].hp - 1]");
   const rect = g.q(`[bricks[${idx}].x, bricks[${idx}].y]`);
   const samples = [];
   for (let d = 0; d < 3; d += 1) {
@@ -213,8 +220,8 @@ await check("AC1/AC3: a 3-hp brick renders THREE distinct damage states (fill st
     const frame = g.events;
     const skin = withBitmap(frame, "brick-skin-a").filter((ev) => ev.args[1] === rect[0] && ev.args[2] === rect[1]);
     const fill = frame.find((ev) => ev.t === "fillRect" && ev.args[0] === rect[0] && ev.args[1] === rect[1]);
-    const strokes = frame.filter((ev) => ev.t === "stroke").length;
-    samples.push({ d, alphas: skin.map((s) => s.alpha), fillStyle: fill?.style, cracks: strokes - 2 });
+    const cracks = frame.filter((ev) => ev.t === "stroke" && ev.lw === crackW && ev.stroke === crackInk).length;
+    samples.push({ d, alphas: skin.map((s) => s.alpha), fillStyle: fill?.style, cracks });
   }
   for (let i = 0; i < 3; i += 1) {
     for (let j = i + 1; j < 3; j += 1) {
@@ -334,7 +341,7 @@ await check("AC2: switching to neon drops EVERY slot to the procedural paint, an
 // ================================================================
 // AC1/AC2 — debris burst
 // ================================================================
-await check("AC1/AC2: a destroyed brick bursts pooled debris sprites that expire, the pool can never grow, and a fresh run drains it", async () => {
+await check("AC1/AC2: a destroyed brick bursts pooled debris sprites that expire, the pool can never grow, and every board spawn drains it", async () => {
   const g = bootArt();
   await g.ready();
   g.q("startGame()");
@@ -358,6 +365,15 @@ await check("AC1/AC2: a destroyed brick bursts pooled debris sprites that expire
 
   g.q("beginRun()");
   assert(g.q("debris.filter((d) => d.active).length") === 0, "a fresh run must drain the debris pool");
+
+  // Every BOARD transition is shard-free, not just a fresh run: the
+  // killing blow on the last brick bursts shards the same frame the
+  // next board spawns, so spawnLevel() itself must drain the pool.
+  const j = g.q("bricks.findIndex((b) => b.active && !b.unbreakable)");
+  g.q(`destroyBrick(${j})`);
+  assert(g.q("debris.filter((d) => d.active).length") > 0, "precondition: the kill must have burst live shards");
+  g.q("spawnLevel()");
+  assert(g.q("debris.filter((d) => d.active).length") === 0, "a freshly spawned board must leave no live shard behind");
 });
 
 // ----------------------------------------------------------------

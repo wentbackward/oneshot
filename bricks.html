@@ -2060,6 +2060,12 @@ function layoutBricks() {
 // arms the unbreakable fixed tier. bricksLeft counts breakable
 // bricks only, so fixed bricks never block a win.
 function spawnLevel() {
+  // Every board transition is shard-free: the killing blow on the
+  // LAST brick can burst debris the same frame the next board spawns
+  // (advanceLevel runs straight through), so the SPAWN — not just
+  // the run reset — drains the decorative pool. No shard ever paints
+  // over a fresh board.
+  for (var d = 0; d < debris.length; d += 1) debris[d].active = false;
   var table = runMode === "alleyway" ? ALLEYWAY_LEVEL_PATTERNS : LEVEL_PATTERNS;
   var pattern = table[(level - 1) % table.length];
   var left = 0;
@@ -2556,8 +2562,8 @@ function beginRun() {
   score = 0;
   level = 1;
   lives = PLAYER_LIVES;
-  // Fresh runs start shard-free: nothing decorative carries over.
-  for (var d = 0; d < debris.length; d += 1) debris[d].active = false;
+  // Fresh runs start shard-free: the spawnLevel() below drains the
+  // decorative debris pool on every board transition.
   var preset = DIFFICULTY[selectedDifficulty];
   // The run's ball-speed percent scales the preset's serve and the
   // growth ceiling by the same factor (curve shape preserved); the
