@@ -14,6 +14,9 @@
 //   AC1 live classic:   skin / paddle / ball bitmaps render in play
 //   AC1 second mode:    the same slots render in an EXCITING run
 //   AC1 damage states:  a 3-hp brick renders THREE distinct states
+//                       (fill stage, skin opacity growing with
+//                       damage, one crack per hit); full hp emits no
+//                       invisible skin fill
 //   AC3 tier material:  the four tiers read as distinct fills, skins
 //                       only on the multi-hit A/B tiers
 //   AC1/AC3 power-ups:  each icon kind overlays a DISTINCT sheet frame
@@ -85,16 +88,44 @@ function makeEl() {
   return el;
 }
 function bootArt() {
-  const events = []; // { t, args, alpha, style, stroke, lw }
+  const events = []; // { t, args, alpha, style, stroke, lw, bbox }
   const state = { fillStyle: "", strokeStyle: "", lineWidth: 1, globalAlpha: 1 };
   const recorded = new Set(["drawImage", "fillRect", "stroke"]);
+  // Path geometry of the current beginPath…stroke cycle, as [x, y]
+  // pairs. Every recorded `stroke` event carries the path's bounding
+  // box, so a test can attribute a stroke to the brick face it lies
+  // INSIDE by position — not by colour or width alone (walls and
+  // the danger line share CRACK_LINE_W).
+  const pathPts = [];
+  const point = (x, y) => pathPts.push(x, y);
   const ctx = new Proxy({}, {
     get(_t, prop) {
       if (typeof prop === "symbol") return undefined;
       if (recorded.has(prop)) {
-        return (...args) => events.push({ t: prop, args, alpha: state.globalAlpha, style: state.fillStyle, stroke: state.strokeStyle, lw: state.lineWidth });
+        return (...args) => {
+          let bbox = null;
+          if (prop === "stroke" && pathPts.length) {
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            for (let i = 0; i < pathPts.length; i += 2) {
+              if (pathPts[i] < minX) minX = pathPts[i];
+              if (pathPts[i] > maxX) maxX = pathPts[i];
+              if (pathPts[i + 1] < minY) minY = pathPts[i + 1];
+              if (pathPts[i + 1] > maxY) maxY = pathPts[i + 1];
+            }
+            bbox = { minX, minY, maxX, maxY };
+          }
+          events.push({ t: prop, args, alpha: state.globalAlpha, style: state.fillStyle, stroke: state.strokeStyle, lw: state.lineWidth, bbox });
+        };
       }
-      return () => {};
+      switch (prop) {
+        case "beginPath": return () => { pathPts.length = 0; };
+        case "moveTo":
+        case "lineTo": return (x, y) => point(x, y);
+        case "rect": return (x, y, w, h) => { point(x, y); point(x + w, y); point(x + w, y + h); point(x, y + h); };
+        case "arc": return (x, y, r) => { point(x - r, y - r); point(x + r, y + r); };
+        case "ellipse": return (x, y, rx, ry) => { point(x - rx, y - ry); point(x + rx, y + ry); };
+        default: return () => {};
+      }
     },
     set(_t, prop, value) { state[prop] = value; return true; },
   });
@@ -174,9 +205,20 @@ await check("AC1/AC2: live classic play draws the brick-skin, paddle and ball sl
   await g.ready();
   assert(g.decodes.length === PAYLOAD_NAMES, `boot must decode every slot exactly once (${g.decodes.length}/${PAYLOAD_NAMES})`);
   g.q("startGame()");
-  const f = g.frame();
-  assert(withBitmap(f, "brick-skin-a").length > 0, "a tier-A brick must wear its material skin (level 1 opens with an A row)");
-  assert(withBitmap(f, "brick-skin-b").length > 0, "a tier-B brick must wear its material skin");
+  // A pristine board: the skin's opacity is zero at full hp, so no
+  // invisible per-frame fill may spend GPU time on undamaged bricks.
+  const pristine = g.frame();
+  assert(withBitmap(pristine, "brick-skin-a").length === 0, "full-hp bricks must not emit a zero-alpha skin fill");
+  assert(withBitmap(pristine, "brick-skin-b").length === 0, "full-hp bricks must not emit a zero-alpha skin fill");
+  // First damage exposes the material skin on each multi-hit tier.
+  const ai = g.q("bricks.findIndex((b) => b.active && b.tier === 0)");
+  g.q(`bricks[${ai}].hp -= 1;`);
+  let f = g.frame();
+  assert(withBitmap(f, "brick-skin-a").length > 0, "a damaged tier-A brick must wear its material skin");
+  const bi = g.q("bricks.findIndex((b) => b.active && b.tier === 1)");
+  g.q(`bricks[${bi}].hp -= 1;`);
+  f = g.frame();
+  assert(withBitmap(f, "brick-skin-b").length > 0, "a damaged tier-B brick must wear its material skin");
   assert(withBitmap(f, "paddle").length === 1, "the paddle must draw its cached skin exactly once per frame");
   assert(withBitmap(f, "ball").length >= 1, "the parked serve ball must draw its cached sprite");
   for (let i = 0; i < 60; i += 1) g.tick();
@@ -191,8 +233,10 @@ await check("AC1: an EXCITING run (second mode) renders the same art slots live"
   await g.ready();
   g.q('selectMode("exciting")');
   g.q("startGame()");
+  const ai = g.q("bricks.findIndex((b) => b.active && b.tier === 0)");
+  g.q(`bricks[${ai}].hp -= 1;`); // the skin is visible from the first damage on
   const f = g.frame();
-  assert(withBitmap(f, "brick-skin-a").length > 0, "exciting play must draw the brick skins");
+  assert(withBitmap(f, "brick-skin-a").length > 0, "exciting play must draw the brick skin on damage");
   assert(withBitmap(f, "paddle").length === 1, "exciting play must draw the paddle skin");
   assert(withBitmap(f, "ball").length >= 1, "exciting play must draw the ball sprite");
 });
@@ -200,37 +244,47 @@ await check("AC1: an EXCITING run (second mode) renders the same art slots live"
 // ================================================================
 // AC1/AC3 — brick damage states
 // ================================================================
-await check("AC1/AC3: a 3-hp brick renders THREE distinct damage states (fill stage, skin fade, one crack per hit)", async () => {
+await check("AC1/AC3: a 3-hp brick renders THREE distinct damage states (fill stage, skin opacity growing with damage, one crack per hit)", async () => {
   const g = bootArt();
   await g.ready();
   g.q("startGame()");
   const idx = g.q("bricks.findIndex((b) => b.active && b.tier === 0)");
   assert(idx >= 0, "the board must carry an active tier-A brick");
-  // Cracks are counted by their own ink — the tier's deepest wear
-  // shade stroked at CRACK_LINE_W — never by subtracting a assumed
-  // number of boundary strokes (a third wall stroke must not flip
-  // this test, nor mask a missing crack).
+  // Cracks are counted on their OWN stroke geometry: the tier's
+  // deepest wear shade, stroked at CRACK_LINE_W, with the path's
+  // bounding box lying WITHIN the brick's face. Walls and the danger
+  // line share that width, so colour + width alone must not
+  // disambiguate, and no assumed number of boundary strokes is
+  // ever subtracted.
   const crackW = g.q("CRACK_LINE_W");
   const crackInk = g.q("BRICK_TIERS[0].ramp[BRICK_TIERS[0].hp - 1]");
-  const rect = g.q(`[bricks[${idx}].x, bricks[${idx}].y]`);
+  const box = g.q(`[bricks[${idx}].x, bricks[${idx}].y, bricks[${idx}].w, bricks[${idx}].h]`);
+  const EPS = 1e-6;
+  const withinBrick = (ev) => !!(ev.bbox &&
+    ev.bbox.minX >= box[0] - EPS && ev.bbox.minY >= box[1] - EPS &&
+    ev.bbox.maxX <= box[0] + box[2] + EPS && ev.bbox.maxY <= box[1] + box[3] + EPS);
   const samples = [];
   for (let d = 0; d < 3; d += 1) {
     g.events.length = 0;
     g.q(`bricks[${idx}].hp = ${3 - d}; draw();`);
     const frame = g.events;
-    const skin = withBitmap(frame, "brick-skin-a").filter((ev) => ev.args[1] === rect[0] && ev.args[2] === rect[1]);
-    const fill = frame.find((ev) => ev.t === "fillRect" && ev.args[0] === rect[0] && ev.args[1] === rect[1]);
-    const cracks = frame.filter((ev) => ev.t === "stroke" && ev.lw === crackW && ev.stroke === crackInk).length;
-    samples.push({ d, alphas: skin.map((s) => s.alpha), fillStyle: fill?.style, cracks });
+    const skin = withBitmap(frame, "brick-skin-a").filter((ev) => ev.args[1] === box[0] && ev.args[2] === box[1]);
+    const fill = frame.find((ev) => ev.t === "fillRect" && ev.args[0] === box[0] && ev.args[1] === box[1]);
+    const cracks = frame.filter((ev) => ev.t === "stroke" && ev.lw === crackW && ev.stroke === crackInk && withinBrick(ev)).length;
+    samples.push({ d, skins: skin.map((s) => s.alpha), fillStyle: fill?.style, cracks });
   }
+  assert(samples[0].skins.length === 0,
+    "a FULL-hp brick must not spend a per-frame invisible (alpha 0) skin fill");
+  assert(samples[1].skins.length === 1 && samples[2].skins.length === 1,
+    "a damaged brick must wear exactly one skin bitmap");
   for (let i = 0; i < 3; i += 1) {
     for (let j = i + 1; j < 3; j += 1) {
       assert(samples[i].fillStyle !== samples[j].fillStyle,
         `stage ${samples[i].d} and ${samples[j].d} must use distinct fill shades (${samples[i].fillStyle})`);
-      assert(Math.abs(samples[i].alphas[0] - samples[j].alphas[0]) > 1e-6,
-        `stage ${samples[i].d} and ${samples[j].d} must fade the skin to distinct opacities`);
     }
   }
+  assert(samples[2].skins[0] > samples[1].skins[0] > 0,
+    `skin opacity must grow with damage taken (zero at full hp), got [${samples[1].skins}/${samples[2].skins}]`);
   assert(JSON.stringify(samples.map((s) => s.cracks)) === JSON.stringify([0, 1, 2]),
     `each hit must add exactly one crack line, got [${samples.map((s) => s.cracks)}]`);
 });
@@ -243,7 +297,7 @@ await check("AC3: the four tiers read as distinct materials — distinct base fi
   await g.ready();
   g.q("startGame()");
   g.q("level = 2; spawnLevel(); draw();"); // level 2 carries all four tiers incl. fixed (X)
-  const f = g.events;
+  const f = g.events.slice(); // pristine full-hp frame (skins: zero-alpha, so absent)
   const fills = [];
   for (let tier = 0; tier < 4; tier += 1) {
     const i = g.q(`bricks.findIndex((b) => b.active && b.tier === ${tier})`);
@@ -252,8 +306,15 @@ await check("AC3: the four tiers read as distinct materials — distinct base fi
     const fill = f.find((ev) => ev.t === "fillRect" && ev.args[0] === rect[0] && ev.args[1] === rect[1]);
     fills.push(fill?.style);
     const skinned = f.filter((ev) => ev.t === "drawImage" && ev.args[0]?.bitmapName?.startsWith("brick-skin") && ev.args[1] === rect[0] && ev.args[2] === rect[1]);
-    if (tier < 2) assert(skinned.length === 1, `tier ${tier} must wear exactly one skin bitmap`);
-    else assert(skinned.length === 0, `tier ${tier} must stay a bare themed fill (no placeholder skin)`);
+    assert(skinned.length === 0, `tier ${tier} at full hp must not emit a zero-alpha skin fill`);
+    if (tier < 2) {
+      // First damage exposes exactly one skin bitmap for that tier.
+      g.q(`bricks[${i}].hp -= 1;`);
+      g.events.length = 0;
+      g.q("draw();");
+      const damaged = g.events.filter((ev) => ev.t === "drawImage" && ev.args[0]?.bitmapName?.startsWith("brick-skin") && ev.args[1] === rect[0] && ev.args[2] === rect[1]);
+      assert(damaged.length === 1, `tier ${tier} must wear exactly one skin bitmap once damaged`);
+    }
   }
   assert(new Set(fills).size === 4, `the four tier fills must be pairwise distinct, got ${fills}`);
 });
