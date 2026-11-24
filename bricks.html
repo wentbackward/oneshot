@@ -888,11 +888,13 @@ var COLOR_DANGER = "#ef5d62";
 // per-frame branches to the draw path.
 var THEME_KEY = "brickbreaker.theme";
 var DEFAULT_THEME = "classic";
+var ART_ON = false;             // active theme carries the placeholder art set (applyTheme rewrites)
 var THEMES = {
   // classic is the legacy look: every mirror references the named
   // module-load constants above, keeping one source of truth (the
   // DIFFICULTY.normal row precedent).
   classic: {
+    art: true,
     css: { bg: "#0b0f14", accent: "#5cf2b0", ink: "#9fb4c7" },
     palette: {
       bg: COLOR_BG,
@@ -905,6 +907,7 @@ var THEMES = {
   },
   // neon: saturated cyan/magenta over a deep violet-black ground.
   neon: {
+    art: false,
     css: { bg: "#0a0118", accent: "#00f0ff", ink: "#8f86c9" },
     palette: {
       bg: "#0a0118",
@@ -917,6 +920,7 @@ var THEMES = {
   },
   // minimal: near-monochrome warm stone over an off-white ground.
   minimal: {
+    art: false,
     css: { bg: "#f2efe9", accent: "#14141a", ink: "#8d877c" },
     palette: {
       bg: "#f2efe9",
@@ -1450,6 +1454,11 @@ function applyThemeCss(css) {
 function applyTheme(name) {
   var row = THEMES[name];
   applyThemeCss(row.css);
+  // Art gate (ticket #138): the placeholder set is tuned to the
+  // classic palette, so only the art-bearing theme draws bitmaps —
+  // the flat-palette skins stay fully procedural (one write-through
+  // flag, no per-frame branches).
+  ART_ON = !!row.art;
   COLOR_BG = row.palette.bg;
   COLOR_PADDLE = row.palette.paddle;
   COLOR_BALL = row.palette.ball;
@@ -2089,8 +2098,11 @@ function spawnLevel() {
 function destroyBrick(index) {
   var b = bricks[index];
   if (!b.active || b.unbreakable) return;
+  var cx = b.x + b.w / 2;   // burst + drop anchor BEFORE the kill
+  var cy = b.y + b.h / 2;
   b.active = false;
   bricksLeft -= 1;
+  burstDebris(cx, cy, index * 977 + score);
   // A kill while the multiplier window is armed is worth MULT_VALUE
   // times the tier's points.
   var pts = BRICK_TIERS[b.tier].points;
@@ -2544,6 +2556,8 @@ function beginRun() {
   score = 0;
   level = 1;
   lives = PLAYER_LIVES;
+  // Fresh runs start shard-free: nothing decorative carries over.
+  for (var d = 0; d < debris.length; d += 1) debris[d].active = false;
   var preset = DIFFICULTY[selectedDifficulty];
   // The run's ball-speed percent scales the preset's serve and the
   // growth ceiling by the same factor (curve shape preserved); the
@@ -2767,6 +2781,89 @@ function bootAssets(onReady) {
   })(ASSET_PAYLOAD_TABLE[i]);
 }
 
+// ---- Placeholder art slots (ticket #138) ----
+// The boot-cached ASSETS table is drawn only while the active theme
+// carries the art set (ART_ON): every slot below is a single cached
+// drawImage over a precomputed table — zero per-frame allocation, the
+// 60 fps rule holds.
+var BRICK_SKIN_NAMES = ["brick-skin-a", "brick-skin-b"]; // per tier: multi-hit A/B only
+var BRICK_SKIN_ALPHA = 0.5;           // full-hp texture opacity; fades with wear
+// Sheet frame per capsule kind: E=expand, B=blast, S=sticky, U=invuln,
+// M=multiplier, X=extra; life and multiball keep the bare themed fill.
+var CAPSULE_ICON_FRAMES = [0, 5, 2, -1, 4, 3, -1, 1];
+var ICON_FRAME_W = 16;                // the power-ups sheet's frame pitch, canvas px
+var BALL_TRAIL_LAG = 0.025;           // simulated seconds of travel per ghost step
+var BALL_TRAIL_LENGTH = 3;
+var BALL_TRAIL_SIZES = [14, 11, 8];   // ghost diameters, canvas px
+var BALL_TRAIL_ALPHAS = [0.30, 0.16, 0.08];
+
+// Debris (ticket #138): a brick kill bursts a handful of shards from a
+// FIXED pool — cached debris bitmaps drifting on sim time, each
+// expiring after DEBRIS_LIFE_S. Spawn angles/speeds come from a
+// deterministic per-kill scramble (NOT the testable `random` hook), so
+// bursts are reproducible under pinned suites, and the round-robin
+// cursor lets a kill flood saturate the pool instead of growing it.
+// Purely decorative: no collision, no score, no behaviour coupling.
+var DEBRIS_POOL_SIZE = 32;
+var DEBRIS_PER_KILL = 4;
+var DEBRIS_LIFE_S = 0.5;
+var DEBRIS_SIZE = 14;                 // shard footprint, canvas px
+var DEBRIS_SPREAD = 160;              // added outward speed range, canvas px/s
+var DEBRIS_SPRITES = ["debris-1", "debris-2"];
+var debris = [];
+(function () {
+  for (var d = 0; d < DEBRIS_POOL_SIZE; d += 1) {
+    debris.push({ active: false, x: 0, y: 0, vx: 0, vy: 0, life: 0, img: 0 });
+  }
+})();
+var debrisCursor = 0;
+// Same multiply-XOR scramble family as the crack points: fixed seed
+// in, reproducible float in [0, 1) out.
+function debrisScramble(seed) {
+  var h = (seed * 2654435761) >>> 0;
+  h = ((h ^ (h >>> 15)) * 2246822519) >>> 0;
+  return ((h >>> 13) & 0xffff) / 0xffff;
+}
+function burstDebris(cx, cy, seed) {
+  if (!ART_ON) return;
+  if (!ASSETS[DEBRIS_SPRITES[0]] && !ASSETS[DEBRIS_SPRITES[1]]) return; // decode lost: no shards
+  for (var s = 0; s < DEBRIS_PER_KILL; s += 1) {
+    var d = debris[debrisCursor];
+    debrisCursor = (debrisCursor + 1) % debris.length;
+    var ang = 2 * Math.PI * debrisScramble(seed + s * 613);
+    var spd = 40 + DEBRIS_SPREAD * debrisScramble(seed + s * 613 + 7);
+    d.active = true;
+    d.x = cx;
+    d.y = cy;
+    d.vx = Math.cos(ang) * spd;
+    d.vy = Math.sin(ang) * spd;
+    d.life = DEBRIS_LIFE_S;
+    d.img = s % 2;
+  }
+}
+function updateDebris(dt) {
+  for (var i = 0; i < debris.length; i += 1) {
+    var d = debris[i];
+    if (!d.active) continue;
+    d.life -= dt;
+    if (d.life <= 0) { d.active = false; continue; }
+    d.x += d.vx * dt;
+    d.y += d.vy * dt;
+  }
+}
+function drawDebris() {
+  if (!ART_ON) return;
+  for (var i = 0; i < debris.length; i += 1) {
+    var d = debris[i];
+    if (!d.active) continue;
+    var spr = ASSETS[DEBRIS_SPRITES[d.img]];
+    if (!spr) continue; // one lost decode loses half the shards, not the frame
+    ctx.globalAlpha = 0.9 * (d.life / DEBRIS_LIFE_S); // fades out over the shard's life
+    ctx.drawImage(spr, d.x - DEBRIS_SIZE / 2, d.y - DEBRIS_SIZE / 2, DEBRIS_SIZE, DEBRIS_SIZE);
+  }
+  ctx.globalAlpha = 1;
+}
+
 // ---- Frame loop ----
 // Per-frame order: resize -> update(dt) -> syncScore -> draw, so a
 // record overtaken inside update persists on the same frame it happens.
@@ -2809,17 +2906,16 @@ function update(dt) {
   updatePaddle(dt);
   updateBalls(dt);
   updatePowerups(dt);
+  updateDebris(dt);
   // Frame end: reset the per-brick damage charges so the next
   // frame's contacts can cost hp again (ticket #42 cap).
   for (var i = 0; i < bricks.length; i += 1) bricks[i].charged = false;
 }
 function draw() {
-  // Arena background: the embedded bitmap (placeholder today,
-  // final art via the sourcing runbook) when a decoder produced
-  // one; the themed flat fill otherwise (headless vm boots).
-  // The placeholder pattern varies only vertically, so the
-  // 960×600 → 480×800 alleyway stretch shows no distortion.
-  var bg = ASSETS.bg;
+  // Arena background (ticket #138): the cached bitmap is drawn only
+  // under the art-bearing theme — the flat-palette themes keep their
+  // themed fill so a fixed-colour placeholder never fights them.
+  var bg = ART_ON ? ASSETS.bg : null;
   if (bg) {
     ctx.drawImage(bg, 0, 0, canvas.width, canvas.height);
   } else {
@@ -2829,9 +2925,12 @@ function draw() {
   if (gameState === "start") return;
   drawBoundary();
   drawBricks();
-  // Outside "playing" the field is frozen: capsules stay pooled but
-  // undrawn, so the game-over screen shows a tidy board.
-  if (gameState === "playing") drawPowerups();
+  // Outside "playing" the field is frozen: capsules and debris stay
+  // pooled but undrawn, so the game-over screen shows a tidy board.
+  if (gameState === "playing") {
+    drawPowerups();
+    drawDebris();
+  }
   drawPaddle();
   drawBalls();
 }
@@ -2877,6 +2976,20 @@ function drawBricks() {
     ctx.fillStyle = tier.ramp[tier.hp - b.hp];
     ctx.fillRect(b.x, b.y, b.w, b.h);
     var dmg = tier.hp - b.hp;
+    // Material skin (ticket #138): the multi-hit tiers A/B overlay
+    // their cached texture at an opacity proportional to REMAINING
+    // hp — each hit fades the material, exposes a deeper wear ramp
+    // AND adds a crack line, so every stage reads at a glance. Tier
+    // C/fixed stay bare themed fills (no placeholder texture for
+    // them); the theme gate keeps flat-palette themes procedural.
+    if (ART_ON && b.tier < 2 && tier.hp > 0) {
+      var skin = ASSETS[BRICK_SKIN_NAMES[b.tier]];
+      if (skin) {
+        ctx.globalAlpha = BRICK_SKIN_ALPHA * (tier.hp - b.hp) / tier.hp;
+        ctx.drawImage(skin, b.x, b.y, b.w, b.h);
+        ctx.globalAlpha = 1;
+      }
+    }
     if (dmg > 0) drawBrickCracks(i, b, tier, dmg);
   }
 }
@@ -2935,16 +3048,36 @@ function drawBrickCracks(index, b, tier, dmg) {
   }
 }
 function drawPowerups() {
+  // Icon sheet (ticket #138): each kind overlays its cached 16px
+  // sheet frame CENTRED on the capsule — the themed fill stays the
+  // legend's colour anchor, the glyph adds at-a-glance identity.
+  // Kinds without a reserved frame keep the bare fill.
+  var sheet = ART_ON ? ASSETS.powerups : null;
   for (var i = 0; i < capsules.length; i += 1) {
     var c = capsules[i];
     if (!c.active) continue;
     ctx.fillStyle = CAPSULE_DRAW_COLORS[c.kind];
     ctx.fillRect(c.x - CAPSULE_W / 2, c.y, CAPSULE_W, CAPSULE_H);
+    var frame = CAPSULE_ICON_FRAMES[c.kind];
+    if (sheet && frame >= 0) {
+      ctx.drawImage(sheet, frame * ICON_FRAME_W, 0, ICON_FRAME_W, ICON_FRAME_W,
+        c.x - ICON_FRAME_W / 2, c.y - 1, ICON_FRAME_W, ICON_FRAME_W);
+    }
   }
 }
 function drawPaddle() {
-  ctx.fillStyle = COLOR_PADDLE;
-  ctx.fillRect(paddle.x - paddleW / 2, paddleTop(), paddleW, PADDLE_HEIGHT);
+  var top = paddleTop();
+  var x = paddle.x - paddleW / 2;
+  // Skin (ticket #138): the cached paddle texture stretched to the
+  // live width (it widens cleanly on expand); the themed fill is the
+  // fallback whenever the art set is gated or a decode failed.
+  var skin = ART_ON ? ASSETS.paddle : null;
+  if (skin) {
+    ctx.drawImage(skin, x, top, paddleW, PADDLE_HEIGHT);
+  } else {
+    ctx.fillStyle = COLOR_PADDLE;
+    ctx.fillRect(x, top, paddleW, PADDLE_HEIGHT);
+  }
 }
 function drawBalls() {
   // EXCITING invulnerability (ticket #75): while the window is live
@@ -2965,13 +3098,41 @@ function drawBalls() {
     }
     ctx.globalAlpha = 1;
   }
-  ctx.fillStyle = invuln ? COLOR_BALL_INVLUN : COLOR_BALL;
+  // Sprite + trail (ticket #138): the cached ball bitmap replaces
+  // the vector circle when the theme carries the art set; an ARMED
+  // invulnerability window keeps the tinted vector core, because the
+  // tint is the state's legible signal. Behind it, three cached
+  // ghosts strung at fixed fractions of the ball's OWN speed (a
+  // faster ball leaves a longer, wider wake — the trail sells
+  // speed), each smaller and fainter; a parked serve wears none.
+  var sprite = ART_ON && !invuln ? ASSETS.ball : null;
+  var trail = ART_ON ? ASSETS["ball-trail"] : null;
   for (var i = 0; i < balls.length; i += 1) {
     var b = balls[i];
     if (!b.active) continue;
-    ctx.beginPath();
-    ctx.arc(b.x, b.y, BALL_RADIUS, 0, 2 * Math.PI);
-    ctx.fill();
+    var speed = 0;
+    if (trail) {
+      speed = Math.hypot(b.vx, b.vy);
+      if (speed > 1) {
+        var nx = b.vx / speed;
+        var ny = b.vy / speed;
+        for (var g = 0; g < BALL_TRAIL_LENGTH; g += 1) {
+          var dist = speed * BALL_TRAIL_LAG * (g + 1);
+          var size = BALL_TRAIL_SIZES[g];
+          ctx.globalAlpha = BALL_TRAIL_ALPHAS[g];
+          ctx.drawImage(trail, b.x - nx * dist - size / 2, b.y - ny * dist - size / 2, size, size);
+        }
+        ctx.globalAlpha = 1;
+      }
+    }
+    if (sprite) {
+      ctx.drawImage(sprite, b.x - BALL_RADIUS, b.y - BALL_RADIUS, BALL_RADIUS * 2, BALL_RADIUS * 2);
+    } else {
+      ctx.fillStyle = invuln ? COLOR_BALL_INVLUN : COLOR_BALL;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, BALL_RADIUS, 0, 2 * Math.PI);
+      ctx.fill();
+    }
   }
 }
 
