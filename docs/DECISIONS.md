@@ -4038,3 +4038,80 @@ stays synthesized Web Audio everywhere. The contract:
   placeholder pattern) for both stage aspects; the alleyway portrait stretch
   is unchanged behaviour from #137. Final art must keep the vertical-only
   pattern or ship a portrait variant (runbook).
+
+## 2026-11-24 — Ticket #139: fishtank art slots + three-phase tinting (render-only)
+
+- **Tinting is a boot-time pixel bake, not a per-frame effect.** The
+  Day/Dusk/Night cycle tints the art (the ticket's default policy: one
+  neutral-palette set, tinted) by pre-baking DUSK and NIGHT as
+  multiplicative per-channel copies of every decoded bitmap before the
+  first frame (`src/render/tinting.ts`); a frame selects the active
+  phase's table with one map lookup — zero per-frame allocation, zero
+  per-frame pixel work. DAY is deliberately the identity pass-through
+  (no bake): noon light adds no colour, so the neutral bitmap IS the
+  day art. Alternatives: per-frame `ctx.filter`/composite passes
+  (per-frame cost and filter-compat risk — rejected against the 60 fps
+  render-hygiene rule), and a single runtime `multiply` composite
+  (a multiply over an ALPHA sprite punches the tint colour into the
+  sprite's transparent corners — the bake's getImageData path never
+  touches the alpha channel, so sprites stay holey).
+- **Degradation is by construction at every step.** A bitmap without
+  usable dimensions, a missing 2d surface (headless boots), or a decode
+  failure each degrade that slot to the neutral bitmap (or, with no
+  decoder at all, to the pre-#137 procedural frame) — never a crash,
+  which is why the vm draw-recording suites see one stable op profile
+  across all three phases and the headless contract (zero bitmap draws
+  without a decoder) is unchanged.
+- **The predator gets its first visual, with a render-owned tail
+  phase.** The sim always owned the apex predator, but the render layer
+  never drew it; this ticket's hybrid spine slot names it, so it is
+  drawn by the SAME spine recipe upscaled to its body (PRD §2 spine
+  reuse) plus its body sprite, in draw order between the school and the
+  pellets. Its undulation phase is RENDER-OWNED (a Renderer scalar
+  advanced by sim-time deltas): the predator's sim state carries no
+  phase and src/sim is frozen by the ticket, and the spine-observer
+  contract forbids inventing sim state. A paused sim freezes it like
+  every other layer. Reason: the alternative (deriving phase from
+  `world.time` directly) would pop whenever the speed changed;
+  integrating sim-time deltas keeps it continuous AND freeze-safe.
+- **Body sprites anchor at the spine head, flip on direction.** Each
+  species' placeholder art faces LEFT (eye dot at the left, tail at
+  the right), so a right-travelling swimmer receives one horizontal
+  mirror (`scale(-1, 1)`) and a left-traveller draws the art as-is; the
+  head fraction is a per-species constant (0.25/0.15) and the sprite
+  length is the spine length × `BODY_SPRITE_OVERSCALE` (1.6) so a fish
+  reads bigger, not identical, once textured. One swim frame per species
+  is the ticket's accepted placeholder baseline (swim/eat/startle
+  frames arrive with the final art, data-only).
+- **Pebbles render at the collision circle's FULL width (2r), keeping
+  their own aspect for height** — the ticket's "render at full r"
+  option: the pebble now matches the collision body's horizon instead of
+  the old 0.78×-squashed ellipse, and stays slightly SHORTER than the
+  circle's 2r top-to-bottom (fish skirt a circle a hair more generous
+  than the drawn caps — the same deliberate generosity as the
+  procedural stone's read, documented at the draw call). Variants
+  alternate by placement order (pebble-1/pebble-2).
+- **Bubbles draw the FULL slot frame, centred on the slot** (no
+  placeholder-specific source rect): the slot's 2·radius diameter stays
+  its identity, the sprite's own aspect sets the height, and a data-only
+  final-art swap per the sourcing runbook stays renderer-blind. Same
+  rule for the kelp quads: segment i of the verlet chain takes row i of
+  the strip (source rect), physics untouched.
+- **Caustics-tile grid is a viewport-fixed count that scrolls
+  diagonally.** (floor(W/cell)+2) × (floor(H/cell)+2) cells anchored at
+  0 and one row/column oversized, drifting `CAUSTICS_TILE_DRIFT` (10 px
+  of sim time) — every pixel stays covered at every offset (seamless,
+  no pop), zero allocation (flat drawImage rects, no transforms).
+  Reason for +2 rather than the tight +1: a +1 grid leaves a
+  viewport-edge strip uncovered as the offset crosses half a cell.
+- **The atmosphere suite's op-profile audits were rewritten, as the
+  ticket foresaw.** Arc-count assertions on the bubble pool became
+  drawImage-POSITION assertions (same invariants: pool recycles,
+  ≥1 wobble period per rise, amplitude within BUBBLE_WOBBLE_AMP — read
+  from sprite centers), "no drawImage anywhere" became the new
+  contract (every frame's bitmap draws are EXACTLY 1 background +
+  gravel band + caustics-tile grid + one body sprite per live swimmer +
+  the pooled bubbles), and the tile's scroll linearity inherits the
+  AC2 "2×FIXED_DT ⇒ 2×increment" intent. The layers that stayed vector
+  (backdrop ambient, caustic shafts, parallax substrate) keep their
+  original audits unchanged.
