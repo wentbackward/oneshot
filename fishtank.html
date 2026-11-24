@@ -1640,6 +1640,7 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
   var KELP_LIGHT = "#5aa873";
   var KELP_WIDTH_DARK = 7;
   var KELP_WIDTH_LIGHT = 2.5;
+  var KELP_QUAD_HALF_WIDTH = 3.5;
   function traceStrand(ctx, strand, sx, sy) {
     const pts = strand.points;
     ctx.beginPath();
@@ -1652,9 +1653,14 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
     const tip = pts[pts.length - 1];
     ctx.lineTo(tip.x * sx, tip.y * sy);
   }
-  function drawKelp(ctx, width, height, strands) {
+  function drawKelp(ctx, width, height, strands, textures = {}) {
     const sx = width / TANK_WIDTH;
     const sy = height / TANK_HEIGHT;
+    const strip = textures["kelp-strip"];
+    if (strip !== void 0 && strip.width > 0 && strip.height > 0) {
+      for (const strand of strands) drawKelpQuads(ctx, strand, sx, sy, strip);
+      return;
+    }
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     for (const strand of strands) {
@@ -1668,10 +1674,39 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
       ctx.stroke();
     }
   }
-  function drawRocks(ctx, width, height, rocks) {
+  function drawKelpQuads(ctx, strand, sx, sy, strip) {
+    const pts = strand.points;
+    const srcRow = strip.height / KELP_SEGMENTS;
+    for (let i = 0; i + 1 < pts.length; i += 1) {
+      const a = pts[i];
+      const b = pts[i + 1];
+      const ax = a.x * sx;
+      const ay = a.y * sy;
+      const dx = b.x * sx - ax;
+      const dy = b.y * sy - ay;
+      const len = Math.hypot(dx, dy);
+      if (!(len > 1e-3)) continue;
+      ctx.save();
+      ctx.translate(ax + dx / 2, ay + dy / 2);
+      ctx.rotate(Math.atan2(dy, dx));
+      ctx.drawImage(strip, 0, i * srcRow, strip.width, srcRow, -len / 2, -KELP_QUAD_HALF_WIDTH, len, KELP_QUAD_HALF_WIDTH * 2);
+      ctx.restore();
+    }
+  }
+  function drawRocks(ctx, width, height, rocks, textures = {}) {
     const sx = width / TANK_WIDTH;
     const sy = height / TANK_HEIGHT;
-    for (const rock of rocks) {
+    for (let i = 0; i < rocks.length; i += 1) {
+      const rock = rocks[i];
+      const pebble = i % 2 === 0 ? textures["pebble-1"] : textures["pebble-2"];
+      if (pebble !== void 0 && pebble.width > 0 && pebble.height > 0) {
+        const cx2 = rock.x * sx;
+        const cy2 = rock.y * sy;
+        const wpx = rock.r * 2 * sx;
+        const hpx = wpx * (pebble.height / pebble.width);
+        ctx.drawImage(pebble, cx2 - wpx / 2, cy2 - hpx / 2, wpx, hpx);
+        continue;
+      }
       const cx = rock.x * sx;
       const cy = rock.y * sy;
       const rx = rock.r * sx;
@@ -1706,6 +1741,28 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
   var TETRA_HEAD_RADIUS = 3.5;
   var ANGEL_HUE_OFFSET = 180;
   var TAU3 = 2 * Math.PI;
+  var BODY_SPRITE_OVERSCALE = 1.6;
+  var HEAD_FRACTIONS = {
+    "tetra-body": 0.25,
+    "angel-body": 0.15,
+    "predator-body": 0.15
+  };
+  function drawBodySprite(ctx, cx, cy, vx, vy, minScale, bodyLength, tex, headFraction) {
+    const w = tex.width;
+    const h = tex.height;
+    if (!(w > 0) || !(h > 0)) return;
+    const len = bodyLength * BODY_SPRITE_OVERSCALE * minScale;
+    const k = len / w;
+    const mirrored = vx >= 0;
+    const angle = mirrored ? Math.atan2(vy, vx) : Math.atan2(-vy, -vx);
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(angle);
+    if (mirrored) ctx.scale(-1, 1);
+    ctx.scale(k, k);
+    ctx.drawImage(tex, -headFraction * w, -h / 2, w, h);
+    ctx.restore();
+  }
   function tetraColour(cache, index, hueOffset = 0) {
     let c = cache[index];
     if (c === void 0) {
@@ -1714,31 +1771,20 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
     }
     return c;
   }
-  function drawTetras(ctx, width, height, fish, colours, hueOffset = 0) {
+  function drawTetras(ctx, width, height, fish, colours, hueOffset = 0, sprite = "tetra-body", textures = {}) {
     const sx = width / TANK_WIDTH;
     const sy = height / TANK_HEIGHT;
+    const bodyTex = sprite === "" ? void 0 : textures[sprite];
+    const headFraction = sprite === "" ? 0 : HEAD_FRACTIONS[sprite];
     for (let i = 0; i < fish.length; i++) {
-      drawTetra(ctx, fish[i], i, sx, sy, colours, hueOffset);
+      drawTetra(ctx, fish[i], i, sx, sy, colours, hueOffset, bodyTex, headFraction);
     }
   }
-  function drawTetra(ctx, t, index, sx, sy, colours, hueOffset) {
-    const speed = Math.hypot(t.vx, t.vy);
-    const hx = speed > 0 ? t.vx / speed : 1;
-    const hy = speed > 0 ? t.vy / speed : 0;
-    const px = -hy;
-    const py = hx;
+  function drawTetra(ctx, t, index, sx, sy, colours, hueOffset, bodyTex, headFraction) {
     const headX = t.x * sx;
     const headY = t.y * sy;
     const colourForFish = tetraColour(colours, index, hueOffset);
-    const tailSpan = TETRA_SPINE_SEGMENTS - 1;
-    ctx.beginPath();
-    ctx.moveTo(headX, headY);
-    for (let seg = 1; seg < TETRA_SPINE_SEGMENTS; seg++) {
-      const k = seg / tailSpan;
-      const back = TETRA_BODY_LENGTH * k;
-      const sway = TETRA_TAIL_AMPLITUDE * k * Math.sin(t.phase - seg * TETRA_TAIL_WAVE_NUMBER);
-      ctx.lineTo((t.x - hx * back + px * sway) * sx, (t.y - hy * back + py * sway) * sy);
-    }
+    traceSpine(ctx, t.x, t.y, t.vx, t.vy, t.phase, TETRA_BODY_LENGTH, TETRA_TAIL_AMPLITUDE, sx, sy);
     ctx.strokeStyle = colourForFish;
     ctx.lineWidth = TETRA_STROKE_WIDTH;
     ctx.lineCap = "round";
@@ -1748,6 +1794,53 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
     ctx.arc(headX, headY, TETRA_HEAD_RADIUS, 0, TAU3);
     ctx.fillStyle = colourForFish;
     ctx.fill();
+    if (bodyTex !== void 0) {
+      drawBodySprite(ctx, headX, headY, t.vx, t.vy, Math.min(sx, sy), TETRA_BODY_LENGTH, bodyTex, headFraction);
+    }
+  }
+  function traceSpine(ctx, x, y, vx, vy, phase, bodyLength, tailAmplitude, sx, sy) {
+    const speed = Math.hypot(vx, vy);
+    const hx = speed > 0 ? vx / speed : 1;
+    const hy = speed > 0 ? vy / speed : 0;
+    const px = -hy;
+    const py = hx;
+    const headX = x * sx;
+    const headY = y * sy;
+    const tailSpan = TETRA_SPINE_SEGMENTS - 1;
+    ctx.beginPath();
+    ctx.moveTo(headX, headY);
+    for (let seg = 1; seg < TETRA_SPINE_SEGMENTS; seg++) {
+      const k = seg / tailSpan;
+      const back = bodyLength * k;
+      const sway = tailAmplitude * k * Math.sin(phase - seg * TETRA_TAIL_WAVE_NUMBER);
+      ctx.lineTo((x - hx * back + px * sway) * sx, (y - hy * back + py * sway) * sy);
+    }
+  }
+  var PREDATOR_BODY_LENGTH = 40;
+  var PREDATOR_TAIL_AMPLITUDE = 9;
+  var PREDATOR_STROKE_WIDTH = 7;
+  var PREDATOR_HEAD_RADIUS = 6;
+  var PREDATOR_COLOUR = "#5b6c7e";
+  function drawPredator(ctx, width, height, pred, phase, textures = {}) {
+    if (pred === null) return;
+    const sx = width / TANK_WIDTH;
+    const sy = height / TANK_HEIGHT;
+    traceSpine(ctx, pred.x, pred.y, pred.vx, pred.vy, phase, PREDATOR_BODY_LENGTH, PREDATOR_TAIL_AMPLITUDE, sx, sy);
+    ctx.strokeStyle = PREDATOR_COLOUR;
+    ctx.lineWidth = PREDATOR_STROKE_WIDTH;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.stroke();
+    const headX = pred.x * sx;
+    const headY = pred.y * sy;
+    ctx.beginPath();
+    ctx.arc(headX, headY, PREDATOR_HEAD_RADIUS, 0, TAU3);
+    ctx.fillStyle = PREDATOR_COLOUR;
+    ctx.fill();
+    const tex = textures["predator-body"];
+    if (tex !== void 0) {
+      drawBodySprite(ctx, headX, headY, pred.vx, pred.vy, Math.min(sx, sy), PREDATOR_BODY_LENGTH, tex, HEAD_FRACTIONS["predator-body"]);
+    }
   }
 
   // src/render/water.ts
@@ -1840,6 +1933,9 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
   var CAUSTIC_TOP_HALF_WIDTH = 0.03;
   var CAUSTIC_BOTTOM_HALF_WIDTH = 0.09;
   var CAUSTIC_LEAN = 0.1;
+  var CAUSTICS_TILE_CELL = 128;
+  var CAUSTICS_TILE_DRIFT = 10;
+  var CAUSTICS_TILE_ALPHA = 0.12;
   function drawCausticShafts(ctx, width, height, t, palette) {
     const top = width * CAUSTIC_TOP_HALF_WIDTH;
     const bot = width * CAUSTIC_BOTTOM_HALF_WIDTH;
@@ -1897,10 +1993,24 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
     }
     /** Release (paint) the whole pool at world time t: every slot,
      *  in fixed slot order — the draw-recording test tracks slot i
-     *  as the i-th bubble arc of each frame. Allocation-free: the
-     *  loop only reads preallocated fields. */
-    paint(ctx, width, height, t) {
+     *  as the i-th bubble draw of each frame. Allocation-free: the
+     *  loop only reads preallocated fields; `textures` is the frame's
+     *  art table (the sprite slot, ticket #139). */
+    paint(ctx, width, height, t, textures = {}) {
       const column = height + BUBBLE_MARGIN * 2;
+      const sprite = textures["bubble"];
+      if (sprite !== void 0 && sprite.width > 0 && sprite.height > 0) {
+        const aspect = sprite.height / sprite.width;
+        for (let i = 0; i < this.slots.length; i++) {
+          const s = this.slots[i];
+          const rise = column / s.speed;
+          const x = s.lane * width + Math.sin(t / rise * TAU4 * BUBBLE_RISE_PERIODS + s.phase0) * BUBBLE_WOBBLE_AMP;
+          const y = height + BUBBLE_MARGIN - (t * s.speed + s.offset * column) % column;
+          const rw = s.radius * 2;
+          ctx.drawImage(sprite, x - rw / 2, y - rw * aspect / 2, rw, rw * aspect);
+        }
+        return;
+      }
       ctx.lineWidth = 1;
       ctx.strokeStyle = BUBBLE_STROKE;
       for (let i = 0; i < this.slots.length; i++) {
@@ -2048,10 +2158,58 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
     }
   }
 
+  // src/render/tinting.ts
+  var ART_TINT_DUSK = { r: 1, g: 0.78, b: 0.6 };
+  var ART_TINT_NIGHT = { r: 0.55, g: 0.78, b: 1 };
+  var PHASE_TINTS = {
+    LIGHT_DAY: null,
+    LIGHT_DUSK: ART_TINT_DUSK,
+    LIGHT_NIGHT: ART_TINT_NIGHT
+  };
+  function defaultSurfaceFactory(width, height) {
+    try {
+      if (typeof OffscreenCanvas === "function") {
+        return new OffscreenCanvas(width, height);
+      }
+      if (typeof document !== "undefined" && typeof document.createElement === "function") {
+        return document.createElement("canvas");
+      }
+    } catch {
+    }
+    return null;
+  }
+  function bakeTintVariant(bitmap, tint, makeSurface) {
+    const w = bitmap.width;
+    const h = bitmap.height;
+    if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return null;
+    const surface = makeSurface(w, h);
+    if (surface === null) return null;
+    const ctx = surface.getContext("2d");
+    if (ctx === null) return null;
+    try {
+      ctx.drawImage(bitmap, 0, 0, w, h);
+      const img = ctx.getImageData(0, 0, w, h);
+      const d = img.data;
+      for (let i = 0; i < d.length; i += 4) {
+        d[i] = Math.round(d[i] * tint.r);
+        d[i + 1] = Math.round(d[i + 1] * tint.g);
+        d[i + 2] = Math.round(d[i + 2] * tint.b);
+      }
+      ctx.putImageData(img, 0, 0);
+      return surface;
+    } catch {
+      return null;
+    }
+  }
+
   // src/render/renderer.ts
   var BACKGROUND_TEXTURE_ALPHA = 0.35;
   var GRAVEL_TEXTURE_BAND = 0.055;
   var GRAVEL_TEXTURE_ALPHA = 0.3;
+  var PREDATOR_TAIL_OMEGA_AT_PATROL = 7;
+  function predatorTailOmega(speed) {
+    return PREDATOR_TAIL_OMEGA_AT_PATROL / PREDATOR_PATROL_SPEED * speed;
+  }
   var Renderer = class {
     /** Per-instance tetra colour cache (src/render/tetras.ts builds
      *  the render layer with NO module-level state — the only mutable
@@ -2072,6 +2230,20 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
      *  empty table (headless boots, decode failures) makes every
      *  texture pass a no-op and the frame is the pre-#137 one. */
     assetBitmaps = {};
+    /** Phase-baked art tables (ticket #139 three-phase tinting):
+     *  palette name -> slot name -> the phase's canvas variant.
+     *  Built ONCE by bakePhaseTints() after the boot decode settles
+     *  (the frame then only does map lookups — zero per-frame work).
+     *  Every slot falls back to its neutral bitmap inside the table
+     *  when its bake degraded; LIGHT_DAY is ABSENT by design: day
+     *  is the identity pass-through, so the frame uses the neutral
+     *  table itself. */
+    phaseTables = {};
+    /** The predator's render-owned tail phase (see
+     *  predatorTailOmega above) and the last rendered sim time it
+     *  diffs against (null before the first frame). */
+    predatorPhase = 0;
+    lastRenderTime = null;
     /** Paint one frame of the given world state. The scene ambient is
      *  resolved from world.time + the lighting-phase offset (a paused
      *  sim freezes it; the offset is the PRD §4 save/load knob); the
@@ -2080,19 +2252,28 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
      *  rest on the gravel) and behind the tetra school. */
     render(ctx, width, height, world) {
       const light = lightPhaseAt(world.time + world.lightingPhaseOffset);
+      const textures = this.phaseTables[light.palette.name] ?? this.assetBitmaps;
       drawBackdrop(ctx, width, height, light.palette);
-      this.paintBackgroundTexture(ctx, width, height);
+      this.paintBackgroundTexture(ctx, width, height, textures);
       this.substrate.paintFar(ctx, width, height, world.time);
       this.substrate.paintNear(ctx, width, height, world.time);
-      this.paintGravelTexture(ctx, width, height);
+      this.paintGravelTexture(ctx, width, height, textures);
       drawCausticShafts(ctx, width, height, world.time, light.palette);
+      this.paintCausticsTile(ctx, width, height, world.time, textures);
       drawSurfaceRipples(ctx, width, world.time);
-      drawKelp(ctx, width, height, world.kelp);
-      drawRocks(ctx, width, height, world.rocks);
-      drawTetras(ctx, width, height, world.angels, this.angelColours, ANGEL_HUE_OFFSET);
-      drawTetras(ctx, width, height, world.agents, this.tetraColours);
+      drawKelp(ctx, width, height, world.kelp, textures);
+      drawRocks(ctx, width, height, world.rocks, textures);
+      drawTetras(ctx, width, height, world.angels, this.angelColours, ANGEL_HUE_OFFSET, "angel-body", textures);
+      drawTetras(ctx, width, height, world.agents, this.tetraColours, 0, "tetra-body", textures);
+      const dt = this.lastRenderTime === null ? 0 : world.time - this.lastRenderTime;
+      const pred = world.predator;
+      if (dt !== 0 && pred !== null) {
+        this.predatorPhase += dt * predatorTailOmega(Math.hypot(pred.vx, pred.vy));
+      }
+      this.lastRenderTime = world.time;
+      drawPredator(ctx, width, height, world.predator, this.predatorPhase, textures);
       drawPellets(ctx, width, height, world.pellets);
-      this.bubbles.paint(ctx, width, height, world.time);
+      this.bubbles.paint(ctx, width, height, world.time, textures);
       drawShockwaves(ctx, width, height, world.shockwaves);
     }
     /** Wire the boot's decode cache (called once, before the first
@@ -2101,16 +2282,62 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
     bindAssets(bitmaps) {
       this.assetBitmaps = bitmaps;
     }
+    /** Bake the three-phase art tinting (ticket #139) — called
+     *  ONCE, after the boot decode has settled and before the first
+     *  frame. For each tinted phase (dusk, night — day is the
+     *  identity pass-through and keeps no bake) a phase table is
+     *  built: every decoded slot gets its pre-baked canvas variant,
+     *  or its neutral bitmap where the bake degraded — degradation,
+     *  never a crash. Boot-time work only: the frame loop reads
+     *  exactly one table per frame. */
+    bakePhaseTints() {
+      for (const name of Object.keys(PHASE_TINTS)) {
+        const tint = PHASE_TINTS[name];
+        if (tint === null) continue;
+        const table = {};
+        for (const slot of Object.keys(this.assetBitmaps)) {
+          const bitmap = this.assetBitmaps[slot];
+          const variant = bakeTintVariant(bitmap, tint, defaultSurfaceFactory);
+          table[slot] = variant ?? bitmap;
+        }
+        this.phaseTables[name] = table;
+      }
+    }
     /** Full-frame underwater background texture over the procedural
      *  ambient (placeholder today; final art arrives via the
      *  sourcing runbook — data-only swap, no code change). No
      *  save/translate: the flat-rect overlay must not disturb the
      *  draw-recording audits of the procedural layers. */
-    paintBackgroundTexture(ctx, width, height) {
-      const tex = this.assetBitmaps["bg"];
+    paintBackgroundTexture(ctx, width, height, textures) {
+      const tex = textures["bg"];
       if (!tex) return;
       ctx.globalAlpha = BACKGROUND_TEXTURE_ALPHA;
       ctx.drawImage(tex, 0, 0, width, height);
+      ctx.globalAlpha = 1;
+    }
+    /** Seamless caustics-TILE overlay (ticket #139): the #137
+     *  verified-seamless tile repeats in a (floor(W/cell) + 2) ×
+     *  (floor(H/cell) + 2) grid — a COUNT FIXED FOR THE VIEWPORT —
+     *  that scrolls diagonally at CAUSTICS_TILE_DRIFT px of sim
+     *  time: the grid is anchored at 0 and one row/column oversized,
+     *  so every viewport pixel stays covered at every offset
+     *  (seamless drift, no pop). Flat drawImage rectangles, no
+     *  transforms — the same overlay discipline as the background/
+     *  gravel passes; the active phase's table supplies the tint.
+     */
+    paintCausticsTile(ctx, width, height, t, textures) {
+      const tex = textures["caustics-tile"];
+      if (!tex || !(CAUSTICS_TILE_CELL > 0)) return;
+      const cell = CAUSTICS_TILE_CELL;
+      const off = (t * CAUSTICS_TILE_DRIFT % cell + cell) % cell;
+      const cols = Math.floor(width / cell) + 2;
+      const rows = Math.floor(height / cell) + 2;
+      ctx.globalAlpha = CAUSTICS_TILE_ALPHA;
+      for (let i = 0; i < cols; i += 1) {
+        for (let j = 0; j < rows; j += 1) {
+          ctx.drawImage(tex, i * cell - off, j * cell - off, cell, cell);
+        }
+      }
       ctx.globalAlpha = 1;
     }
     /** Seamless gravel tile along the floor (placeholder; the tile
@@ -2118,12 +2345,12 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
      *  horizontal tiling, drawn as plain drawImage rectangles — no
      *  transforms, no per-frame allocation (tile count is fixed for
      *  a given viewport width). */
-    paintGravelTexture(ctx, width, height) {
-      const tex = this.assetBitmaps["gravel-tile"];
+    paintGravelTexture(ctx, width, height, textures) {
+      const tex = textures["gravel-tile"];
       if (!tex) return;
       const band = height * GRAVEL_TEXTURE_BAND;
       const tileW = band * (tex.width / tex.height);
-      if (tileW <= 0) return;
+      if (!(tileW > 0)) return;
       ctx.globalAlpha = GRAVEL_TEXTURE_ALPHA;
       for (let x = 0; x < width; x += tileW) {
         ctx.drawImage(tex, x, height - band, tileW, band);
@@ -2644,7 +2871,10 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
       };
       win.requestAnimationFrame(frame);
     };
-    decodeAllAssets(assetCache, startLoop);
+    decodeAllAssets(assetCache, () => {
+      renderer.bakePhaseTints();
+      startLoop();
+    });
     return world;
   }
   function clampDelta(seconds) {

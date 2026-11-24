@@ -58,6 +58,28 @@ const CAUSTIC_BOTTOM_HALF_WIDTH = 0.09;
  *  with depth so they read as raking rays, not pillars. */
 const CAUSTIC_LEAN = 0.1;
 
+// ============================================================
+// Caustics-TILE overlay (ticket #139): the #137 seamless 128 px
+// tile (manifest geometry — the integrity suite verifies the
+// seam) repeats in a grid that SCROLLS diagonally with sim time,
+// so the light texture drifts like real caustics. The shafts
+// above stay the vector volumetric layer; this is the water's
+// SHIMMER texture riding over the scene (the renderer places
+// it, right after the shafts).
+// ============================================================
+
+/** Grid cell in canvas px: the tile's manifest square, so the
+ *  pattern lands 1:1 (no upscale blur). */
+export const CAUSTICS_TILE_CELL = 128;
+
+/** Scroll speed, px per SIMULATION second (diagonal: x and y
+ *  advance together — light drifting, not a conveyor belt). */
+export const CAUSTICS_TILE_DRIFT = 10;
+
+/** Blend strength over the procedural scene (the shafts' pulse
+ *  remains the light's heartbeat; this is texture, not light). */
+export const CAUSTICS_TILE_ALPHA = 0.12;
+
 /** Paint the caustic shafts for world time t under the given
  *  palette. One save/translate/restore group per shaft. */
 export function drawCausticShafts(

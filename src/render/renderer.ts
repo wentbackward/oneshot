@@ -11,30 +11,53 @@
 //   3  substrate near layer (top decor, save/translate/restore)
 //      + seamless gravel TEXTURE band (embedded asset, #137)
 //   4  caustic light shafts (five save/translate/restore groups)
-//   5  surface ripples
-//   6  kelp strands (placed, PRD §3 — roots rest on the gravel)
-//   7  rocks (placed, PRD §3 — behind the school)
-//   8  angelfish spines (PRD §2 — behind the school, the large
+//   5  caustics-TILE grid — the seamless 128 px tile (manifest
+//      geometry) repeating in a fixed grid that scrolls with
+//      sim time (ticket #139 — the water's animated light texture)
+//   6  surface ripples
+//   7  kelp strands (placed, PRD §3 — roots rest on the gravel;
+//      textured quads riding the verlet bones when the strip art
+//      is decoded, ticket #139)
+//   8  rocks (placed, PRD §3 — behind the school; pebble sprites
+//      at the collision circle's full width when decoded, #139)
+//   9  angelfish spines (PRD §2 — behind the school, the large
 //      slow independents drawn by the SAME tetra spine renderer
-//      with a complementary palette, #123)
-//   9  tetra spines (PRD §2)
-//   10 dropped pellets (PRD §3 — food floats over the school)
-//   11 bubble column (pool, painted in slot order)
-//   12 shockwave rings (PRD §3 tap-glass — on the GLASS, in front
+//      with a complementary palette, #123) + their body SPRITES
+//      riding the spines (the hybrid, #139)
+//   10 tetra spines (PRD §2) + their body sprites (#139)
+//   11 the predator (ticket #139 — its first visual): the same
+//       articulated-spine recipe upscaled to its body, its body
+//       sprite riding the spine, tail phase render-owned and
+//       scaled by the predator's current swimming speed
+//   12 dropped pellets (PRD §3 — food floats over the school)
+//   13 bubble column (pool, painted in slot order; bubble SPRITES
+//       when decoded, arcs as the fallback, #139)
+//   14 shockwave rings (PRD §3 tap-glass — on the GLASS, in front
 //       of everything, incl. the bubbles)
-// Layers 10/12 draw nothing while the world carries no food/rings,
-// so a fresh boot's frame is byte-identical to the pre-food one.
+// Layers 12/14 draw nothing while the world carries no food/rings,
+// and the texture passes 1/3/5 and the sprite halves of 7/8/9/
+// 10/11/13 no-op without their decoded assets, so a headless
+// boot's frame is byte-identical to the pre-#137 procedural one.
+//
+// THREE-PHASE TINTING (#139): the Day/Dusk/Night cycle tints the
+// art at runtime — the ticket's default policy (one neutral-
+// palette asset set, tinted): every decoded bitmap gets phase-
+// baked copies at boot (src/render/tinting.ts), and each frame
+// selects the ACTIVE PHASE'S table for every art slot. Day is
+// the identity pass-through (the neutral table itself).
 // ================================================================
 
 import type { World } from "../sim/world.ts";
+import { PREDATOR_PATROL_SPEED } from "../sim/constants.ts";
 import { drawKelp, drawRocks } from "./scenery.ts";
-import { ANGEL_HUE_OFFSET, drawTetras } from "./tetras.ts";
+import { ANGEL_HUE_OFFSET, drawPredator, drawTetras } from "./tetras.ts";
 import { drawBackdrop, drawSurfaceRipples } from "./water.ts";
 import { lightPhaseAt } from "./lighting.ts";
-import { drawCausticShafts } from "./caustics.ts";
+import { drawCausticShafts, CAUSTICS_TILE_ALPHA, CAUSTICS_TILE_CELL, CAUSTICS_TILE_DRIFT } from "./caustics.ts";
 import { BubbleColumn } from "./bubbles.ts";
 import { Substrate } from "./substrate.ts";
 import { drawPellets, drawShockwaves } from "./food.ts";
+import { bakeTintVariant, defaultSurfaceFactory, PHASE_TINTS, type ArtTexture } from "./tinting.ts";
 
 // Embedded-texture overlay strengths (ticket #137): the textures
 // sit OVER the procedural paint, which stays the scene's light —
@@ -44,9 +67,31 @@ const BACKGROUND_TEXTURE_ALPHA = 0.35;
 
 /** Gravel band height above the floor, fraction of tank height
  *  (mirrors substrate.ts's GRAVEL_BAND 0.06 so the texture sits
- *  inside the gravel the procedural stones decorate). */
-const GRAVEL_TEXTURE_BAND = 0.055;
+ *  inside the gravel the procedural stones decorate). Exported —
+ *  the render-contract tests derive the band's draw count from it. */
+export const GRAVEL_TEXTURE_BAND = 0.055;
 const GRAVEL_TEXTURE_ALPHA = 0.3;
+
+/** The predator's render-owned tail undulation at PATROL SPEED,
+ *  rad of phase per sim second — the cruise baseline the visual
+ *  was tuned to. */
+const PREDATOR_TAIL_OMEGA_AT_PATROL = 7;
+
+/** Render-owned predator tail omega as a pure function of the
+ *  predator's current speed (tank units/s): LINEAR in speed —
+ *  PRD §2 requires the undulation frequency to scale dynamically
+ *  with swimming speed for every fish, and this is the same
+ *  speed-proportional rule the tetras/angels run through
+ *  tailFrequency's speed gain (src/sim/tail.ts). A zero-speed
+ *  predator idles at zero rad/s (its lowest real speed is
+ *  PREDATOR_REST_SPEED, so it always beats); the turning-torque
+ *  term of tailFrequency is outside render's reach — the sim
+ *  state exposes no torque, and the observer contract forbids
+ *  inventing it. Exported — the render-contract tests pin the
+ *  speed-scaling, not the spine geometry. */
+export function predatorTailOmega(speed: number): number {
+  return (PREDATOR_TAIL_OMEGA_AT_PATROL / PREDATOR_PATROL_SPEED) * speed;
+}
 
 export class Renderer {
   /** Per-instance tetra colour cache (src/render/tetras.ts builds
@@ -68,6 +113,20 @@ export class Renderer {
    *  empty table (headless boots, decode failures) makes every
    *  texture pass a no-op and the frame is the pre-#137 one. */
   private assetBitmaps: Record<string, ImageBitmap> = {};
+  /** Phase-baked art tables (ticket #139 three-phase tinting):
+   *  palette name -> slot name -> the phase's canvas variant.
+   *  Built ONCE by bakePhaseTints() after the boot decode settles
+   *  (the frame then only does map lookups — zero per-frame work).
+   *  Every slot falls back to its neutral bitmap inside the table
+   *  when its bake degraded; LIGHT_DAY is ABSENT by design: day
+   *  is the identity pass-through, so the frame uses the neutral
+   *  table itself. */
+  private readonly phaseTables: Record<string, Record<string, ArtTexture>> = {};
+  /** The predator's render-owned tail phase (see
+   *  predatorTailOmega above) and the last rendered sim time it
+   *  diffs against (null before the first frame). */
+  private predatorPhase = 0;
+  private lastRenderTime: number | null = null;
 
   /** Paint one frame of the given world state. The scene ambient is
    *  resolved from world.time + the lighting-phase offset (a paused
@@ -77,19 +136,34 @@ export class Renderer {
    *  rest on the gravel) and behind the tetra school. */
   render(ctx: CanvasRenderingContext2D, width: number, height: number, world: World): void {
     const light = lightPhaseAt(world.time + world.lightingPhaseOffset);
+    // The frame's art table: the ACTIVE PHASE's baked variants
+    // (or the neutral table for day / a not-yet-baked boot).
+    const textures = this.phaseTables[light.palette.name] ?? this.assetBitmaps;
     drawBackdrop(ctx, width, height, light.palette);
-    this.paintBackgroundTexture(ctx, width, height);
+    this.paintBackgroundTexture(ctx, width, height, textures);
     this.substrate.paintFar(ctx, width, height, world.time);
     this.substrate.paintNear(ctx, width, height, world.time);
-    this.paintGravelTexture(ctx, width, height);
+    this.paintGravelTexture(ctx, width, height, textures);
     drawCausticShafts(ctx, width, height, world.time, light.palette);
+    this.paintCausticsTile(ctx, width, height, world.time, textures);
     drawSurfaceRipples(ctx, width, world.time);
-    drawKelp(ctx, width, height, world.kelp);
-    drawRocks(ctx, width, height, world.rocks);
-    drawTetras(ctx, width, height, world.angels, this.angelColours, ANGEL_HUE_OFFSET);
-    drawTetras(ctx, width, height, world.agents, this.tetraColours);
+    drawKelp(ctx, width, height, world.kelp, textures);
+    drawRocks(ctx, width, height, world.rocks, textures);
+    drawTetras(ctx, width, height, world.angels, this.angelColours, ANGEL_HUE_OFFSET, "angel-body", textures);
+    drawTetras(ctx, width, height, world.agents, this.tetraColours, 0, "tetra-body", textures);
+    // The predator's spine phase advances by SIM TIME (a paused
+    // sim freezes it) at an omega scaled by its CURRENT SPEED —
+    // PRD §2's speed-scaled undulation, render-owned (#139);
+    // the world's clock is the ground truth.
+    const dt = this.lastRenderTime === null ? 0 : world.time - this.lastRenderTime;
+    const pred = world.predator;
+    if (dt !== 0 && pred !== null) {
+      this.predatorPhase += dt * predatorTailOmega(Math.hypot(pred.vx, pred.vy));
+    }
+    this.lastRenderTime = world.time;
+    drawPredator(ctx, width, height, world.predator, this.predatorPhase, textures);
     drawPellets(ctx, width, height, world.pellets);
-    this.bubbles.paint(ctx, width, height, world.time);
+    this.bubbles.paint(ctx, width, height, world.time, textures);
     drawShockwaves(ctx, width, height, world.shockwaves);
   }
 
@@ -100,16 +174,64 @@ export class Renderer {
     this.assetBitmaps = bitmaps;
   }
 
+  /** Bake the three-phase art tinting (ticket #139) — called
+   *  ONCE, after the boot decode has settled and before the first
+   *  frame. For each tinted phase (dusk, night — day is the
+   *  identity pass-through and keeps no bake) a phase table is
+   *  built: every decoded slot gets its pre-baked canvas variant,
+   *  or its neutral bitmap where the bake degraded — degradation,
+   *  never a crash. Boot-time work only: the frame loop reads
+   *  exactly one table per frame. */
+  bakePhaseTints(): void {
+    for (const name of Object.keys(PHASE_TINTS) as (keyof typeof PHASE_TINTS)[]) {
+      const tint = PHASE_TINTS[name];
+      if (tint === null) continue; // day: identity — the neutral table stands
+      const table: Record<string, ArtTexture> = {};
+      for (const slot of Object.keys(this.assetBitmaps)) {
+        const bitmap = this.assetBitmaps[slot]!;
+        const variant = bakeTintVariant(bitmap, tint, defaultSurfaceFactory);
+        table[slot] = variant ?? bitmap; // degraded bake: keep the neutral art
+      }
+      this.phaseTables[name] = table;
+    }
+  }
+
   /** Full-frame underwater background texture over the procedural
    *  ambient (placeholder today; final art arrives via the
    *  sourcing runbook — data-only swap, no code change). No
    *  save/translate: the flat-rect overlay must not disturb the
    *  draw-recording audits of the procedural layers. */
-  private paintBackgroundTexture(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-    const tex = this.assetBitmaps["bg"];
+  private paintBackgroundTexture(ctx: CanvasRenderingContext2D, width: number, height: number, textures: Record<string, ArtTexture>): void {
+    const tex = textures["bg"];
     if (!tex) return;
     ctx.globalAlpha = BACKGROUND_TEXTURE_ALPHA;
     ctx.drawImage(tex, 0, 0, width, height);
+    ctx.globalAlpha = 1;
+  }
+
+  /** Seamless caustics-TILE overlay (ticket #139): the #137
+   *  verified-seamless tile repeats in a (floor(W/cell) + 2) ×
+   *  (floor(H/cell) + 2) grid — a COUNT FIXED FOR THE VIEWPORT —
+   *  that scrolls diagonally at CAUSTICS_TILE_DRIFT px of sim
+   *  time: the grid is anchored at 0 and one row/column oversized,
+   *  so every viewport pixel stays covered at every offset
+   *  (seamless drift, no pop). Flat drawImage rectangles, no
+   *  transforms — the same overlay discipline as the background/
+   *  gravel passes; the active phase's table supplies the tint.
+   */
+  private paintCausticsTile(ctx: CanvasRenderingContext2D, width: number, height: number, t: number, textures: Record<string, ArtTexture>): void {
+    const tex = textures["caustics-tile"];
+    if (!tex || !(CAUSTICS_TILE_CELL > 0)) return;
+    const cell = CAUSTICS_TILE_CELL;
+    const off = (((t * CAUSTICS_TILE_DRIFT) % cell) + cell) % cell;
+    const cols = Math.floor(width / cell) + 2;
+    const rows = Math.floor(height / cell) + 2;
+    ctx.globalAlpha = CAUSTICS_TILE_ALPHA;
+    for (let i = 0; i < cols; i += 1) {
+      for (let j = 0; j < rows; j += 1) {
+        ctx.drawImage(tex, i * cell - off, j * cell - off, cell, cell);
+      }
+    }
     ctx.globalAlpha = 1;
   }
 
@@ -118,14 +240,15 @@ export class Renderer {
    *  horizontal tiling, drawn as plain drawImage rectangles — no
    *  transforms, no per-frame allocation (tile count is fixed for
    *  a given viewport width). */
-  private paintGravelTexture(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-    const tex = this.assetBitmaps["gravel-tile"];
+  private paintGravelTexture(ctx: CanvasRenderingContext2D, width: number, height: number, textures: Record<string, ArtTexture>): void {
+    const tex = textures["gravel-tile"];
     if (!tex) return;
     const band = height * GRAVEL_TEXTURE_BAND;
     const tileW = band * (tex.width / tex.height);
-    // A zero-height canvas makes the tile step 0 — the tiling loop
-    // would spin forever and freeze the tab.
-    if (tileW <= 0) return;
+    // A zero-height canvas makes the tile step 0 (a degenerate
+    // bitmap makes it NaN) — the tiling loop would spin forever
+    // and freeze the tab; `!(> 0)` refuses both, 0 and NaN alike.
+    if (!(tileW > 0)) return;
     ctx.globalAlpha = GRAVEL_TEXTURE_ALPHA;
     for (let x = 0; x < width; x += tileW) {
       ctx.drawImage(tex, x, height - band, tileW, band);

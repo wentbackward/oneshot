@@ -12,8 +12,20 @@
 // (its frequency scales with the bubble's rise speed), so EVERY
 // bubble completes >= 1 wobble period per ascent at ANY viewport
 // size — the guarantee the draw-recording test audits from the
-// recorded arc positions.
+// recorded positions.
+//
+// When the frame's art table carries the bubble sprite (ticket
+// #139) each slot is painted as a SPRITE instead of a stroked arc
+// — same position math, same pool, same identity: the slot's
+// center anchors a drawImage sized 2·radius across, with the
+// sprite's own aspect for height. The FULL slot frame is drawn
+// (no placeholder-specific source cropping), so a data-only
+// final-art swap per the sourcing runbook stays renderer-blind.
+// Without the asset the arcs are the fallback: headless boots see
+// exactly the pre-#139 frame.
 // ================================================================
+
+import type { ArtTexture } from "./tinting.ts";
 
 /** Pool size: how many bubbles the emitter releases, always. */
 export const BUBBLE_POOL_SIZE = 24;
@@ -40,7 +52,6 @@ const BUBBLE_RADIUS_MIN = 1.5;
 const BUBBLE_RADIUS_MAX = 5.0;
 
 const BUBBLE_STROKE = "rgba(230, 250, 255, 0.35)";
-
 const TAU = 2 * Math.PI;
 
 /** Deterministic pseudo-random in [0,1) for one slot's lane, size,
@@ -85,10 +96,27 @@ export class BubbleColumn {
 
   /** Release (paint) the whole pool at world time t: every slot,
    *  in fixed slot order — the draw-recording test tracks slot i
-   *  as the i-th bubble arc of each frame. Allocation-free: the
-   *  loop only reads preallocated fields. */
-  paint(ctx: CanvasRenderingContext2D, width: number, height: number, t: number): void {
+   *  as the i-th bubble draw of each frame. Allocation-free: the
+   *  loop only reads preallocated fields; `textures` is the frame's
+   *  art table (the sprite slot, ticket #139). */
+  paint(ctx: CanvasRenderingContext2D, width: number, height: number, t: number, textures: Record<string, ArtTexture> = {}): void {
     const column = height + BUBBLE_MARGIN * 2;
+    const sprite = textures["bubble"];
+    if (sprite !== undefined && sprite.width > 0 && sprite.height > 0) {
+      const aspect = sprite.height / sprite.width;
+      for (let i = 0; i < this.slots.length; i++) {
+        const s = this.slots[i]!;
+        // One full rise (bottom margin to top margin) takes
+        // column / speed seconds; the wobble completes
+        // BUBBLE_RISE_PERIODS cycles over exactly that span.
+        const rise = column / s.speed;
+        const x = s.lane * width + Math.sin((t / rise) * TAU * BUBBLE_RISE_PERIODS + s.phase0) * BUBBLE_WOBBLE_AMP;
+        const y = height + BUBBLE_MARGIN - ((t * s.speed + s.offset * column) % column);
+        const rw = s.radius * 2; // the slot's diameter stays its identity
+        ctx.drawImage(sprite, x - rw / 2, y - (rw * aspect) / 2, rw, rw * aspect);
+      }
+      return;
+    }
     ctx.lineWidth = 1;
     ctx.strokeStyle = BUBBLE_STROKE;
     for (let i = 0; i < this.slots.length; i++) {

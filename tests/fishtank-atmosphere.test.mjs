@@ -5,6 +5,26 @@
 // shafts, bubble column and parallax substrate are proven from the
 // REAL committed bundle the way a user experiences them.
 //
+// REWRITTEN FOR TICKET #139 (the ticket's known test consequence):
+// the scene now carries EMBEDDED ART (the #137 placeholder set) —
+// background, caustics tile, gravel band, pebble/kelp/fish/bubble
+// sprites — so the OLD audits on per-frame ARC OP COUNTS and
+// "no drawImage anywhere" no longer describe the render. The new
+// render contract this file pins instead:
+//   - every frame's BITMAP draws are exactly the documented art
+//     slots in the renderer's draw order: 1 background · gravel
+//     band · caustics-tile grid · (placed scenery) · one body
+//     sprite per live swimmer · the BUBBLE_POOL_SIZE pooled
+//     bubbles LAST (nothing bitmap-drawing follows them);
+//   - the caustics-tile grid is seamless AND ANIMATED: it scrolls
+//     proportionally to sim time (the AC2 linearity intent, now
+//     for the tile's recorded positions);
+//   - the bubble pool recycles its slots (stable per-slot sprite
+//     sizes) and wobbles sinusoidally (recorded drawImage
+//     CENTERS, replacing the old arc positions — same invariant).
+// The layers that stay vector (backdrop, substrate, caustic
+// SHIFTS) keep their ORIGINAL audits unchanged.
+//
 // Harness: the bundled <script> from fishtank.html boots in a
 // sandboxed node:vm context whose 2d context RECORDS drawing
 // events (kind + selected arguments) into a flat per-boot log,
@@ -14,20 +34,26 @@
 // fps), so most frames consume one FIXED_DT sim step and an
 // occasional frame consumes two (the app's accumulator catching
 // up) — those 2-step frames are what the AC1/AC2 pins rely on, and
-// world.time is the ground truth everywhere below.
-// No network, no browser.
+// world.time is the ground truth everywhere below. The sandbox
+// carries a stubbed SYNCHRONOUS createImageBitmap/atob pair (the
+// fake bitmap reads its slot's real dimensions from the PNG IHDR),
+// so the decode path runs and the art slots draw. No network, no
+// browser.
 //
-// Draw order per frame (src/render/renderer.ts owns it, the parsers
-// below rely on it): ambient backdrop -> substrate far -> substrate
-// near -> caustic shafts (5, each inside save/translate/restore) ->
-// surface ripples -> tetra spines -> bubble column. The backdrop's
-// gradient therefore always emits a frame's FIRST two 'stop'
-// events: its (surface, depth) pair IS the scene ambient.
+// Draw order per frame (src/render/renderer.ts owns it, the
+// parsers below rely on it): ambient backdrop -> background
+// texture -> substrate far -> substrate near -> gravel texture ->
+// caustic shafts (5, each inside save/translate/restore) ->
+// caustics-tile grid -> surface ripples -> kelp -> rocks -> angel
+// bodies -> tetra bodies -> predator body -> pellets -> bubble
+// column -> shockwaves. The backdrop's gradient therefore always
+// emits a frame's FIRST two 'stop' events: its (surface, depth)
+// pair IS the scene ambient.
 //
 // Requires `npm ci` first (like every build-dependent check).
 //
 // Run: node tests/fishtank-atmosphere.test.mjs
-// ================================================================
+// =================================================================
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
@@ -46,7 +72,10 @@ import { FIXED_DT } from "../src/sim/constants.ts";
 import {
   CAUSTIC_SHAFTS,
   CAUSTIC_SWEEP_SPEED,
+  CAUSTICS_TILE_CELL,
+  CAUSTICS_TILE_DRIFT,
 } from "../src/render/caustics.ts";
+import { GRAVEL_TEXTURE_BAND } from "../src/render/renderer.ts";
 import { BUBBLE_MARGIN, BUBBLE_POOL_SIZE, BUBBLE_WOBBLE_AMP } from "../src/render/bubbles.ts";
 import {
   SUBSTRATE_GRAVEL_COUNT,
@@ -62,6 +91,12 @@ const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/);
 if (!scriptMatch) throw new Error("no <script> block found in fishtank.html");
 const gameSource = scriptMatch[1];
 
+// The manifest is DATA (declared slot geometry), not source: the
+// gravel-band count below derives from the tile's dimensions.
+const MANIFEST = JSON.parse(readFileSync(path.join(root, "assets", "fishtank", "manifest.json"), "utf8"));
+const SLOT = {};
+for (const entry of MANIFEST.entries) SLOT[entry.name] = entry;
+
 /** Wall-clock interval between driven frames in ms. Deliberately a
  *  touch SLOWER than 60 fps (17 ms > 16.67 ms = 1/60 s): each frame
  *  takes at least one FIXED_DT step, and the leftover ~0.33 ms
@@ -70,21 +105,39 @@ const gameSource = scriptMatch[1];
  *  count) is the ground truth in every audit below. */
 const FRAME_MS = 17;
 
-// ---------- tiny test harness (house style) ----------
+// ---------- tiny test harness (house style, ordered async-aware) ----------
+// Decoder boots settle their decodes on the microtask queue (the
+// boot's real Promise chain), so checks are awaited IN ORDER by
+// runAll — output stays sequential and deterministic.
 let passed = 0;
 let failed = 0;
+const queue = [];
 function check(name, fn) {
-  try {
-    fn();
-    passed += 1;
-    console.log(`ok   - ${name}`);
-  } catch (err) {
-    failed += 1;
-    console.error(`FAIL - ${name}\n       ${err.message}`);
+  queue.push([name, fn]);
+}
+async function runAll() {
+  for (const [name, fn] of queue) {
+    try {
+      await fn();
+      passed += 1;
+      console.log(`ok   - ${name}`);
+    } catch (err) {
+      failed += 1;
+      console.error(`FAIL - ${name}\n       ${err.message}`);
+    }
   }
+  console.log(`\n${passed} passed, ${failed} failed`);
+  process.exit(failed === 0 ? 0 : 1);
 }
 function assert(cond, msg) {
   if (!cond) throw new Error(msg);
+}
+
+/** Flush the isolate's microtask queue (the vm's Promise settles
+ *  land there): the decode chain finishes and the loop registers
+ *  before the first frame is driven. */
+function flushMicrotasks() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 // ---------- vm stubs with a recording 2d context ----------
@@ -149,7 +202,7 @@ function makeCanvas(state) {
 
 // Boot the REAL bundled script from the committed fishtank.html,
 // enabling the named event kinds on the recording context.
-function boot(width, height, enabledKinds) {
+async function boot(width, height, enabledKinds) {
   const state = {
     events: [],
     enabled: new Set(enabledKinds),
@@ -176,9 +229,26 @@ function boot(width, height, enabledKinds) {
   const sandbox = {
     window: win,
     document: { getElementById: (id) => (id === "game" ? canvas : null) },
+    // Ticket #139: the art path runs in this suite — the stubbed
+    // decode reads the slot's REAL dimensions from the PNG IHDR
+    // (big-endian uint32 widths at byte 16, heights at 20, read
+    // per-byte: this toolchain's V8 build has no typed-array
+    // byte-access methods). The boot hands over a Blob where the
+    // sandbox carries one (Node ≥ 24 vm contexts do), else a raw
+    // ArrayBuffer — the stub reads the bytes either way (only a
+    // Blob exposes arrayBuffer()). Settles as a real Promise;
+    // boot() flushes the microtask queue before returning, so the
+    // loop is registered by the time the first frame is driven.
+    atob: (s) => Buffer.from(s, "base64").toString("binary"),
+    createImageBitmap: async (buf) => {
+      const bytes = new Uint8Array(typeof buf.arrayBuffer === "function" ? await buf.arrayBuffer() : buf);
+      const dim = (at) => bytes[at] * 16777216 + bytes[at + 1] * 65536 + bytes[at + 2] * 256 + bytes[at + 3];
+      return { fakeBitmap: true, width: dim(16), height: dim(20) };
+    },
   };
   vm.createContext(sandbox);
   vm.runInContext(gameSource, sandbox);
+  await flushMicrotasks(); // decodes settle, the loop registers
 
   function frameAt(ms) {
     const cb = rafCb;
@@ -236,7 +306,7 @@ function paletteName(surface, depth) {
 // LIGHT_DUSK, LIGHT_NIGHT) in order, each holding its named
 // duration of SIM TIME (+/- 1 step)
 // ================================================================
-check("AC1: over one full cycle the ambient walks LIGHT_DAY -> LIGHT_DUSK -> LIGHT_NIGHT in order, each phase held for its named sim-time duration (+/- 1 step)", () => {
+check("AC1: over one full cycle the ambient walks LIGHT_DAY -> LIGHT_DUSK -> LIGHT_NIGHT in order, each phase held for its named sim-time duration (+/- 1 step)", async () => {
   for (const [label, duration] of [
     ["DAY", DAY_DURATION], ["DUSK", DUSK_DURATION], ["NIGHT", NIGHT_DURATION],
   ]) {
@@ -251,7 +321,7 @@ check("AC1: over one full cycle the ambient walks LIGHT_DAY -> LIGHT_DUSK -> LIG
   // recorded ambient must equal the palette holding at the world
   // clock it rendered at, and each phase must begin within one step
   // of its named sim-time boundary.
-  const g = boot(640, 360, ["stop"]);
+  const g = await boot(640, 360, ["stop"]);
   const rows = []; // { t, name } per rendered frame
   const record = (fromIdx) => {
     const [surface, depth] = ambientPair(g.state, fromIdx);
@@ -317,8 +387,8 @@ check("AC1: over one full cycle the ambient walks LIGHT_DAY -> LIGHT_DUSK -> LIG
     `the wrap to LIGHT_DAY must land at t = ${CYCLE_DURATION}s (+/- 1 step), first post-lap DAY at t = ${firstDayAfterLap.t}s`);
 });
 
-check("AC1: pausing the sim (zero steps) freezes the lighting phase and its ambient fills", () => {
-  const g = boot(640, 360, ["stop"]);
+check("AC1: pausing the sim (zero steps) freezes the lighting phase and its ambient fills", async () => {
+  const g = await boot(640, 360, ["stop"]);
   g.frameAt(0);
   const intoDuskSteps = Math.round((DAY_DURATION + DUSK_DURATION / 2) / FIXED_DT); // ~ t = 52.5 s
   g.tick(intoDuskSteps - 1, 0);
@@ -388,9 +458,9 @@ function shaftTranslate(slice, k) {
   return place.args[0]; // translate(x, y)
 }
 
-check("AC2: every frame issues the caustic shaft gradient draws, each placed by its own translate", () => {
+check("AC2: every frame issues the caustic shaft gradient draws, each placed by its own translate", async () => {
   assert(CAUSTIC_SHAFTS >= 2, `test setup: expected several shafts, got ${CAUSTIC_SHAFTS}`);
-  const g = boot(800, 600, ["gradient", "stop", "translate"]);
+  const g = await boot(800, 600, ["gradient", "stop", "translate"]);
   g.marks = [0];
   g.frameAt(0);
   g.marks.push(g.state.events.length);
@@ -416,8 +486,8 @@ check("AC2: every frame issues the caustic shaft gradient draws, each placed by 
   }
 });
 
-check("AC2 (review should-fix): the sawtooth sweep wrap is masked — a shaft at the wrap paints at zero alpha, the fade only attenuates, and mid-sweep the shaft reaches its caustic base alpha", () => {
-  const g = boot(800, 600, ["gradient", "stop"]);
+check("AC2 (review should-fix): the sawtooth sweep wrap is masked — a shaft at the wrap paints at zero alpha, the fade only attenuates, and mid-sweep the shaft reaches its caustic base alpha", async () => {
+  const g = await boot(800, 600, ["gradient", "stop"]);
   const parseAlpha = (color) => Number(color.slice(color.lastIndexOf(", ") + 2, -1));
   const firstShaftStop = (slice, k) => {
     const grads = [];
@@ -461,8 +531,8 @@ check("AC2 (review should-fix): the sawtooth sweep wrap is masked — a shaft at
     `shaft 0 peaked at alpha ${peak} < caustic base ${LIGHT_DAY.causticBaseAlpha} — the fade never fully reopened mid-sweep`);
 });
 
-check("AC2: the shaft phase advances proportionally to sim time — a 2 x FIXED_DT gap advances exactly twice one step's increment", () => {
-  const g = boot(800, 600, ["gradient", "translate"]);
+check("AC2: the shaft phase advances proportionally to sim time — a 2 x FIXED_DT gap advances exactly twice one step's increment", async () => {
+  const g = await boot(800, 600, ["gradient", "translate"]);
   const EPS = 1e-9;
   const drive = () => {
     const from = g.state.events.length;
@@ -509,8 +579,8 @@ check("AC2: the shaft phase advances proportionally to sim time — a 2 x FIXED_
     `two frames 2 x FIXED_DT apart must advance the phase by exactly twice one step's increment (2 x ${oneStep}px = ${2 * oneStep}px, recorded ${twoStep}px)`);
 });
 
-check("AC2: pausing the sim freezes the shaft phase (the sweep is sim-time driven, not wall-clock driven)", () => {
-  const g = boot(800, 600, ["gradient", "translate"]);
+check("AC2: pausing the sim freezes the shaft phase (the sweep is sim-time driven, not wall-clock driven)", async () => {
+  const g = await boot(800, 600, ["gradient", "translate"]);
   g.frameAt(0);
   g.tick(5, 0);
   const from = g.state.events.length;
@@ -531,68 +601,69 @@ check("AC2: pausing the sim freezes the shaft phase (the sweep is sim-time drive
 });
 
 // ================================================================
-// AC3: bubbles — a POOL-BASED emitter (pool size named) recycles
-// its slots without allocation, every frame releases exactly
-// BUBBLE_POOL_SIZE bubbles with stable per-slot identity across
-// 1000 frames, and each rising bubble wobbles SINUSOIDALLY in x:
-// >= 1 full wobble period per rise, amplitude within the named
-// BUBBLE_WOBBLE_AMP (all from recorded arc positions)
+// AC3 (REWRITTEN, ticket #139): bubbles — a POOL-BASED emitter
+// (pool size named) recycles its slots without allocation, every
+// frame releases exactly BUBBLE_POOL_SIZE bubble SPRITES with
+// stable per-slot size across 1001 frames, and each rising bubble
+// wobbles SINUSOIDALLY in x: >= 1 full wobble period per rise,
+// amplitude within the named BUBBLE_WOBBLE_AMP (all from the
+// recorded drawImage CENTERS — the slots moved from stroked arcs
+// to sprites; the geometric invariant is unchanged)
 // ================================================================
 
-check("AC3: the bubble pool recycles without spawning — every one of 1001 frames releases exactly BUBBLE_POOL_SIZE bubbles with stable per-slot identity", () => {
+check("AC3: the bubble pool recycles without spawning — every one of 1001 frames releases exactly BUBBLE_POOL_SIZE bubble sprites with stable per-slot size", async () => {
   assert(Number.isInteger(BUBBLE_POOL_SIZE) && BUBBLE_POOL_SIZE > 0,
     `BUBBLE_POOL_SIZE must be a named positive integer, got ${BUBBLE_POOL_SIZE}`);
-  const g = boot(800, 600, ["arc"]);
-  const radii = new Array(BUBBLE_POOL_SIZE).fill(null);
+  const g = await boot(800, 600, ["drawImage"]);
+  const widths = new Array(BUBBLE_POOL_SIZE).fill(null);
   for (let f = 0; f <= 1000; f++) {
     const from = g.state.events.length;
     if (f === 0) g.frameAt(0);
     else g.tick(1, (f - 1) * FRAME_MS);
-    const arcs = g.state.events.slice(from).filter((ev) => ev.kind === "arc");
-    // Each live tetra and each live angel paints exactly one head
-    // arc (drawTetras walks world.angels THEN world.agents), bubbles
-    // are painted last, in slot order — so the frame's arc count
-    // pins the pool size given the live head count (read through the
-    // world seams, not the compile-time species sizes: a mid-window
-    // predation must not fail this audit) and its last
-    // BUBBLE_POOL_SIZE entries are the recycled slots.
-    const live = g.q("FISH_TANK_WORLD.agents.length") + g.q("FISH_TANK_WORLD.angels.length");
+    // Bubble sprites are the frame's LAST BUBBLE_POOL_SIZE bitmap
+    // draws: nothing bitmap-drawing follows the column (pellets
+    // and shockwaves stay vector). The swimmers' body sprites
+    // precede them, in draw order.
+    const di = g.state.events.slice(from).filter((ev) => ev.kind === "drawImage");
+    const live = g.q("FISH_TANK_WORLD.agents.length") + g.q("FISH_TANK_WORLD.angels.length") + (g.q("FISH_TANK_WORLD.predator !== null") ? 1 : 0);
     assert(Number.isInteger(live) && live >= 0,
-      `frame ${f}: live head count came back ${live}, not a non-negative integer`);
-    assert(arcs.length === live + BUBBLE_POOL_SIZE,
-      `frame ${f}: expected ${live} fish heads + ${BUBBLE_POOL_SIZE} pooled bubbles arcs, got ${arcs.length}`);
+      `frame ${f}: live swimmer count came back ${live}, not a non-negative integer`);
+    assert(di.length >= live + BUBBLE_POOL_SIZE,
+      `frame ${f}: expected at least ${live} body sprites + ${BUBBLE_POOL_SIZE} pooled bubble sprites, got ${di.length} bitmap draws`);
+    const bubbles = di.slice(-BUBBLE_POOL_SIZE);
     for (let i = 0; i < BUBBLE_POOL_SIZE; i++) {
-      const [x, y, r] = arcs[live + i].args;
-      assert(Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(r),
-        `frame ${f} bubble ${i}: arc went non-finite (${x}, ${y}, ${r})`);
-      if (radii[i] === null) radii[i] = r;
-      else if (r !== radii[i]) {
-        throw new Error(`frame ${f} bubble ${i}: radius changed ${radii[i]} -> ${r} — the pool spawned new bubbles instead of recycling slots`);
+      const [, dx, dy, dw, dh] = bubbles[i].args;
+      assert(Number.isFinite(dx) && Number.isFinite(dy) && Number.isFinite(dw) && Number.isFinite(dh) && dw > 0 && dh > 0,
+        `frame ${f} bubble ${i}: sprite draw went non-finite/non-positive (${dx}, ${dy}, ${dw}, ${dh})`);
+      if (widths[i] === null) widths[i] = dw;
+      else if (dw !== widths[i]) {
+        throw new Error(`frame ${f} bubble ${i}: width changed ${widths[i]} -> ${dw} — the pool spawned new bubbles instead of recycling slots`);
       }
     }
   }
 });
 
-check("AC3: rising bubbles wobble sinusoidally in x — >= 1 full wobble period per rise, amplitude within BUBBLE_WOBBLE_AMP", () => {
+check("AC3: rising bubbles wobble sinusoidally in x — >= 1 full wobble period per rise, amplitude within BUBBLE_WOBBLE_AMP (recorded sprite centers)", async () => {
   const H = 600;
-  const g = boot(800, H, ["arc"]);
+  const g = await boot(800, H, ["drawImage"]);
   const FRAMES = 2000; // ~34 s of sim: every pool slot completes >= 2 full rises
   const lanes = new Array(BUBBLE_POOL_SIZE).fill(null).map(() => []);
   for (let f = 0; f < FRAMES; f++) {
     const from = g.state.events.length;
     if (f === 0) g.frameAt(0);
     else g.tick(1, (f - 1) * FRAME_MS);
-    const arcs = g.state.events.slice(from).filter((ev) => ev.kind === "arc");
-    // Fish heads lead (angels first, then tetras — see the
-    // pool-recycle check above), the pooled bubbles trail in slot
-    // order (head counts read live).
-    const live = g.q("FISH_TANK_WORLD.agents.length") + g.q("FISH_TANK_WORLD.angels.length");
-    assert(Number.isInteger(live) && live >= 0,
-      `frame ${f}: live head count came back ${live}, not a non-negative integer`);
-    assert(arcs.length === live + BUBBLE_POOL_SIZE, `frame ${f}: pool released ${arcs.length - live} bubbles`);
-    for (let i = 0; i < BUBBLE_POOL_SIZE; i++) lanes[i].push(arcs[live + i].args); // [x, y, r]
+    const di = g.state.events.slice(from).filter((ev) => ev.kind === "drawImage");
+    // The pooled bubbles trail in slot order (the last
+    // BUBBLE_POOL_SIZE bitmap draws of the frame — see the
+    // pool-recycle check above).
+    const bubbles = di.slice(-BUBBLE_POOL_SIZE);
+    assert(bubbles.length === BUBBLE_POOL_SIZE, `frame ${f}: the column released ${bubbles.length} sprites, not ${BUBBLE_POOL_SIZE}`);
+    for (let i = 0; i < BUBBLE_POOL_SIZE; i++) {
+      const [, dx, dy, dw, dh] = bubbles[i].args;
+      lanes[i].push([dx + dw / 2, dy + dh / 2]); // sprite CENTER = the bubble's position
+    }
   }
-  const column = H + BUBBLE_MARGIN * 2; // the arc's y travel: from +BUBBLE_MARGIN below to -BUBBLE_MARGIN above the tank
+  const column = H + BUBBLE_MARGIN * 2; // the center's y travel: from +BUBBLE_MARGIN below to -BUBBLE_MARGIN above the tank
   for (let i = 0; i < BUBBLE_POOL_SIZE; i++) {
     const samples = lanes[i];
     // Longest monotone-rising run = one (near-)full ascent: y only
@@ -644,14 +715,75 @@ check("AC3: rising bubbles wobble sinusoidally in x — >= 1 full wobble period 
 });
 
 // ================================================================
-// AC4: substrate — >= 2 procedurally drawn PARALLAX layers
-// (gravel + top decor) render EVERY frame, at DIFFERENT drift
-// rates (the near layer slides measurably faster), and the whole
-// scene references no external assets (no drawImage, no
-// createImageBitmap, anywhere in the recording)
+// AC4 (REWRITTEN, ticket #139): the scene is NO LONGER 100%
+// procedural — it carries the #137/#139 embedded art set. The new
+// render contract: every frame's bitmap draws are EXACTLY the
+// documented art slots (1 background + gravel band + caustics-tile
+// grid + one body sprite per live swimmer + the pooled bubbles)
+// — no slot missing, no undrawn extras — and the caustics-tile
+// grid scrolls proportionally to sim time (the AC2 linearity
+// intent, now applied to the tile's recorded positions). The
+// procedural-substrate audit above (named draw counts + parallax
+// drift rates) stays as written: those layers remain vector.
 // ================================================================
 
-check("AC4: gravel and top-decor parallax layers render every frame with their named draw counts, and the near layer drifts faster than the far layer", () => {
+/** The frame's expected bitmap-draw count at 800×600 (the
+ *  boot's viewport in this file): the constants mirror
+ *  src/render/renderer.ts's overlay math. */
+const VIEW_W = 800;
+const VIEW_H = 600;
+const GRAVEL_DRAWS = Math.ceil(VIEW_W / (VIEW_H * GRAVEL_TEXTURE_BAND * (SLOT["gravel-tile"].width / SLOT["gravel-tile"].height)));
+const CAUSTICS_ROWS = Math.floor(VIEW_H / CAUSTICS_TILE_CELL) + 2;
+const CAUSTICS_COLS = Math.floor(VIEW_W / CAUSTICS_TILE_CELL) + 2;
+const CAUSTICS_DRAWS = CAUSTICS_ROWS * CAUSTICS_COLS;
+
+check("AC4: every frame's bitmap draws are exactly the documented art slots — 1 background + gravel band + caustics-tile grid + one body sprite per live swimmer + the pooled bubbles (nothing missing, nothing extra)", async () => {
+  const g = await boot(VIEW_W, VIEW_H, ["drawImage"]);
+  const FRAMES = 120;
+  for (let f = 0; f < FRAMES; f++) {
+    const from = g.state.events.length;
+    if (f === 0) g.frameAt(0);
+    else g.tick(1, (f - 1) * FRAME_MS);
+    const di = g.state.events.slice(from).filter((ev) => ev.kind === "drawImage");
+    const live = g.q("FISH_TANK_WORLD.agents.length") + g.q("FISH_TANK_WORLD.angels.length") + (g.q("FISH_TANK_WORLD.predator !== null") ? 1 : 0);
+    const expected = 1 + GRAVEL_DRAWS + CAUSTICS_DRAWS + live + BUBBLE_POOL_SIZE;
+    assert(di.length === expected,
+      `frame ${f}: expected ${expected} bitmap draws (1 bg + ${GRAVEL_DRAWS} gravel + ${CAUSTICS_DRAWS} caustics-tile + ${live} bodies + ${BUBBLE_POOL_SIZE} bubbles), got ${di.length}`);
+  }
+});
+
+check("AC4: the caustics-tile grid is seamless-animated — its scroll phase advances PROPORTIONALLY TO SIM TIME (a 2 x FIXED_DT gap advances exactly twice one step's increment), recorded from the tile positions", async () => {
+  assert(CAUSTICS_TILE_DRIFT > 0, "test setup: the tile must scroll");
+  const EPS = 1e-9;
+  const g = await boot(VIEW_W, VIEW_H, ["drawImage"]);
+  // Tile (1, 0) — the second column of the grid — sits at
+  // CAUSTICS_TILE_CELL - offset(t); the recorded x is the phase.
+  const tileX = (slice) => slice.filter((ev) => ev.kind === "drawImage")
+    [1 + GRAVEL_DRAWS + CAUSTICS_ROWS].args[1];
+  const frames = [];
+  g.frameAt(0);
+  frames.push({ t: 0, x: tileX(g.state.events) });
+  for (let f = 0; f < 200; f++) {
+    const from = g.state.events.length;
+    g.tick(1, (f + 1) * FRAME_MS);
+    frames.push({ t: g.q("FISH_TANK_WORLD.time"), x: tileX(g.state.events.slice(from)) });
+  }
+  // The ~3.4 s window ends far short of the tile's wrap period
+  // (CAUSTICS_TILE_CELL / CAUSTICS_TILE_DRIFT), so no recorded
+  // gap can straddle the seamless reset.
+  for (let k = 1; k < frames.length; k++) {
+    const dt = frames[k].t - frames[k - 1].t;
+    if (!(Math.abs(dt - FIXED_DT) <= EPS || Math.abs(dt - 2 * FIXED_DT) <= EPS)) {
+      throw new Error(`frame ${k} moved ${dt}s of sim time — expected whole fixed steps`);
+    }
+    const expected = -CAUSTICS_TILE_DRIFT * dt; // the grid scrolls against the +x axis
+    const d = frames[k].x - frames[k - 1].x;
+    assert(Math.abs(d - expected) <= EPS,
+      `caustics tile: a ${dt}s gap must advance the scroll by ${expected}px (DRIFT x dt), recorded ${d}px`);
+  }
+});
+
+check("AC4: gravel and top-decor parallax layers render every frame with their named draw counts, and the near layer drifts faster than the far layer", async () => {
   assert(Number.isInteger(SUBSTRATE_GRAVEL_COUNT) && SUBSTRATE_GRAVEL_COUNT > 0, "gravel count must be a named positive constant");
   assert(
     SUBSTRATE_DECOR_ROCKS + SUBSTRATE_KELP_TUFTS >= 2 && SUBSTRATE_GRAVEL_COUNT >= 2,
@@ -659,7 +791,7 @@ check("AC4: gravel and top-decor parallax layers render every frame with their n
   );
   assert(SUBSTRATE_NEAR_DRIFT > SUBSTRATE_FAR_DRIFT > 0,
     `parallax requires the NEAR layer to drift faster (near ${SUBSTRATE_NEAR_DRIFT} <= far ${SUBSTRATE_FAR_DRIFT})`);
-  const g = boot(800, 600, ["translate", "ellipse", "beginPath", "fill", "stroke"]);
+  const g = await boot(800, 600, ["translate", "ellipse", "beginPath", "fill", "stroke"]);
   const FRAMES = 120;
   const frames = [];
   for (let f = 0; f < FRAMES; f++) {
@@ -694,7 +826,7 @@ check("AC4: gravel and top-decor parallax layers render every frame with their n
   }
   // Parallax rates: audit the drifts on a fresh boot so the sim-
   // time bookkeeping stays local.
-  const h = boot(800, 600, ["translate"]);
+  const h = await boot(800, 600, ["translate"]);
   const drift = [];
   const collect = (fromIdx) => {
     const pair = h.state.events.slice(fromIdx).filter((ev) => ev.kind === "translate");
@@ -724,15 +856,5 @@ check("AC4: gravel and top-decor parallax layers render every frame with their n
   }
 });
 
-check("AC4: the atmosphere references no external assets — no drawImage or createImageBitmap anywhere in the recording", () => {
-  const g = boot(800, 600, ["drawImage", "imageBitmap"]);
-  g.frameAt(0);
-  g.tick(120, 0);
-  const bad = g.state.events.filter((ev) => ev.kind === "drawImage" || ev.kind === "imageBitmap");
-  assert(bad.length === 0,
-    `the scene must be 100% procedural (no external assets), recorded ${bad.length} image loads`);
-});
-
-// ---------- summary ----------
-console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed === 0 ? 0 : 1);
+// ---------- run ----------
+runAll();
