@@ -1,0 +1,197 @@
+{
+  "asset": "bg",
+  "file": "bg-minimal.png",
+  "candidate": 3,
+  "tool": "asset-forge 0.1.0",
+  "tool_commit": "1f01832",
+  "comfyui": "0.46.0",
+  "style": "pixel",
+  "model": "flux2-klein-4b-pixel",
+  "model_label": "FLUX.2 [klein] 4B + Limbicnation pixel-art sprite LoRA",
+  "licence": "Apache-2.0 (base) + Apache-2.0 (LoRA; CC0 training data)",
+  "sources": [
+    "black-forest-labs/FLUX.2-klein-4B",
+    "Limbicnation/pixel-art-lora"
+  ],
+  "params": {
+    "lora_strength": 0.6
+  },
+  "palette": [
+    "#f2efe9",
+    "#e9e5dd",
+    "#d6d3d1",
+    "#c4bfb6",
+    "#a8a29e",
+    "#8d877c",
+    "#78716c",
+    "#57534e",
+    "#3d3934",
+    "#14141a"
+  ],
+  "frames": [
+    {
+      "prompt": "pixel art sprite, 16-bit pixel art, crisp hard-edged pixels, limited colour palette, game asset, low-resolution pixel art with large chunky square pixels, flat colour areas, no anti-aliasing. warm stone monochrome on an off-white paper ground, flat geometric surfaces with a single soft light bevel, zero gloss. View from INSIDE a quiet studio wall facing a wooden plank floor, seen from slightly above: the pale warm off-white wall and the floor cover the ENTIRE image edge to edge, corner to corner \u2014 no visible backdrop outside the room, no border, completely opaque. The wall is a plain warm stone off-white with a very faint etched grid of barely darker lines, the floor a slightly darker warm grey-tan with soft plank seams meeting the wall at a soft horizon line. Empty room: no furniture, no objects, no balls, no paddles, no text, no logos. Very low contrast, calm and receding so dark foreground pieces stand out; wide composition, nothing important at the edges. A full-frame empty scene used as a game background, wide composition, nothing important at the edges, no game pieces, no characters, no text, no UI, no logos. dark 1px outline in the stone ink tones, no anti-aliasing, front-top light, 16-bit presentation",
+      "seed": 246863353173102,
+      "gen_size": [
+        1280,
+        832
+      ],
+      "raw": "raw/cand-03.png",
+      "graph": {
+        "unet": {
+          "class_type": "UNETLoader",
+          "inputs": {
+            "unet_name": "flux-2-klein-4b.safetensors",
+            "weight_dtype": "default"
+          }
+        },
+        "clip": {
+          "class_type": "CLIPLoader",
+          "inputs": {
+            "clip_name": "qwen_3_4b.safetensors",
+            "type": "flux2",
+            "device": "default"
+          }
+        },
+        "vae": {
+          "class_type": "VAELoader",
+          "inputs": {
+            "vae_name": "flux2-vae.safetensors"
+          }
+        },
+        "pos": {
+          "class_type": "CLIPTextEncode",
+          "inputs": {
+            "text": "pixel art sprite, 16-bit pixel art, crisp hard-edged pixels, limited colour palette, game asset, low-resolution pixel art with large chunky square pixels, flat colour areas, no anti-aliasing. warm stone monochrome on an off-white paper ground, flat geometric surfaces with a single soft light bevel, zero gloss. View from INSIDE a quiet studio wall facing a wooden plank floor, seen from slightly above: the pale warm off-white wall and the floor cover the ENTIRE image edge to edge, corner to corner \u2014 no visible backdrop outside the room, no border, completely opaque. The wall is a plain warm stone off-white with a very faint etched grid of barely darker lines, the floor a slightly darker warm grey-tan with soft plank seams meeting the wall at a soft horizon line. Empty room: no furniture, no objects, no balls, no paddles, no text, no logos. Very low contrast, calm and receding so dark foreground pieces stand out; wide composition, nothing important at the edges. A full-frame empty scene used as a game background, wide composition, nothing important at the edges, no game pieces, no characters, no text, no UI, no logos. dark 1px outline in the stone ink tones, no anti-aliasing, front-top light, 16-bit presentation",
+            "clip": [
+              "clip",
+              0
+            ]
+          }
+        },
+        "neg": {
+          "class_type": "ConditioningZeroOut",
+          "inputs": {
+            "conditioning": [
+              "pos",
+              0
+            ]
+          }
+        },
+        "noise": {
+          "class_type": "RandomNoise",
+          "inputs": {
+            "noise_seed": 246863353173102
+          }
+        },
+        "sampler": {
+          "class_type": "KSamplerSelect",
+          "inputs": {
+            "sampler_name": "euler"
+          }
+        },
+        "sigmas": {
+          "class_type": "Flux2Scheduler",
+          "inputs": {
+            "steps": 4,
+            "width": 1280,
+            "height": 832
+          }
+        },
+        "latent": {
+          "class_type": "EmptyFlux2LatentImage",
+          "inputs": {
+            "width": 1280,
+            "height": 832,
+            "batch_size": 1
+          }
+        },
+        "lora": {
+          "class_type": "LoraLoaderModelOnly",
+          "inputs": {
+            "model": [
+              "unet",
+              0
+            ],
+            "lora_name": "pixel-art-lora-klein4b.safetensors",
+            "strength_model": 0.6
+          }
+        },
+        "guider": {
+          "class_type": "CFGGuider",
+          "inputs": {
+            "model": [
+              "lora",
+              0
+            ],
+            "positive": [
+              "pos",
+              0
+            ],
+            "negative": [
+              "neg",
+              0
+            ],
+            "cfg": 1.0
+          }
+        },
+        "sample": {
+          "class_type": "SamplerCustomAdvanced",
+          "inputs": {
+            "noise": [
+              "noise",
+              0
+            ],
+            "guider": [
+              "guider",
+              0
+            ],
+            "sampler": [
+              "sampler",
+              0
+            ],
+            "sigmas": [
+              "sigmas",
+              0
+            ],
+            "latent_image": [
+              "latent",
+              0
+            ]
+          }
+        },
+        "decode": {
+          "class_type": "VAEDecode",
+          "inputs": {
+            "samples": [
+              "sample",
+              0
+            ],
+            "vae": [
+              "vae",
+              0
+            ]
+          }
+        },
+        "save": {
+          "class_type": "SaveImage",
+          "inputs": {
+            "images": [
+              "decode",
+              0
+            ],
+            "filename_prefix": "forge-bg"
+          }
+        }
+      }
+    }
+  ],
+  "sha256": "dc697cafc1c9039670c6d0f3b657d64258a1777907e5c420a18dd3c2a4fee52c",
+  "bytes": 19854,
+  "size": [
+    960,
+    600
+  ],
+  "mode": "RGB",
+  "created": "2026-11-26T02:33:34"
+}

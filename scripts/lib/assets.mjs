@@ -55,10 +55,26 @@ export function loadGameAssets(game, root = ROOT, readAssetFile = readFileSync) 
   if (!entriesRaw || entriesRaw.length === 0) throw new Error(`assets/${game}/manifest.json must declare a non-empty "entries" array`);
 
   const entries = entriesRaw.map((raw) => normalizeEntry(game, dir, raw));
-  // Stable manifest order: sorted by name.
-  entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  // Stable manifest order: (set, name) — set first, slot name within.
+  // Slot names repeat across the game's sets (every set ships its own
+  // "bg", "ball", ...); the pair is the slot's identity (ticket #143).
+  entries.sort((a, b) => {
+    if (a.set === b.set) return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+    return a.set < b.set ? -1 : 1;
+  });
   for (let i = 1; i < entries.length; i += 1) {
-    if (entries[i].name === entries[i - 1].name) throw new Error(`duplicate asset name "${entries[i].name}"`);
+    if (entries[i].set === entries[i - 1].set && entries[i].name === entries[i - 1].name) {
+      throw new Error(`duplicate slot pair (set ${entries[i].set}, name ${entries[i].name})`);
+    }
+  }
+  // A slot's file is claimed by exactly one slot pair: sharing it
+  // would double-count the raw budget and blur the pair's identity.
+  const fileOwners = new Map();
+  for (const e of entries) {
+    if (fileOwners.has(e.file)) {
+      throw new Error(`slot file ${e.file} is claimed by more than one (set, name) slot pair`);
+    }
+    fileOwners.set(e.file, e);
   }
   let rawBytes = 0;
   for (const e of entries) {
@@ -85,6 +101,8 @@ function normalizeEntry(game, dir, raw) {
     if (!Number.isInteger(v) || v <= 0) fail(`${name}: "${key}" must be a positive integer, got ${JSON.stringify(v)}`);
     return v;
   };
+  const set = field("set");
+  if (typeof set !== "string" || !NAME_RE.test(set)) fail(`${name}: "set" must match the slot naming rule, got ${JSON.stringify(set)}`);
   const file = field("file");
   if (typeof file !== "string" || !file.endsWith(".png")) fail(`${name}: "file" must be a .png path, got ${JSON.stringify(file)}`);
   const width = int("width");
@@ -105,18 +123,19 @@ function normalizeEntry(game, dir, raw) {
   const license = field("license");
   if (typeof license !== "string" || license.trim().length === 0) fail(`${name}: "license" must be a non-empty attribution line`);
   return {
-    name, file, width, height, frames, frameWidth, frameHeight,
+    name, file, set, width, height, frames, frameWidth, frameHeight,
     alpha, tiling, placeholder, category, license,
   };
 }
 
 /** The deterministic embedded payload: one line of JSON, entries
- *  in sorted manifest order, fixed key order, base64 of the
- *  committed file bytes. Pure function of the tree — rebuilding
- *  from the same tree is byte-identical. */
+ *  in stable (set, name) manifest order, fixed key order (se
+ *  leading), base64 of the committed file bytes. Pure function
+ *  of the tree — rebuilding from the same tree is byte-identical. */
 export function assetPayloadJson(game, root = ROOT, readAssetFile = readFileSync) {
   const { entries } = loadGameAssets(game, root, readAssetFile);
   const items = entries.map((e) => ({
+    set: e.set,
     name: e.name,
     w: e.width,
     h: e.height,

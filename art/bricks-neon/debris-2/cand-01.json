@@ -1,0 +1,55 @@
+{
+  "asset": "debris-2",
+  "file": "debris-2-neon.png",
+  "candidate": 1,
+  "method": "draw",
+  "tool": "asset-forge 0.1.0",
+  "tool_commit": "1f01832",
+  "style": "pixel",
+  "model": "hand-drawn",
+  "model_label": "hand-drawn pixel grid by agent (hand-drawn pixel grid, palette-snapped)",
+  "licence": "drawn for the project (project licence)",
+  "author": "agent (hand-drawn pixel grid, palette-snapped)",
+  "source": "/home/code/hacking/oneshot-art/w143/drawings-neon/debris-2.json",
+  "legend": {
+    "A": "#0a0118",
+    "B": "#1b0d33",
+    "C": "#33205c",
+    "D": "#5b4b8a",
+    "E": "#7c4dff",
+    "F": "#b388ff",
+    "G": "#00f0ff",
+    "H": "#7dfbff",
+    "I": "#ffffff",
+    "J": "#ff2d78",
+    "K": "#ff7aa8",
+    "L": "#ffbe0b",
+    "M": "#ffd166"
+  },
+  "frames": [
+    {
+      "grid": [
+        "............",
+        "............",
+        "......FFFF..",
+        "...FFFEEEF..",
+        "...FEEEEEF..",
+        "...FEEEEEF..",
+        "...FEEEEEEF.",
+        "....FEEEEEF.",
+        "....FEEEEFF.",
+        "....FEFFF...",
+        "....FF......",
+        "............"
+      ]
+    }
+  ],
+  "sha256": "626f7d6d776119867a036c9241804b301c245fddbd7b884225beea9a74ed8f9c",
+  "bytes": 138,
+  "size": [
+    12,
+    12
+  ],
+  "mode": "RGBA",
+  "created": "2026-11-26T02:28:36"
+}

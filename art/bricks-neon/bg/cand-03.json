@@ -1,0 +1,200 @@
+{
+  "asset": "bg",
+  "file": "bg-neon.png",
+  "candidate": 3,
+  "tool": "asset-forge 0.1.0",
+  "tool_commit": "1f01832",
+  "comfyui": "0.46.0",
+  "style": "pixel",
+  "model": "flux2-klein-4b-pixel",
+  "model_label": "FLUX.2 [klein] 4B + Limbicnation pixel-art sprite LoRA",
+  "licence": "Apache-2.0 (base) + Apache-2.0 (LoRA; CC0 training data)",
+  "sources": [
+    "black-forest-labs/FLUX.2-klein-4B",
+    "Limbicnation/pixel-art-lora"
+  ],
+  "params": {
+    "lora_strength": 0.6
+  },
+  "palette": [
+    "#0a0118",
+    "#1b0d33",
+    "#33205c",
+    "#5b4b8a",
+    "#7c4dff",
+    "#b388ff",
+    "#00f0ff",
+    "#7dfbff",
+    "#ffffff",
+    "#ff2d78",
+    "#ff7aa8",
+    "#ffbe0b",
+    "#ffd166"
+  ],
+  "frames": [
+    {
+      "prompt": "pixel art sprite, 16-bit pixel art, crisp hard-edged pixels, limited colour palette, game asset, low-resolution pixel art with large chunky square pixels, flat colour areas, no anti-aliasing. deep violet-black synthwave arcade arena, electric cyan glow, hot magenta and amber game pieces. View from INSIDE a synthwave arcade arena: the paneled walls and the glowing grid floor together cover the ENTIRE image edge to edge, corner to corner \u2014 no visible backdrop outside the room, no border, completely opaque. Deep violet-black walls with faint electric-cyan grid lines, a hot-magenta horizon line where wall meets floor, very subtle dark vignette in the four corners. Empty arena: no bricks, no ball, no paddle, no icons, no text, no logos. Calm and low-contrast so bright foreground pieces stand out; wide composition, nothing important at the edges. A full-frame empty scene used as a game background, wide composition, nothing important at the edges, no game pieces, no characters, no text, no UI, no logos. dark outline 1px, no anti-aliasing, front-top light, 16-bit arcade presentation",
+      "seed": 246863353173102,
+      "gen_size": [
+        1280,
+        832
+      ],
+      "raw": "raw/cand-03.png",
+      "graph": {
+        "unet": {
+          "class_type": "UNETLoader",
+          "inputs": {
+            "unet_name": "flux-2-klein-4b.safetensors",
+            "weight_dtype": "default"
+          }
+        },
+        "clip": {
+          "class_type": "CLIPLoader",
+          "inputs": {
+            "clip_name": "qwen_3_4b.safetensors",
+            "type": "flux2",
+            "device": "default"
+          }
+        },
+        "vae": {
+          "class_type": "VAELoader",
+          "inputs": {
+            "vae_name": "flux2-vae.safetensors"
+          }
+        },
+        "pos": {
+          "class_type": "CLIPTextEncode",
+          "inputs": {
+            "text": "pixel art sprite, 16-bit pixel art, crisp hard-edged pixels, limited colour palette, game asset, low-resolution pixel art with large chunky square pixels, flat colour areas, no anti-aliasing. deep violet-black synthwave arcade arena, electric cyan glow, hot magenta and amber game pieces. View from INSIDE a synthwave arcade arena: the paneled walls and the glowing grid floor together cover the ENTIRE image edge to edge, corner to corner \u2014 no visible backdrop outside the room, no border, completely opaque. Deep violet-black walls with faint electric-cyan grid lines, a hot-magenta horizon line where wall meets floor, very subtle dark vignette in the four corners. Empty arena: no bricks, no ball, no paddle, no icons, no text, no logos. Calm and low-contrast so bright foreground pieces stand out; wide composition, nothing important at the edges. A full-frame empty scene used as a game background, wide composition, nothing important at the edges, no game pieces, no characters, no text, no UI, no logos. dark outline 1px, no anti-aliasing, front-top light, 16-bit arcade presentation",
+            "clip": [
+              "clip",
+              0
+            ]
+          }
+        },
+        "neg": {
+          "class_type": "ConditioningZeroOut",
+          "inputs": {
+            "conditioning": [
+              "pos",
+              0
+            ]
+          }
+        },
+        "noise": {
+          "class_type": "RandomNoise",
+          "inputs": {
+            "noise_seed": 246863353173102
+          }
+        },
+        "sampler": {
+          "class_type": "KSamplerSelect",
+          "inputs": {
+            "sampler_name": "euler"
+          }
+        },
+        "sigmas": {
+          "class_type": "Flux2Scheduler",
+          "inputs": {
+            "steps": 4,
+            "width": 1280,
+            "height": 832
+          }
+        },
+        "latent": {
+          "class_type": "EmptyFlux2LatentImage",
+          "inputs": {
+            "width": 1280,
+            "height": 832,
+            "batch_size": 1
+          }
+        },
+        "lora": {
+          "class_type": "LoraLoaderModelOnly",
+          "inputs": {
+            "model": [
+              "unet",
+              0
+            ],
+            "lora_name": "pixel-art-lora-klein4b.safetensors",
+            "strength_model": 0.6
+          }
+        },
+        "guider": {
+          "class_type": "CFGGuider",
+          "inputs": {
+            "model": [
+              "lora",
+              0
+            ],
+            "positive": [
+              "pos",
+              0
+            ],
+            "negative": [
+              "neg",
+              0
+            ],
+            "cfg": 1.0
+          }
+        },
+        "sample": {
+          "class_type": "SamplerCustomAdvanced",
+          "inputs": {
+            "noise": [
+              "noise",
+              0
+            ],
+            "guider": [
+              "guider",
+              0
+            ],
+            "sampler": [
+              "sampler",
+              0
+            ],
+            "sigmas": [
+              "sigmas",
+              0
+            ],
+            "latent_image": [
+              "latent",
+              0
+            ]
+          }
+        },
+        "decode": {
+          "class_type": "VAEDecode",
+          "inputs": {
+            "samples": [
+              "sample",
+              0
+            ],
+            "vae": [
+              "vae",
+              0
+            ]
+          }
+        },
+        "save": {
+          "class_type": "SaveImage",
+          "inputs": {
+            "images": [
+              "decode",
+              0
+            ],
+            "filename_prefix": "forge-bg"
+          }
+        }
+      }
+    }
+  ],
+  "sha256": "ba69ca3835290be5070fe88da59d9de10017a7fb30d32ae7a41ad5185313dbd3",
+  "bytes": 36372,
+  "size": [
+    960,
+    600
+  ],
+  "mode": "RGB",
+  "created": "2026-11-26T02:31:36"
+}

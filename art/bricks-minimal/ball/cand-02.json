@@ -1,0 +1,56 @@
+{
+  "asset": "ball",
+  "file": "ball-minimal.png",
+  "candidate": 2,
+  "method": "draw",
+  "tool": "asset-forge 0.1.0",
+  "tool_commit": "1f01832",
+  "style": "pixel",
+  "model": "hand-drawn",
+  "model_label": "hand-drawn pixel grid by agent (hand-drawn pixel grid, palette-snapped)",
+  "licence": "drawn for the project (project licence)",
+  "author": "agent (hand-drawn pixel grid, palette-snapped)",
+  "source": "/home/code/hacking/oneshot-art/w143/drawings-minimal/ball.json",
+  "legend": {
+    "A": "#f2efe9",
+    "B": "#e9e5dd",
+    "C": "#d6d3d1",
+    "D": "#c4bfb6",
+    "E": "#a8a29e",
+    "F": "#8d877c",
+    "G": "#78716c",
+    "H": "#57534e",
+    "I": "#3d3934",
+    "J": "#14141a"
+  },
+  "frames": [
+    {
+      "grid": [
+        ".....JJJJJ......",
+        "...JJJJIJJJJ....",
+        "..JJIIIIIIIJJ...",
+        ".JJIIIHHHIIIJJ..",
+        ".JIIHHHHHHHIIJ..",
+        "JJIIHHHHHHHIIJJ.",
+        "JJIHHHHHHHHHIJJ.",
+        "JIIHHHHHHHHHIIJ.",
+        "JJIHHHHHHHHHIJJ.",
+        "JJIIHHHHHHHIIJJ.",
+        ".JIIHHHHHHHIIJ..",
+        ".JJIIIHHHIIIJJ..",
+        "..JJIIIIIIIJJ...",
+        "...JJJJIJJJJ....",
+        ".....JJJJJ......",
+        "................"
+      ]
+    }
+  ],
+  "sha256": "682cb167e9ee5d5b89a0c827be01f746e6859e3375b279fba22387d82dc860e4",
+  "bytes": 189,
+  "size": [
+    16,
+    16
+  ],
+  "mode": "RGBA",
+  "created": "2026-11-26T02:28:36"
+}

@@ -108,24 +108,45 @@ for (const game of GAMES) {
   const htmlPath = path.join(ROOT, `${game}.html`);
   const html = readFileSync(htmlPath, "utf8");
 
-  check(`${game}.html: the embedded payload is hash-identical to assets/${game} on disk, in sorted manifest order`, () => {
+  check(`${game}.html: the embedded payload is hash-identical to assets/${game} on disk, in stable (set, name) manifest order`, () => {
     const embedded = extractEmbedded(html, game);
     const { entries } = loadGameAssets(game);
     assert(embedded.length === entries.length,
       `payload carries ${embedded.length} entries, the manifest declares ${entries.length}`);
-    const names = embedded.map((e) => e.name);
-    assert(JSON.stringify(names) === JSON.stringify([...names].sort()),
-      "payload entries must be in stable sorted manifest order");
+    const keys = embedded.map((e) => `${e.set}:${e.name}`);
+    assert(JSON.stringify(keys) === JSON.stringify([...keys].sort()),
+      "payload entries must be in stable sorted manifest order (set, then name)");
     for (let i = 0; i < entries.length; i += 1) {
       const e = entries[i];
       const emb = embedded[i];
       const fileBuf = readFileSync(path.join(ROOT, "assets", game, e.file));
+      assert(emb.set === e.set, `payload[${i}] set ${JSON.stringify(emb.set)} ≠ manifest set ${JSON.stringify(e.set)}`);
       assert(emb.name === e.name, `payload[${i}] name ${emb.name} ≠ manifest ${e.name}`);
       assert(Buffer.from(emb.d, "base64").equals(fileBuf),
-        `${e.name}: embedded base64 does not hash-compare to assets/${game}/${e.file}`);
-      assert(emb.w === e.width && emb.h === e.height, `${e.name}: embedded dimensions disagree with the manifest`);
-      assert(emb.ph === (e.placeholder ? 1 : 0), `${e.name}: placeholder flag did not survive the embed`);
+        `${e.set}/${e.name}: embedded base64 does not hash-compare to assets/${game}/${e.file}`);
+      assert(emb.w === e.width && emb.h === e.height, `${e.set}/${e.name}: embedded dimensions disagree with the manifest`);
+      assert(emb.frames === e.frames, `${e.set}/${e.name}: embedded frame count disagrees with the manifest`);
+      assert(emb.ph === (e.placeholder ? 1 : 0), `${e.set}/${e.name}: placeholder flag did not survive the embed`);
     }
+  });
+
+  check(`${game}.html: the payload carries a set name per entry; every manifest (set, name) slot pair is present exactly once`, () => {
+    const embedded = extractEmbedded(html, game);
+    const { entries } = loadGameAssets(game);
+    for (const e of embedded) {
+      assert(typeof e.set === "string" && e.set.length > 0,
+        `payload entry ${e.name} must carry a non-empty set name`);
+    }
+    const inPayload = new Set(embedded.map((e) => `${e.set}:${e.name}`));
+    assert(inPayload.size === embedded.length, "the payload must not carry the same (set, name) pair twice");
+    for (const e of entries) {
+      assert(inPayload.has(`${e.set}:${e.name}`), `payload is missing the manifest slot pair ${e.set}:${e.name}`);
+    }
+    for (const key of inPayload) {
+      const [set, name] = key.split(":");
+      assert(entries.some((e) => e.set === set && e.name === name), `payload slot pair ${key} has no manifest entry`);
+    }
+    assert(new Set(embedded.map((e) => e.set)).size > 0, "the payload must declare at least one asset set");
   });
 
   check(`${game}.html: the payload is regenerated deterministically (two builds, identical JSON)`, () => {
@@ -210,7 +231,7 @@ check("assetPayloadJson: the rawBytes budget and the serialized payload come fro
     const manifest = {
       game: "bricks",
       entries: [{
-        name: "solo", file: "solo.png",
+        name: "solo", file: "solo.png", set: "classic",
         width: 4, height: 4, frames: 1, frameWidth: 4, frameHeight: 4,
         alpha: "opaque", tiling: false, placeholder: true,
         category: "sprite", license: "CC0 (fixture)",
@@ -352,16 +373,16 @@ check("fishtank.html: a one-byte asset mutation makes build --check exit non-zer
 });
 
 // ================================================================
-// Placeholder generator: every slot still flagged `placeholder: true`
+// Placeholder generator: every slot STILL flagged `placeholder: true`
 // is a BYTE GOLDEN of scripts/generate-placeholders.mjs — regenerating
-// into a fresh copy must reproduce it byte for byte. That pins the
-// generator AND the PNG encoder (a future zlib/toolchain bump that
-// changes deflateSync output fails here, forcing a deliberate asset
-// re-commit instead of silent drift).
-// Slots replaced with approved final art (`placeholder: false`, per
-// docs/ASSET-SOURCING.md) must instead DIFFER from the generator's
-// output: the swap has to be real, not a silent placeholder
-// re-commit. The generator-owned manifest and LICENSE files keep
+// into a fresh, pristine out dir must reproduce the committed bytes for
+// the slots the generator OWNS. Slots replaced with approved final art
+// (`placeholder: false`, per docs/ASSET-SOURCING.md) must instead DIFFER
+// from the generator's output: the swap has to be real, not a silent
+// placeholder re-commit. Sets added as final art from day one (ticket
+// #143: neon / minimal) are copied file sets, not generator output —
+// they must be manifest-declared slots, and are exempt from the
+// byte comparison. The generator-owned manifest and LICENSE files keep
 // their place in the file set but are free to evolve.
 // ================================================================
 const listFiles = (dir) => {
@@ -377,40 +398,64 @@ const listFiles = (dir) => {
   return out.sort();
 };
 
-check("assets/: regenerated placeholders stay byte-identical, final art provably differs", () => {
+check("assets/: the placeholder generator is a byte golden for the slots it owns; final art provably differs from it", () => {
   const tmp = tmpTree();
+  const genTmp = mkdtempSync(path.join(os.tmpdir(), "embed-137-gen-"));
   try {
-    const r = run(tmp, [path.join(tmp, "scripts", "generate-placeholders.mjs"), tmp]);
+    // The generator writes its full owned asset set into a PRISTINE out
+    // dir — that list IS the ownership definition, independent of the
+    // committed manifest (which carries more sets than the generator
+    // knows about).
+    const r = run(ROOT, [path.join(ROOT, "scripts", "generate-placeholders.mjs"), genTmp]);
     assert(r.code === 0, `the generator must succeed against a foreign out dir, got ${r.code}:\n${r.output}`);
+    const genFiles = new Set(listFiles(path.join(genTmp, "assets")));
     const rootFiles = listFiles(path.join(ROOT, "assets"));
     const tmpFiles = listFiles(path.join(tmp, "assets"));
+    // Running the generator against the COPIED tree must keep the file
+    // set byte-stable (it rewrites its owned slots in place only).
     assert(JSON.stringify(rootFiles) === JSON.stringify(tmpFiles),
-      `the regenerated tree has a different file set (${rootFiles.length} vs ${tmpFiles.length} files)`);
+      `the copied tree has a different file set after in-place regeneration (${rootFiles.length} vs ${tmpFiles.length} files)`);
+    // Every committed asset file is either generator-owned or a
+    // manifest-declared slot — no orphan bytes may hide in the tree.
+    const declared = new Set();
+    for (const game of readdirSync(path.join(ROOT, "assets")).sort()) {
+      const entries = JSON.parse(readFileSync(path.join(ROOT, "assets", game, "manifest.json"), "utf8"));
+      for (const e of entries.entries) declared.add(`${game}/${e.file}`);
+      declared.add(`${game}/manifest.json`);
+      declared.add(`${game}/LICENSE.txt`);
+    }
+    for (const rel of rootFiles) {
+      assert(genFiles.has(rel) || declared.has(rel),
+        `assets/${rel} is neither generator-owned nor a manifest-declared slot`);
+    }
+    // Content rule, generator-owned PNGs only: placeholder-owned slots
+    // must reproduce byte for byte (pins the generator AND the PNG
+    // encoder); final-art slots must provably differ from it.
     const manifestByGameFile = {};
-    for (const game of readdirSync(path.join(ROOT, "assets"))) {
+    for (const game of readdirSync(path.join(ROOT, "assets")).sort()) {
       const entries = JSON.parse(readFileSync(path.join(ROOT, "assets", game, "manifest.json"), "utf8"));
       manifestByGameFile[game] = {};
       for (const e of entries.entries) manifestByGameFile[game][e.file] = e;
     }
     for (const rel of rootFiles) {
+      if (!rel.endsWith(".png") || !genFiles.has(rel)) continue;
       const [game, file] = rel.split("/");
       const committed = readFileSync(path.join(ROOT, "assets", rel));
-      const regenerated = readFileSync(path.join(tmp, "assets", rel));
-      if (file.endsWith(".png")) {
-        const e = manifestByGameFile[game][file];
-        if (e.placeholder) {
-          assert(committed.equals(regenerated),
-            `placeholder assets/${rel} is not byte-identical after regeneration ` +
-            `(${committed.byteLength} vs ${regenerated.byteLength} bytes)`);
-        } else {
-          assert(!committed.equals(regenerated),
-            `final-art assets/${rel} is byte-identical to the placeholder generator output — ` +
-            `the slot was not actually swapped (placeholder remains)`);
-        }
+      const regenerated = readFileSync(path.join(genTmp, "assets", rel));
+      const e = manifestByGameFile[game][file];
+      if (e.placeholder) {
+        assert(committed.equals(regenerated),
+          `placeholder assets/${rel} is not byte-identical after regeneration ` +
+          `(${committed.byteLength} vs ${regenerated.byteLength} bytes)`);
+      } else {
+        assert(!committed.equals(regenerated),
+          `final-art assets/${rel} is byte-identical to the placeholder generator output — ` +
+          `the slot was not actually swapped (placeholder remains)`);
       }
     }
   } finally {
     rmSync(tmp, { recursive: true, force: true });
+    rmSync(genTmp, { recursive: true, force: true });
   }
 });
 
@@ -495,7 +540,9 @@ function makeBricksEls(canvas) {
 }
 // `decodeSpec` is true (every entry resolves), false (no decoder at
 // all), or a function used as createImageBitmap as-is.
-function bootBricks(decodeSpec) {
+// `seedTheme` (optional) seeds the theme persistence key so a boot
+// can start on a non-default theme (the loadTheme contract).
+function bootBricks(decodeSpec, seedTheme) {
   const bricksHtml = readFileSync(path.join(ROOT, "bricks.html"), "utf8");
   const gameSource = bricksHtml.match(/<script>([\s\S]*?)<\/script>/)[1];
   const drawImages = [];
@@ -513,7 +560,10 @@ function bootBricks(decodeSpec) {
       }
       : undefined;
   const sandbox = {
-    localStorage: { getItem: () => null, setItem: () => {} },
+    localStorage: {
+      getItem: (key) => (seedTheme !== undefined && key === "brickbreaker.theme" ? JSON.stringify(seedTheme) : null),
+      setItem: () => {},
+    },
     window: {
       innerWidth: 960, innerHeight: 600,
       addEventListener: () => {},
@@ -538,15 +588,23 @@ function bootBricks(decodeSpec) {
   };
 }
 
-await checkAsync("bricks runtime: with a bitmap decoder the payload decodes into the cached table BEFORE the first frame", async () => {
-  const g = bootBricks(true);
+// Per-set facts of the shipped payload, for the runtime checks below.
+const bricksPayload = extractEmbedded(readFileSync(path.join(ROOT, "bricks.html"), "utf8"), "bricks");
+const countBricksSet = (set) => bricksPayload.filter((e) => e.set === set).length;
+const bricksSetSlots = (set) => new Set(bricksPayload.filter((e) => e.set === set).map((e) => e.name));
+
+await checkAsync("bricks runtime: boot decodes ONLY the active set's entries, and the loop starts once that set has settled", async () => {
+  const seen = [];
+  const g = bootBricks((buf) => { seen.push(1); return Promise.resolve({ fakeBitmap: true }); });
   // Before the microtasks flush, nothing may have started: the loop
-  // is only registered once every bitmap has settled.
-  assert(!g.rafRegistered(), "the rAF loop must not start before the decodes have settled");
+  // is only registered once the ACTIVE set's decodes have settled.
+  assert(!g.rafRegistered(), "the rAF loop must not start before the active set's decodes have settled");
   await flushMicrotasks();
-  assert(g.rafRegistered(), "the loop must be registered once every bitmap settled");
-  assert(g.q("Object.keys(ASSETS).length") === g.q("ASSET_PAYLOAD_TABLE.length"),
-    `the cache must hold every payload entry (${g.q("Object.keys(ASSETS).length")}/${g.q("ASSET_PAYLOAD_TABLE.length")})`);
+  assert(g.rafRegistered(), "the loop must be registered once the active set settled");
+  assert(seen.length === countBricksSet("classic"),
+    `boot must decode only the default (classic) set's ${countBricksSet("classic")} entries — never every set — got ${seen.length}`);
+  assert(g.q("Object.keys(ASSETS).length") === countBricksSet("classic"),
+    `the active table must hold the active set's slots (${g.q("Object.keys(ASSETS).length")}/${countBricksSet("classic")})`);
 });
 
 await checkAsync("bricks runtime: the first frame draws the cached background bitmap (zero re-decodes)", async () => {
@@ -558,7 +616,7 @@ await checkAsync("bricks runtime: the first frame draws the cached background bi
   const before = g.fakeBitmaps.length;
   g.tick();
   g.tick();
-  assert(g.fakeBitmaps.length === before, "decodes happen at boot only — never per frame");
+  assert(g.fakeBitmaps.length === before, "decodes happen per set on first use only — never per frame");
 });
 
 await checkAsync("bricks runtime: a failing decoder degrades to the procedural fallback and still boots the loop", async () => {
@@ -589,13 +647,14 @@ await checkAsync("bricks runtime: a failing decoder degrades to the procedural f
   assert(drawImages.length === 0, "without any decoded bitmap the arena background must stay the procedural fill (no drawImage)");
 });
 
-await checkAsync("bricks runtime: onReady waits for EVERY entry to settle — a fast rejection must not start the loop while a slow decode is still pending", async () => {
-  // Entry 0 rejects immediately, every other entry resolves ~30ms
-  // later. With a "first rejection settles the batch" boot (e.g.
-  // Promise.all) the loop would already be running while the slow
-  // entries are still pending; the per-entry settle must wait for
-  // all of them.
-  const nEntries = extractEmbedded(readFileSync(path.join(ROOT, "bricks.html"), "utf8"), "bricks").length;
+await checkAsync("bricks runtime: onReady waits for EVERY entry OF THE ACTIVE SET to settle — a fast rejection must not start the loop while a slow decode is still pending", async () => {
+  // The active set's first decode rejects immediately, every other
+  // decode of the set resolves ~30ms later (and NOTHING outside the
+  // set is handed to the decoder at boot). With a "first rejection
+  // settles the batch" boot (e.g. Promise.all) the loop would already
+  // be running while the slow entries are still pending; the per-entry
+  // settle must wait for all of the set's entries.
+  const nEntries = countBricksSet("classic");
   let call = 0;
   const g = bootBricks(() => {
     call += 1;
@@ -603,14 +662,81 @@ await checkAsync("bricks runtime: onReady waits for EVERY entry to settle — a 
     return new Promise((resolve) => setTimeout(() => resolve({ fakeBitmap: true, slow: true }), 30));
   });
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-  await sleep(10); // entry 0 already rejected, the rest still pending
-  assert(!g.rafRegistered(), "the loop must not start while any decode is still pending (batch settled on the first rejection)");
-  assert(call === nEntries, `every entry must have been handed to the decoder before settlement (${call}/${nEntries})`);
+  await sleep(10); // first entry already rejected, the rest still pending
+  assert(!g.rafRegistered(), "the loop must not start while any active-set decode is still pending (batch settled on the first rejection)");
+  assert(call === nEntries, `boot must hand over exactly the active set's entries (${call}/${nEntries}) — no other set may decode at boot`);
   await sleep(50); // the slow entries have resolved by now
-  assert(g.rafRegistered(), "the loop must start once every entry has settled");
+  assert(g.rafRegistered(), "the loop must start once every active-set entry has settled");
   const cached = g.q("Object.keys(ASSETS).length");
   assert(cached === nEntries - 1,
-    `the cache must hold every SUCCEEDED entry (${cached}/${nEntries - 1})`);
+    `the active table must hold every SUCCEEDED entry of the set (${cached}/${nEntries - 1})`);
+});
+
+await checkAsync("bricks runtime: a persisted non-default theme boots ITS set", async () => {
+  for (const set of ["neon", "minimal"]) {
+    const seen = [];
+    const g = bootBricks((buf) => { seen.push(1); return Promise.resolve({ fakeBitmap: true }); }, set);
+    await flushMicrotasks();
+    assert(g.rafRegistered(), `booting on ${set} must register the rAF loop`);
+    assert(seen.length === countBricksSet(set),
+      `booting on ${set} must decode its ${countBricksSet(set)} entries (and no other set), got ${seen.length}`);
+    assert(g.q(`Object.keys(ASSETS_BY_SET["${set}"]).length`) === countBricksSet(set),
+      `${set}'s per-set table must hold its own slots`);
+  }
+});
+
+await checkAsync("bricks runtime: selecting a theme decodes ITS set lazily, exactly once; repeats decode nothing; tables stay per-set", async () => {
+  let calls = 0;
+  const g = bootBricks((buf) => { calls += 1; return Promise.resolve({ fakeBitmap: true }); });
+  await flushMicrotasks();
+  assert(calls === countBricksSet("classic"), "boot decodes the classic set only");
+  let baseline = calls;
+  for (const set of ["neon", "minimal"]) {
+    g.q(`selectTheme("${set}")`);
+    await flushMicrotasks();
+    assert(calls === baseline + countBricksSet(set),
+      `selecting ${set} must decode its ${countBricksSet(set)} entries lazily and exactly once, got ${calls - baseline} more`);
+    assert(g.q(`Object.keys(ASSETS_BY_SET["${set}"]).length`) === countBricksSet(set),
+      `${set}'s table must hold exactly its own slots after the lazy decode`);
+    baseline = calls;
+  }
+  g.q('selectTheme("neon")');
+  await flushMicrotasks();
+  g.q('selectTheme("classic")');
+  await flushMicrotasks();
+  assert(calls === baseline, "toggling between already-decoded sets must decode nothing");
+  for (const set of ["classic", "neon", "minimal"]) {
+    const keys = g.q(`Object.keys(ASSETS_BY_SET["${set}"])`);
+    for (const k of keys) {
+      assert(bricksSetSlots(set).has(k), `set ${set}'s table must not hold a foreign slot (got ${k})`);
+    }
+  }
+});
+
+await checkAsync("bricks runtime: a fully failing set leaves the procedural fallback AND later sets still decode (per-set isolation)", async () => {
+  const failN = countBricksSet("classic");
+  let calls = 0;
+  const g = bootBricks((buf) => {
+    calls += 1;
+    return calls <= failN
+      ? Promise.reject(new Error("decode failure (fixture)"))
+      : Promise.resolve({ fakeBitmap: true });
+  });
+  await flushMicrotasks();
+  assert(g.rafRegistered(), "a fully failing active set must still boot the rAF loop");
+  assert(g.q("Object.keys(ASSETS).length") === 0, "no bitmap may enter the failed set's table");
+  g.q('selectTheme("minimal")');
+  await flushMicrotasks();
+  assert(calls === failN + countBricksSet("minimal"), "the later selection must decode its own set's entries");
+  assert(g.q('Object.keys(ASSETS_BY_SET["minimal"]).length') === countBricksSet("minimal"),
+    "the later set's table must hold its own slots despite the failed sibling");
+  g.q("draw()");
+  if (countBricksSet("minimal") > 0) {
+    assert(g.drawImages.some((a) => a[0]?.fakeBitmap),
+      "with the decoded set active the frame must draw its bitmaps (the arena background)");
+  } else {
+    assert(g.drawImages.length === 0, "a set with no decoded slots must stay fully procedural (no drawImage)");
+  }
 });
 
 // ---- fishtank boot harness (same style as tests/fishtank-scaffold.*) ----

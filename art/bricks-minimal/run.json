@@ -1,0 +1,36 @@
+{
+  "tool": "asset-forge 0.1.0",
+  "commit": "1f01832",
+  "comfyui": "0.46.0",
+  "started": "2026-11-26T02:33:22",
+  "project": "bricks",
+  "style": "pixel",
+  "assets": {
+    "bg": [
+      "cand-01.png",
+      "cand-02.png",
+      "cand-03.png",
+      "cand-04.png"
+    ],
+    "brick-skin-a": [
+      "cand-01.png",
+      "cand-02.png",
+      "cand-03.png",
+      "cand-04.png"
+    ],
+    "brick-skin-b": [
+      "cand-01.png",
+      "cand-02.png",
+      "cand-03.png",
+      "cand-04.png"
+    ],
+    "paddle": [
+      "cand-01.png",
+      "cand-02.png",
+      "cand-03.png",
+      "cand-04.png"
+    ]
+  },
+  "images_generated": 16,
+  "finished": "2026-11-26T02:34:23"
+}

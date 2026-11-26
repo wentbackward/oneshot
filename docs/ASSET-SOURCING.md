@@ -74,6 +74,16 @@ How placeholder art is replaced with final, human-approved art for
 8. **Merge is the human step.** The loop stages and proves; the human
    approves art + license and merges.
 
+## Multi-set asset sets (ticket #143)
+
+Bricks ships one art set per theme (classic / neon / minimal). The manifest stays single:
+every entry carries the `set` field, slot names are unique per (set, name) pair, and the
+entries are pre-sorted by (set, name). File naming: the canonical set keeps the slot's
+bare name (`bg.png`), the others suffix theirs (`bg-neon.png`). Provenance for a set
+commits under `art/<game>-<theme>/` (spec, run record, per-candidate metadata); the raw
+candidates and contact sheets stay in the shared art workspace (path referenced from the
+PR notes).
+
 ## Placeholder → final swap, per slot (summary)
 
 replace file → edit manifest entry (license + `placeholder: false`) →
