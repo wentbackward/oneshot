@@ -76,6 +76,7 @@ import {
   CAUSTICS_TILE_DRIFT,
 } from "../src/render/caustics.ts";
 import { GRAVEL_TEXTURE_BAND } from "../src/render/renderer.ts";
+import { SURFACE_RIPPLES } from "../src/render/water.ts";
 import { BUBBLE_MARGIN, BUBBLE_POOL_SIZE, BUBBLE_WOBBLE_AMP } from "../src/render/bubbles.ts";
 import {
   SUBSTRATE_GRAVEL_COUNT,
@@ -84,6 +85,14 @@ import {
   SUBSTRATE_FAR_DRIFT,
   SUBSTRATE_NEAR_DRIFT,
 } from "../src/render/substrate.ts";
+import {
+  HABITAT_TUFT_COUNT,
+  HABITAT_TUFT_BLADES,
+  HABITAT_ANEMONE_COUNT,
+  HABITAT_ANEMONE_TENTACLES,
+  HABITAT_MOTE_COUNT,
+  HABITAT_TILE_COPIES,
+} from "../src/render/habitat.ts";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const html = readFileSync(path.join(root, "fishtank.html"), "utf8");
@@ -853,6 +862,72 @@ check("AC4: gravel and top-decor parallax layers render every frame with their n
       `frame ${f}: near layer drifted ${dn}px over ${dt}s — not SUBSTRATE_NEAR_DRIFT x dt`);
     assert(Math.abs(dn - ratio * df) <= EPS,
       `frame ${f}: parallax ratio broke — near drift ${dn}px vs ${ratio} x far drift ${df}px`);
+  }
+});
+
+// ================================================================
+// AC5 (ticket #145): the habitat decor (docs/HABITAT-BRIEF.md)
+// renders BETWEEN the placed scenery and the fish layers — the
+// exact two-sided window contract: the scenery->fish window
+// (after the 5th caustic-shaft translate, before the first fish
+// body sprite) carries the habitat's FULL named op profile
+// (tile-doubled anemone-tentacle + tuft-blade strokes, the pooled
+// mote arcs) on top of the surface-ripple strokes and the first
+// fish's spine stroke + head arc; and the rest of the frame (after
+// the first body sprite) carries EXACTLY the remaining fish
+// spine strokes + head arcs and the bitmap layers — nothing the
+// habitat owns leaks past the first body sprite, nothing else
+// slips into the habitat's slot. (Per-fish structure: spine
+// stroke + head arc, then the body sprite's own translate — the
+// sprite translates are NOT caustic/substrate translates, so the
+// window's boundary is pinned at the 7th recorded translate.)
+// ================================================================
+
+check("AC5: the habitat decor renders strictly between the placed scenery and the fish — its exact named op profile in the scenery->fish window, nothing past the first fish body sprite", async () => {
+  const HABITAT_STROKES = HABITAT_TILE_COPIES * (
+    HABITAT_ANEMONE_COUNT * HABITAT_ANEMONE_TENTACLES +
+    HABITAT_TUFT_COUNT * HABITAT_TUFT_BLADES); // tile-doubled tentacles + blades
+  const g = await boot(VIEW_W, VIEW_H, ["translate", "drawImage", "fill", "stroke", "arc"]);
+  const FRAMES = 60;
+  for (let f = 0; f < FRAMES; f++) {
+    const from = g.state.events.length;
+    if (f === 0) g.frameAt(0);
+    else g.tick(1, (f - 1) * FRAME_MS);
+    const slice = g.state.events.slice(from);
+    // Window boundary: the FIRST SEVEN translates are substrate
+    // far, substrate near and the five caustic shafts (no placed
+    // kelp/rocks in the default world); the 7th closes the water
+    // layers. Fish body sprites carry their OWN translates later
+    // (per-fish orient/rotate), so the last translate is not usable.
+    const trans = slice.filter((ev) => ev.kind === "translate");
+    assert(trans.length >= 7, `frame ${f}: expected 2 substrate + 5 caustic translates, got ${trans.length}`);
+    const windowStart = slice.indexOf(trans[6]);
+    const di = slice.filter((ev) => ev.kind === "drawImage");
+    const bodyStart = 1 + GRAVEL_DRAWS + CAUSTICS_DRAWS; // first fish body sprite
+    const swimmers = g.q("FISH_TANK_WORLD.angels.length") + g.q("FISH_TANK_WORLD.agents.length") + (g.q("FISH_TANK_WORLD.predator !== null") ? 1 : 0);
+    assert(di.length >= bodyStart + swimmers,
+      `frame ${f}: expected ${bodyStart + swimmers} bitmap draws (overlays + one body sprite per live swimmer), got ${di.length}`);
+    const firstBody = slice.indexOf(di[bodyStart]);
+    assert(windowStart < firstBody, `frame ${f}: scenery window does not end before the first fish body sprite`);
+    const count = (arr, kind) => arr.filter((ev) => ev.kind === kind).length;
+    // Scenery->fish window: 3 ripple strokes + the habitat's full
+    // named profile + exactly ONE fish's spine stroke and head arc
+    // (the first swimmer's — its sprite IS the first body bitmap).
+    const window = slice.slice(windowStart + 1, firstBody);
+    assert(count(window, "arc") === HABITAT_MOTE_COUNT + 1,
+      `frame ${f}: scenery->fish window carries ${count(window, "arc")} arcs — expected the habitat's ${HABITAT_MOTE_COUNT} pooled motes + the first fish head arc`);
+    assert(count(window, "stroke") === SURFACE_RIPPLES + HABITAT_STROKES + 1,
+      `frame ${f}: scenery->fish window carries ${count(window, "stroke")} strokes — expected ${SURFACE_RIPPLES} ripples + ${HABITAT_STROKES} habitat + the first fish spine`);
+    // After the first body sprite: every REMAINING swimmer's spine
+    // stroke + head arc, then bitmaps only — so nothing the habitat
+    // owns leaks into the fish layer, and no undocumentable layer
+    // hides in there either.
+    const after = slice.slice(firstBody);
+    const remaining = swimmers - 1;
+    assert(count(after, "stroke") === remaining,
+      `frame ${f}: ${count(after, "stroke")} strokes after the first body sprite — expected ${remaining} (the remaining spines); a decor layer has leaked in front of the fish`);
+    assert(count(after, "arc") === remaining,
+      `frame ${f}: ${count(after, "arc")} arcs after the first body sprite — expected ${remaining} (the remaining fish head arcs); a decor layer has leaked in front of the fish`);
   }
 });
 
