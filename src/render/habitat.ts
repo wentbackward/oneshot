@@ -37,7 +37,7 @@
 
 import { mulberry32 } from "../sim/rng.ts";
 import { AMBIENT_CURRENT_X } from "../sim/constants.ts";
-import { SUBSTRATE_NEAR_DRIFT } from "./substrate.ts";
+import { KELP_SWAY_SPEED, SUBSTRATE_NEAR_DRIFT } from "./substrate.ts";
 
 /** Seed for the habitat streams (named like every other
  *  deterministic source in this repo). */
@@ -56,9 +56,11 @@ const TUFT_HEIGHT_MIN = 0.04;
 const TUFT_HEIGHT_MAX = 0.09;
 /** Blade spread within a cluster, ± px about the cluster base. */
 const TUFT_SPREAD_PX = 8;
-/** Idle-sway speed, rad of phase per sim second — the substrate
- *  kelp tufts run the SAME frequency: one shared current driver. */
-export const HABITAT_TUFT_SWAY_SPEED = 0.8;
+/** Idle-sway speed, rad of phase per sim second: an alias of the
+ *  substrate's kelp frequency, which IS the habitat tufts'
+ *  frequency — one shared current driver for all floor vegetation
+ *  (a retune on either side stays a single edit). */
+export const HABITAT_TUFT_SWAY_SPEED = KELP_SWAY_SPEED;
 /** Peak lateral sway of a blade's mid-section, px. */
 const TUFT_SWAY_AMP = 4.5;
 /** Tip multiplier over the mid-section sway (free end bends more). */
@@ -236,7 +238,10 @@ export class Habitat {
     const tile = width;
     const off = (t * SUBSTRATE_NEAR_DRIFT) % tile; // shared near-band parallax
 
-    // --- anemone/coral clusters: footprint + pulsing tentacles ---
+    // --- anemone/coral clusters: footprints, then tentacles ---
+    // (every base ellipse precedes every tentacle, so a late
+    //  cluster's footprint can never overpaint an early cluster's
+    //  tentacle tips — z order == paint order)
     ctx.lineCap = "round";
     ctx.fillStyle = ANEMONE_BASE_FILL;
     for (const a of this.anemones) {
@@ -246,8 +251,10 @@ export class Habitat {
         ctx.ellipse(bx, height, a.baseR, a.baseR * 0.35, 0, 0, TAU);
         ctx.fill();
       }
-      ctx.strokeStyle = ANEMONE_TENTACLE_STROKE;
-      ctx.lineWidth = ANEMONE_TENTACLE_LINE_WIDTH;
+    }
+    ctx.strokeStyle = ANEMONE_TENTACLE_STROKE;
+    ctx.lineWidth = ANEMONE_TENTACLE_LINE_WIDTH;
+    for (const a of this.anemones) {
       for (const copy of COPY_OFFSETS) {
         const bx = a.u * tile + off + copy * tile;
         for (let i = 0; i < HABITAT_ANEMONE_TENTACLES; i++) {

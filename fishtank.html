@@ -2164,7 +2164,7 @@ window.__FISHTANK_ASSETS__ = [{"set":"default","name":"angel-body","w":128,"h":6
   var TUFT_HEIGHT_MIN = 0.04;
   var TUFT_HEIGHT_MAX = 0.09;
   var TUFT_SPREAD_PX = 8;
-  var HABITAT_TUFT_SWAY_SPEED = 0.8;
+  var HABITAT_TUFT_SWAY_SPEED = KELP_SWAY_SPEED;
   var TUFT_SWAY_AMP = 4.5;
   var TUFT_TIP_AMP = 1.5;
   var HABITAT_TUFT_CURRENT_LEAN = 6;
@@ -2262,8 +2262,10 @@ window.__FISHTANK_ASSETS__ = [{"set":"default","name":"angel-body","w":128,"h":6
           ctx.ellipse(bx, height, a.baseR, a.baseR * 0.35, 0, 0, TAU6);
           ctx.fill();
         }
-        ctx.strokeStyle = ANEMONE_TENTACLE_STROKE;
-        ctx.lineWidth = ANEMONE_TENTACLE_LINE_WIDTH;
+      }
+      ctx.strokeStyle = ANEMONE_TENTACLE_STROKE;
+      ctx.lineWidth = ANEMONE_TENTACLE_LINE_WIDTH;
+      for (const a of this.anemones) {
         for (const copy of COPY_OFFSETS) {
           const bx = a.u * tile + off + copy * tile;
           for (let i = 0; i < HABITAT_ANEMONE_TENTACLES; i++) {
