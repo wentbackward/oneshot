@@ -38,6 +38,75 @@ export const STARTLE_IMPULSE = 200;
 export const TETRA_MIN_SPEED = 30;
 export const TETRA_MAX_SPEED = 220;
 
+// ---------- steering master cap & boundary band (#144) ----------
+
+/** Master force limit: no per-force clamp may exceed it (the
+ *  steering layer keeps every per-force clamp at or under it).
+ *  Sized by the boundary band's stop requirement (below). */
+export const MAX_STEERING_FORCE = 200;
+
+/** Boundary-avoidance force clamp: the boundary band is the only
+ *  force sized at the master scale — it must be able to STOP a
+ *  fastest tetra, not just nudge it. */
+export const MAX_BOUNDARY_AVOIDANCE_FORCE = MAX_STEERING_FORCE;
+
+/** How far inside the wall a tetra starts being steered back, tank
+ *  units — the force ramps linearly from 0 at the margin edge to
+ *  full strength at the wall. Stop argument: a tetra entering the
+ *  margin at TETRA_MAX_SPEED carries ½·220² = 24 200 energy and the
+ *  ramp supplies ½·MAX_BOUNDARY_AVOIDANCE_FORCE·BOUNDARY_MARGIN =
+ *  30 000 of work, so the fastest fish always has room to turn
+ *  before contact. Bands stay disjoint: tank sides exceed 2× this.
+ *  Moved from steering.ts (which keeps re-exporting it for its
+ *  pinned contract tests). */
+export const BOUNDARY_MARGIN = 300;
+
+// ---------- motion overhaul (#144): continuous turning, non-mirroring
+// wall safety net, vertical feel, organic wander ----------
+
+/** Ceiling on a tetra's heading CHANGE, radians per second of sim
+ *  time: every fixed step may rotate the velocity by at most
+ *  TETRA_TURN_RATE_RAD_S × dt (≈ 2.4°), so all trajectories are
+ *  continuous curves — a 180° reversal takes ≈ 1.2 s of steering.
+ *  A full-speed turn needs only MAX_STEERING_FORCE /
+ *  TETRA_MAX_SPEED ≈ 0.9 rad/s, well under the cap, so the limiter
+ *  only ever bites at LOW speed, where force-limited turns would
+ *  otherwise be violent. */
+export const TETRA_TURN_RATE_RAD_S = 2.6;
+
+/** Wall safety net: the fraction of the OUTWARD normal velocity
+ *  component retained when a tetra lands exactly on a wall (the
+ *  rare residue the boundary steering did not turn away in time).
+ *  0 = full absorption: the tangential component is preserved and
+ *  the boundary force does the turning. Mirroring (the old elastic
+ *  reflection) is banned — it is the axis-flip that produced the
+ *  #144 right-angle bounces. */
+export const TETRA_WALL_NORMAL_RETENTION = 0;
+
+/** Net negative buoyancy: a constant downward (screen +y) tetra
+ *  acceleration, tank units/s². A fish with little effort
+ *  expenditure (low speed, between pulses) sags slowly; countered
+ *  by TETRA_THRUST_LIFT as the school energies up. */
+export const TETRA_GRAVITY = 8;
+
+/** Maximum upward lift a thrusting tetra generates, tank units/s²,
+ *  scaled by (speed / TETRA_MAX_SPEED)²: below ≈ 139 u/s lift loses
+ *  to TETRA_GRAVITY (gentle sink), at full startle/chase burst
+ *  lift wins (climbs back up) — “rises on thrust”. */
+export const TETRA_THRUST_LIFT = 20;
+
+/** Gentle wander: the amplitude of a lateral (perpendicular-to-
+ *  heading) acceleration, tank units/s², modulated by a slow per-
+ *  tetra sine of world.time — idle paths curve organically instead
+ *  of running straight lines; well under the school forces so an
+ *  actively schooling tetra does not notice it. */
+export const WANDER_ACCEL = 18;
+/** Per-tetra wander frequency range, rad/s: each tetra draws a
+ *  frequency from [min, min + spread] on its spawn stream — one
+ *  lazy S per few seconds (same band as the angel cruise wander). */
+export const WANDER_FREQ_MIN = 0.25;
+export const WANDER_FREQ_SPREAD = 0.75;
+
 // ---------- apex predator (PRD §2's third behaviour, #124) ----------
 
 /** Speed of the predator's waypoint patrol, tank units/s — patrol
