@@ -98,9 +98,12 @@ export const TETRA_THRUST_LIFT = 20;
 /** Gentle wander: the amplitude of a lateral (perpendicular-to-
  *  heading) acceleration, tank units/s², modulated by a slow per-
  *  tetra sine of world.time — idle paths curve organically instead
- *  of running straight lines; well under the school forces so an
- *  actively schooling tetra does not notice it. */
-export const WANDER_ACCEL = 18;
+ *  of running straight lines. Sized BELOW the buoyancy story
+ *  (TETRA_GRAVITY): the vertical drift a school sags by over
+ *  seconds must not be swamped by the wander's sideways pull, and
+ *  well under the school forces, so an actively schooling tetra
+ *  does not notice it. */
+export const WANDER_ACCEL = 4;
 /** Per-tetra wander frequency range, rad/s: each tetra draws a
  *  frequency from [min, min + spread] on its spawn stream — one
  *  lazy S per few seconds (same band as the angel cruise wander). */

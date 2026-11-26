@@ -99,6 +99,16 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
   var STARTLE_IMPULSE = 200;
   var TETRA_MIN_SPEED = 30;
   var TETRA_MAX_SPEED = 220;
+  var MAX_STEERING_FORCE = 200;
+  var MAX_BOUNDARY_AVOIDANCE_FORCE = MAX_STEERING_FORCE;
+  var BOUNDARY_MARGIN = 300;
+  var TETRA_TURN_RATE_RAD_S = 2.6;
+  var TETRA_WALL_NORMAL_RETENTION = 0;
+  var TETRA_GRAVITY = 8;
+  var TETRA_THRUST_LIFT = 20;
+  var WANDER_ACCEL = 4;
+  var WANDER_FREQ_MIN = 0.25;
+  var WANDER_FREQ_SPREAD = 0.75;
   var PREDATOR_PATROL_SPEED = 340;
   var PREDATOR_STALK_SPEED = 380;
   var PREDATOR_REST_SPEED = 30;
@@ -302,8 +312,8 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
   var GRAZE_ORBIT_SPEED_FRACTION = 0.5;
   var GRAZE_RADIAL_GAIN = 1.5;
   var WANDER_RATE = 0.9;
-  var WANDER_FREQ_MIN = 0.25;
-  var WANDER_FREQ_SPREAD = 0.75;
+  var WANDER_FREQ_MIN2 = 0.25;
+  var WANDER_FREQ_SPREAD2 = 0.75;
   var SPAWN_X_MARGIN = 80;
   var SPAWN_BASEY_LOW = 0.45;
   var SPAWN_BASEY_HIGH = 0.8;
@@ -500,7 +510,7 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
       const cruiseHeading = rng() * Math.PI;
       const cruiseSpeed = ANGEL_CRUISE_SPEED * (SPAWN_SPEED_MIN_FRACTION + (1 - SPAWN_SPEED_MIN_FRACTION) * rng());
       const bobPhase = rng() * TAU;
-      const wanderFreq = WANDER_FREQ_MIN + WANDER_FREQ_SPREAD * rng();
+      const wanderFreq = WANDER_FREQ_MIN2 + WANDER_FREQ_SPREAD2 * rng();
       const wanderPhase = rng() * TAU;
       const orbitDir = rng() < 0.5 ? -1 : 1;
       angels.push(new Angel(
@@ -526,16 +536,13 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
   }
 
   // src/sim/steering.ts
-  var MAX_STEERING_FORCE = 120;
   var MAX_SEPARATION_FORCE = 90;
   var MAX_ALIGNMENT_FORCE = 1;
   var MAX_COHESION_FORCE = 60;
-  var MAX_BOUNDARY_AVOIDANCE_FORCE = MAX_STEERING_FORCE;
   var MAX_OBSTACLE_AVOIDANCE_FORCE = 100;
   var MAX_SEEK_FORCE = 100;
   var NEIGHBOUR_RADIUS = 64;
   var COHESION_GAIN = 0.35;
-  var BOUNDARY_MARGIN = 120;
   var OBSTACLE_AVOID_DISTANCE = 150;
   var FISH_MAX_SPEED = 80;
   function zero() {
@@ -1200,7 +1207,9 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
           vy: Math.sin(heading) * speed,
           phase: rng() * TAU,
           torque: 0,
-          heading
+          heading,
+          wanderFreq: WANDER_FREQ_MIN + WANDER_FREQ_SPREAD * rng(),
+          wanderPhase: rng() * TAU
         });
       }
     }
@@ -1237,12 +1246,17 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
     }
     /** One deterministic step of EXACTLY dt seconds: for every tetra
      *  (fixed array order) compose the steering forces (including
-     *  obstacle avoidance around the placed rocks) against the grid
-     *  as left by the previous step, clamp the speed, integrate and
-     *  keep the body INSIDE the tank (elastic reflection, a hard
-     *  clamp) and hard-resolve it against every rock's collision
-     *  radius together with the tank walls (bounded fixed point —
-     *  see the resolution comment in the body), and advance its
+     *  obstacle avoidance around the placed rocks, the #144 organic
+     *  wander, and the vertical story: net-negative buoyancy with
+     *  thrust lift) against the grid as left by the previous step,
+     *  clamp the speed, integrate, and keep the body INSIDE the tank
+     *  — walls are STEERING, not collisions (the boundary band turns
+     *  a fish well short of the glass; a rare contact is resolved by
+     *  the bounded position resolution plus the non-mirroring safety
+     *  net below), hard-resolve it against every rock's collision
+     *  radius together with the tank walls, absorb any outward wall
+     *  normal, apply the per-step turn-rate cap so the heading never
+     *  swings more than TETRA_TURN_RATE_RAD_S · dt, and advance its
      *  articulated tail at tailFrequency(speed, torque). Finally,
      *  advance every kelp strand under the ambient current, letting
      *  the tetras drag the strands they swim through, the predator
@@ -1272,6 +1286,16 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
         const coh = cohesion(t, this.neighbours);
         const bou = boundaryAvoidance(t, TANK_WIDTH, TANK_HEIGHT);
         const obs = obstacleAvoidance(t, this.rocks);
+        const spd = Math.hypot(t.vx, t.vy);
+        const sr = spd / TETRA_MAX_SPEED;
+        const buoyancy = TETRA_GRAVITY - TETRA_THRUST_LIFT * sr * sr;
+        let wx = 0;
+        let wy = 0;
+        if (spd > 1e-9) {
+          const wob = WANDER_ACCEL * Math.sin(t.wanderFreq * this.time + t.wanderPhase);
+          wx = -t.vy / spd * wob;
+          wy = t.vx / spd * wob;
+        }
         let foodX = 0;
         let foodY = 0;
         if (this.pellets.length > 0) {
@@ -1295,8 +1319,8 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
             }
           }
         }
-        const ax = sep.x + ali.x * ALIGNMENT_CRUISE_SPEED + coh.x + bou.x + obs.x + foodX;
-        const ay = sep.y + ali.y * ALIGNMENT_CRUISE_SPEED + coh.y + bou.y + obs.y + foodY;
+        const ax = sep.x + ali.x * ALIGNMENT_CRUISE_SPEED + coh.x + bou.x + obs.x + foodX + wx;
+        const ay = sep.y + ali.y * ALIGNMENT_CRUISE_SPEED + coh.y + bou.y + obs.y + foodY + wy + buoyancy;
         let vx = t.vx + ax * dt;
         let vy = t.vy + ay * dt;
         const speed = Math.hypot(vx, vy);
@@ -1311,20 +1335,6 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
         }
         let x = t.x + vx * dt;
         let y = t.y + vy * dt;
-        if (x < 0) {
-          x = -x;
-          vx = -vx;
-        } else if (x > TANK_WIDTH) {
-          x = 2 * TANK_WIDTH - x;
-          vx = -vx;
-        }
-        if (y < 0) {
-          y = -y;
-          vy = -vy;
-        } else if (y > TANK_HEIGHT) {
-          y = 2 * TANK_HEIGHT - y;
-          vy = -vy;
-        }
         for (let pass = 0; pass <= this.rocks.length; pass++) {
           let moved = false;
           const n = this.collectViolators(x, y);
@@ -1365,14 +1375,14 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
             }
           }
           if (worst !== null) {
-            const m = worst.r + ROCK_COLLIDE_PAD;
+            const m2 = worst.r + ROCK_COLLIDE_PAD;
             const rx = x - worst.x;
             const ry = y - worst.y;
             const d = Math.hypot(rx, ry);
             const ux = d > 0 ? rx / d : 1;
             const uy = d > 0 ? ry / d : 0;
-            const exitX = clampX(worst.x + ux * m);
-            const exitY = clampY(worst.y + uy * m);
+            const exitX = clampX(worst.x + ux * m2);
+            const exitY = clampY(worst.y + uy * m2);
             if (worstRingDepth(this.rocks, exitX, exitY) < depth) {
               x = exitX;
               y = exitY;
@@ -1382,7 +1392,28 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
         stripInwardVelocity(this.rocks, x, y, vx, vy, this.stripV);
         vx = this.stripV.x;
         vy = this.stripV.y;
-        const nx = Math.hypot(vx, vy);
+        if (x === 0 && vx < 0) vx *= TETRA_WALL_NORMAL_RETENTION;
+        else if (x === TANK_WIDTH && vx > 0) vx *= TETRA_WALL_NORMAL_RETENTION;
+        if (y === 0 && vy < 0) vy *= TETRA_WALL_NORMAL_RETENTION;
+        else if (y === TANK_HEIGHT && vy > 0) vy *= TETRA_WALL_NORMAL_RETENTION;
+        let nx = Math.hypot(vx, vy);
+        if (nx < 1e-6) {
+          if (x === 0) vx = TETRA_MIN_SPEED;
+          else if (x === TANK_WIDTH) vx = -TETRA_MIN_SPEED;
+          else if (y === 0) vy = TETRA_MIN_SPEED;
+          else vy = -TETRA_MIN_SPEED;
+          nx = TETRA_MIN_SPEED;
+        }
+        const rawHeading = Math.atan2(vy, vx);
+        const maxDh = TETRA_TURN_RATE_RAD_S * dt;
+        let dhh = wrapPi(rawHeading - t.heading);
+        if (dhh > maxDh) dhh = maxDh;
+        else if (dhh < -maxDh) dhh = -maxDh;
+        const limHeading = t.heading + dhh;
+        const m = Math.hypot(vx, vy);
+        vx = m * Math.cos(limHeading);
+        vy = m * Math.sin(limHeading);
+        nx = m;
         const heading = Math.atan2(vy, vx);
         const instantTorque = wrapPi(heading - t.heading) / dt;
         t.torque += TORQUE_SMOOTHING * (instantTorque - t.torque);
@@ -1553,10 +1584,15 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
      *  receives an OUTWARD impulse of STARTLE_IMPULSE straight away
      *  from the epicentre. A tetra sitting exactly ON the epicentre
      *  (undefined radial direction) is flung along its own heading,
-     *  or +x if it has none — deterministic. Non-finite coordinates
-     *  are rejected: the event is a no-op reporting 0, touching
-     *  nothing (same well-formedness philosophy as advance()).
-     *  Returns the number of startled tetras. */
+     *  or +x if it has none — deterministic. The impulse is a
+     *  physical jolt that re-orients the velocity, so each startled
+     *  tetra's heading — a pure function of its velocity — is
+     *  refreshed in the same call: the next step's turn-rate cap
+     *  measures from the post-impulse heading and does not fight the
+     *  scatter (the tail torque smooths over the jolt). Non-finite
+     *  coordinates are rejected: the event is a no-op reporting 0,
+     *  touching nothing (same well-formedness philosophy as
+     *  advance()). Returns the number of startled tetras. */
     startleAt(x, y) {
       if (!Number.isFinite(x) || !Number.isFinite(y)) return 0;
       let startled = 0;
@@ -1577,6 +1613,7 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
         }
         t.vx += ux * STARTLE_IMPULSE;
         t.vy += uy * STARTLE_IMPULSE;
+        t.heading = Math.atan2(t.vy, t.vx);
         startled += 1;
       }
       return startled;

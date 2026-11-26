@@ -83,11 +83,18 @@ function pokeLone(world, x, y, vx, vy) {
 // and steering-turn zero crossings (tiny, gradual flips while the
 // heading passes through perpendicular) are not mirrors.
 // ================================================================
-// A flip that keeps ≥ this fraction of its magnitude is a
+// A flip that keeps ≥ MIRROR_RATIO of its magnitude is a
 // reflection: measured reflections preserve ~100% (195 → −193),
 // steering zero crossings keep a sliver (heading just past
-// perpendicular), the safety net keeps 0.
+// perpendicular), the safety net keeps 0. The flip must also be a
+// flip of a MEANINGFUL normal component (≥ NORMAL_FRACTION of the
+// speed): a fish riding the glass after a startle slides with its
+// heading rocking a couple of degrees around perpendicular, and
+// its ~1-u/s sideways wobble (≈ 2 % of a 50 u/s slide) flipping
+// sign is organic wall-sliding, not a billiard-ball bounce — a real
+// reflection flips the component that CARRIES the motion.
 const MIRROR_RATIO = 0.7;
+const NORMAL_FRACTION = 0.25;
 // The wall band recognizing a "contact": ≥ 2× the max per-step
 // overshoot (TETRA_MAX_SPEED × FIXED_DT ≈ 3.7), so both a
 // reflection bounce (lands back inside at ≤ 2× overshoot) and the
@@ -99,6 +106,12 @@ check("1000 steps, default population: no velocity component axis-mirrors across
   const prev = new Map();
   let contacts = 0;
   for (let i = 0; i < 1000; i++) {
+    // Two tap-glass startles: flinging the school toward the walls
+    // is what drives fish INTO the wall band (and occasionally past
+    // it, exercising the safety net) — a passive soak with the
+    // boundary band in place rarely touches glass at all.
+    if (i === 250) world.tapGlass(120, TANK_HEIGHT / 2);
+    if (i === 700) world.tapGlass(TANK_WIDTH - 120, TANK_HEIGHT / 2);
     for (const t of world.agents) prev.set(t, { x: t.x, y: t.y, vx: t.vx, vy: t.vy });
     world.step(FIXED_DT);
     for (const t of world.agents) {
@@ -109,11 +122,13 @@ check("1000 steps, default population: no velocity component axis-mirrors across
       contacts += 1;
       const flipX = Math.sign(p.vx) !== 0 && Math.sign(t.vx) === -Math.sign(p.vx);
       const flipY = Math.sign(p.vy) !== 0 && Math.sign(t.vy) === -Math.sign(p.vy);
-      if (atSideWall && flipX && Math.abs(t.vx) >= MIRROR_RATIO * Math.abs(p.vx)) {
+      if (atSideWall && flipX && Math.abs(p.vx) >= NORMAL_FRACTION * Math.hypot(p.vx, p.vy)
+          && Math.abs(t.vx) >= MIRROR_RATIO * Math.abs(p.vx)) {
         throw new Error(`step ${i}: x-component axis-mirrored at a side wall ` +
           `(${p.vx.toFixed(1)} -> ${t.vx.toFixed(1)}) at x=${t.x.toFixed(1)}`);
       }
-      if (atTopBot && flipY && Math.abs(t.vy) >= MIRROR_RATIO * Math.abs(p.vy)) {
+      if (atTopBot && flipY && Math.abs(p.vy) >= NORMAL_FRACTION * Math.hypot(p.vx, p.vy)
+          && Math.abs(t.vy) >= MIRROR_RATIO * Math.abs(p.vy)) {
         throw new Error(`step ${i}: y-component axis-mirrored at a top/bottom wall ` +
           `(${p.vy.toFixed(1)} -> ${t.vy.toFixed(1)}) at y=${t.y.toFixed(1)}`);
       }
@@ -192,26 +207,28 @@ check("1000 steps, default population: max |Δheading| per step stays under the 
 // AC4 species vertical behaviour: the school has a VERTICAL STORY —
 // it sags under its own weight and climbs when it thrusters.
 // ================================================================
-check("lone tetra in open water sinks slowly: net vertical drift is downward over a soak", () => {
+check("lone tetra in open water sinks slowly: net vertical drift is downward and gains downward speed", () => {
   const world = new World({ seed: 7, population: 1, predator: false, angels: 0 });
-  const t = pokeLone(world, TANK_WIDTH / 2, TANK_HEIGHT / 2, 60, 0);
+  // Start with a vertical (downward, +y) velocity so the wander
+  // force — perpendicular to the heading — acts HORIZONTALLY and
+  // cannot contaminate the vertical reading.
+  const t = pokeLone(world, TANK_WIDTH / 2, TANK_HEIGHT / 2, 0, TETRA_MIN_SPEED);
   const y0 = t.y;
-  const N = 600; // 10 s
-  let vySum = 0;
+  const vy0 = t.vy;
+  const N = 180; // 3 s
   let speedSum = 0;
   for (let i = 0; i < N; i++) {
     world.step(FIXED_DT);
-    vySum += t.vy;
     speedSum += Math.hypot(t.vx, t.vy);
   }
-  const meanVy = vySum / N;
   const drift = t.y - y0;
-  assert(drift > 40,
-    `net negative buoyancy: a lone tetra must SAG over 10 s (drift ${drift} tank units, want > 40)`);
-  assert(meanVy > 0,
-    `net vertical velocity must be downward (screen +y), got ${meanVy} tank units/s`);
+  const gainedVy = t.vy - vy0;
+  assert(drift > 30,
+    `net negative buoyancy: a lone tetra must SAG over 3 s (drift ${drift.toFixed(1)} tank units, want > 30)`);
+  assert(gainedVy > 8,
+    `gravity must WIN at low effort: downward speed must grow by > 8 tank units/s over 3 s, got ${gainedVy.toFixed(1)}`);
   assert(speedSum / N < TETRA_MAX_SPEED * 0.75,
-    `the sink must be SLOW — a steady plunge at near-max speed is not "sink slowly": mean speed ${speedSum / N}`);
+    `the sink must be SLOW — a steady plunge at near-max speed is not "sink slowly": mean speed ${(speedSum / N).toFixed(1)}`);
 });
 
 check("lone tetra under thrust climbs: high speed reverses the net vertical acceleration", () => {
