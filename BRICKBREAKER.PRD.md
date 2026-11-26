@@ -53,10 +53,21 @@ Overlay	Screens (Start / Pause / Game Over)	Absolute-positioned HTML overlays fo
 • Single File Boundary: All CSS styling and JavaScript logic must live inside <style> and <script> tags within one index.html file.
 • Performance: Pure vanilla JavaScript rendering on a 2d Canvas context, hitting a stable 60 FPS using requestAnimationFrame.
 • Responsive Scaling: The canvas element must scale dynamically to fit mobile viewports and desktop resolutions seamlessly.
-If you want to take this forward, let me know:
-• Should I generate the actual game code for you to copy and play right now?
-• Do you want to add any specific retro themes (neon cyberpunk, classic 8-bit, minimalist)?
-Ready to create a plan?
-Use Canvas to save, edit, and share your planning progress
-Get started
 
+6. Visual Direction & Media Design (standing requirement)
+
+Before any visual work on this product starts, the digital-media-designer skill
+(asset-forge toolchain) defines and documents the overall look and feel:
+
+- Style and a one-sentence concept line for the world and mood.
+- Colour palette per theme: a named hex list per selectable theme (pixel art:
+  8-32 colours, the spec's `palette`; every pixel asset snaps to it). The
+  Classic, Neon and Minimal themes each carry their own palette and their own
+  generated asset set; gameplay pieces pop, backgrounds recede.
+- Consistency anchors: light direction, outline policy, detail level.
+- Required assets and animation direction: for every element that moves —
+  what moves, how, frame count and cadence, easing; slots too small for
+  diffusion (roughly 16 px and below) are hand-drawn with `forge draw`.
+- The palette/theme definitions are part of each ticket's acceptance
+  criteria; final image assets follow the human approval process in
+  docs/ASSET-SOURCING.md.

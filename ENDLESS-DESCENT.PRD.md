@@ -1100,3 +1100,18 @@ acceptance criteria.
    forecast comparison tools, and isolated narration-only LLM integration.
 5. **Later products:** LLM gameplay editing and authoritative shared-world/
    MMORPG services, each with a separate specification and security model.
+## 19. Visual Direction & Media Design (standing requirement)
+
+Before any visual work on this product starts, the digital-media-designer
+skill (asset-forge toolchain) defines and documents the overall look and feel:
+
+- Style and a one-sentence concept line for the world and mood.
+- Colour palette per theme: a named hex list per theme or biome; contrast
+  hierarchy so gameplay-critical elements (danger, affordances, party state)
+  pop against receding scenery.
+- Consistency anchors: light direction, outline policy, detail level.
+- Required assets and animation direction: for every element that moves —
+  what moves, how, frame count and cadence, easing.
+- The palette/theme definitions are part of each ticket's acceptance
+  criteria; final image assets follow docs/ASSET-SOURCING.md (where
+  applicable).

@@ -26,3 +26,23 @@ Build an interactive 3D hardware showcase and thermal airflow visualizer in Type
 - Unit tests verifying thermal convergence math, fan PWM curve clamping, exploded-view coordinate interpolation bounds, and RGB color mapping.
 - Headless scene-graph instantiation test (verifying mesh hierarchy, disposal/cleanup without memory leaks, and zero TypeScript errors).
 
+
+6. Visual Direction & Media Design (standing requirement)
+
+Before any visual work on this product starts, the digital-media-designer skill
+(asset-forge toolchain) defines and documents the overall look and feel:
+
+- Style and a one-sentence concept line for the world and mood (studio
+  product shot: materials, reflections, ambience).
+- Colour palette per theme/scene: a named hex list per scene or display mode
+  (e.g. thermal-RGB scale, exploded-view accents); the pedestal and room
+  recede, the hardware pops.
+- Consistency anchors: light rig (key/fill/rim), material finish policy,
+  detail level.
+- Required assets and animation direction: for every element that moves —
+  what moves, how, frame count and cadence, easing (fan spin-up, exploded
+  view interpolation, thermal transitions); which textures/materials are
+  procedural versus supplied files.
+- The palette/theme definitions are part of each ticket's acceptance
+  criteria; final image assets follow docs/ASSET-SOURCING.md (where
+  applicable).

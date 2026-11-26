@@ -27,3 +27,22 @@ Build a high-performance, interactive 2D/2.5D aquarium ecosystem simulation in T
 - Unit tests for spatial grid neighbor accuracy vs. brute-force distance checks, steering force vector clamping, kelp spring constraint stability, and tank JSON serialization/validation.
 - Benchmark test verifying 1,000 fixed-timestep updates with 200 entities completes well under real-time budget without NaN coordinates or out-of-bounds escapes.
 
+6. Visual Direction & Media Design (standing requirement)
+
+Before any visual work on this product starts, the digital-media-designer skill
+(asset-forge toolchain) defines and documents the overall look and feel:
+
+- Style and a one-sentence concept line for the world and mood.
+- Colour palette per theme/lighting: a named hex list per lighting phase
+  (Day / Dusk / Bioluminescent Night) and per decorative element group, so
+  background, substrate and living things each occupy a deliberate contrast
+  band; the day phase stays neutral daylight (art is tinted per phase at
+  boot).
+- Consistency anchors: light direction, outline policy, detail level.
+- Required assets and animation direction: for every element that moves —
+  what moves, how, frame count and cadence, easing (tail undulation, kelp
+  sway, bubble wobble, caustics drift); which slots are drawn procedurally
+  versus taken from build-time-embedded image assets.
+- The palette/theme definitions are part of each ticket's acceptance
+  criteria; final image assets follow the human approval process in
+  docs/ASSET-SOURCING.md.

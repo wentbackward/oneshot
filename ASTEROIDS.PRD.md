@@ -13,3 +13,23 @@ Create a complete, playable arcade action game in a single index.html file using
 Return ONLY valid raw HTML code inside a single markdown code block. No conversational filler, no explanations before or after.
 
 
+## Visual Direction & Media Design (standing requirement)
+
+Before any visual work on this product starts, the digital-media-designer skill
+(asset-forge toolchain) defines and documents the overall look and feel:
+
+- Style and a one-sentence concept line for the world and mood.
+- Colour palette per theme: a named hex list per selectable theme (pixel art:
+  8–32 colours, the spec's `palette`; every pixel asset snaps to it). Contrast
+  hierarchy: gameplay pieces pop, backgrounds recede.
+- Consistency anchors: light direction, outline policy, detail level.
+- Required assets and animation direction: for every element that moves —
+  what moves, how, frame count and cadence, easing.
+- The palette/theme definitions are part of each ticket's acceptance
+  criteria; final image assets follow docs/ASSET-SOURCING.md (where
+  applicable).
+
+Asteroids-specific: rendering stays FULLY PROCEDURAL (Canvas shapes / vector
+paths, no image assets). The digital-media-designer still defines the
+palette, themes and animation direction, and the implementer realises it in
+vector code and procedural animation.
