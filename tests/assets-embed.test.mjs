@@ -352,12 +352,17 @@ check("fishtank.html: a one-byte asset mutation makes build --check exit non-zer
 });
 
 // ================================================================
-// Placeholder generator: the committed assets/ tree is a BYTE
-// GOLDEN of scripts/generate-placeholders.mjs. Regenerating into a
-// fresh copy must reproduce every file byte for byte — this pins
-// the generator AND the PNG encoder (a future zlib/toolchain bump
-// that changes deflateSync output fails here, forcing a deliberate
-// asset re-commit instead of silent drift).
+// Placeholder generator: every slot still flagged `placeholder: true`
+// is a BYTE GOLDEN of scripts/generate-placeholders.mjs — regenerating
+// into a fresh copy must reproduce it byte for byte. That pins the
+// generator AND the PNG encoder (a future zlib/toolchain bump that
+// changes deflateSync output fails here, forcing a deliberate asset
+// re-commit instead of silent drift).
+// Slots replaced with approved final art (`placeholder: false`, per
+// docs/ASSET-SOURCING.md) must instead DIFFER from the generator's
+// output: the swap has to be real, not a silent placeholder
+// re-commit. The generator-owned manifest and LICENSE files keep
+// their place in the file set but are free to evolve.
 // ================================================================
 const listFiles = (dir) => {
   const out = [];
@@ -372,7 +377,7 @@ const listFiles = (dir) => {
   return out.sort();
 };
 
-check("assets/: regenerating the placeholders into a fresh tree is byte-identical to the committed assets/", () => {
+check("assets/: regenerated placeholders stay byte-identical, final art provably differs", () => {
   const tmp = tmpTree();
   try {
     const r = run(tmp, [path.join(tmp, "scripts", "generate-placeholders.mjs"), tmp]);
@@ -381,11 +386,28 @@ check("assets/: regenerating the placeholders into a fresh tree is byte-identica
     const tmpFiles = listFiles(path.join(tmp, "assets"));
     assert(JSON.stringify(rootFiles) === JSON.stringify(tmpFiles),
       `the regenerated tree has a different file set (${rootFiles.length} vs ${tmpFiles.length} files)`);
+    const manifestByGameFile = {};
+    for (const game of readdirSync(path.join(ROOT, "assets"))) {
+      const entries = JSON.parse(readFileSync(path.join(ROOT, "assets", game, "manifest.json"), "utf8"));
+      manifestByGameFile[game] = {};
+      for (const e of entries.entries) manifestByGameFile[game][e.file] = e;
+    }
     for (const rel of rootFiles) {
+      const [game, file] = rel.split("/");
       const committed = readFileSync(path.join(ROOT, "assets", rel));
       const regenerated = readFileSync(path.join(tmp, "assets", rel));
-      assert(committed.equals(regenerated),
-        `assets/${rel} is not byte-identical after regeneration (${committed.byteLength} vs ${regenerated.byteLength} bytes)`);
+      if (file.endsWith(".png")) {
+        const e = manifestByGameFile[game][file];
+        if (e.placeholder) {
+          assert(committed.equals(regenerated),
+            `placeholder assets/${rel} is not byte-identical after regeneration ` +
+            `(${committed.byteLength} vs ${regenerated.byteLength} bytes)`);
+        } else {
+          assert(!committed.equals(regenerated),
+            `final-art assets/${rel} is byte-identical to the placeholder generator output — ` +
+            `the slot was not actually swapped (placeholder remains)`);
+        }
+      }
     }
   } finally {
     rmSync(tmp, { recursive: true, force: true });

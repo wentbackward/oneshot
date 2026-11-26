@@ -8,4 +8,13 @@ Final (non-placeholder) art arriving via docs/ASSET-SOURCING.md
 adds one attribution line per asset below, mirroring the
 `license` field of the manifest entry:
 
-- (none yet — placeholders only)
+- bg.png — Apache-2.0 (Qwen-Image-2512, Alibaba); generated 2026-11-25, seed 216298011287216 (gen [1280, 832])
+- caustics-tile.png — Apache-2.0 (Z-Image Turbo, Tongyi-MAI); generated 2026-11-25, seed 250724700054473 (gen [1024, 1024])
+- gravel-tile.png — Apache-2.0 (Z-Image Turbo, Tongyi-MAI); generated 2026-11-25, seed 40290104851425 (gen [1664, 640])
+- kelp-strip.png — MIT (Ming-Image 0.1 Design, inclusionAI); generated 2026-11-25, seed 240382694100880 (gen [896, 1152])
+- pebble-1.png — MIT (Ming-Image 0.1 Design, inclusionAI); generated 2026-11-25, seed 189490217537086 (gen [1280, 832])
+- pebble-2.png — MIT (Ming-Image 0.1 Design, inclusionAI); generated 2026-11-25, seed 136450118313288 (gen [1216, 832])
+- bubble.png — MIT (Ming-Image 0.1 Design, inclusionAI); generated 2026-11-25, seed 92732703052421 (gen [1792, 576])
+- tetra-body.png — MIT (Ming-Image 0.1 Design, inclusionAI); generated 2026-11-25, seed 205986564250343 (gen [1792, 576])
+- angel-body.png — MIT (Ming-Image 0.1 Design, inclusionAI); generated 2026-11-25, seed 16890167146563 (gen [1472, 704])
+- predator-body.png — MIT (Ming-Image 0.1 Design, inclusionAI); generated 2026-11-25, seed 197861709018542 (gen [1792, 576])

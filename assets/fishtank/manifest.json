@@ -12,8 +12,8 @@
       "alpha": "opaque",
       "tiling": false,
       "category": "background",
-      "placeholder": true,
-      "license": "CC0-1.0 (generated in-repo by scripts/generate-placeholders.mjs)"
+      "placeholder": false,
+      "license": "Apache-2.0 (Qwen-Image-2512, Alibaba)"
     },
     {
       "name": "caustics-tile",
@@ -26,8 +26,8 @@
       "alpha": "opaque",
       "tiling": true,
       "category": "tile",
-      "placeholder": true,
-      "license": "CC0-1.0 (generated in-repo by scripts/generate-placeholders.mjs)"
+      "placeholder": false,
+      "license": "Apache-2.0 (Z-Image Turbo, Tongyi-MAI)"
     },
     {
       "name": "gravel-tile",
@@ -40,8 +40,8 @@
       "alpha": "opaque",
       "tiling": true,
       "category": "tile",
-      "placeholder": true,
-      "license": "CC0-1.0 (generated in-repo by scripts/generate-placeholders.mjs)"
+      "placeholder": false,
+      "license": "Apache-2.0 (Z-Image Turbo, Tongyi-MAI)"
     },
     {
       "name": "pebble-1",
@@ -54,8 +54,8 @@
       "alpha": "alpha",
       "tiling": false,
       "category": "sprite",
-      "placeholder": true,
-      "license": "CC0-1.0 (generated in-repo by scripts/generate-placeholders.mjs)"
+      "placeholder": false,
+      "license": "MIT (Ming-Image 0.1 Design, inclusionAI)"
     },
     {
       "name": "pebble-2",
@@ -68,8 +68,8 @@
       "alpha": "alpha",
       "tiling": false,
       "category": "sprite",
-      "placeholder": true,
-      "license": "CC0-1.0 (generated in-repo by scripts/generate-placeholders.mjs)"
+      "placeholder": false,
+      "license": "MIT (Ming-Image 0.1 Design, inclusionAI)"
     },
     {
       "name": "kelp-strip",
@@ -82,8 +82,8 @@
       "alpha": "alpha",
       "tiling": false,
       "category": "texture",
-      "placeholder": true,
-      "license": "CC0-1.0 (generated in-repo by scripts/generate-placeholders.mjs)"
+      "placeholder": false,
+      "license": "MIT (Ming-Image 0.1 Design, inclusionAI)"
     },
     {
       "name": "bubble",
@@ -96,8 +96,8 @@
       "alpha": "alpha",
       "tiling": false,
       "category": "sprite",
-      "placeholder": true,
-      "license": "CC0-1.0 (generated in-repo by scripts/generate-placeholders.mjs)"
+      "placeholder": false,
+      "license": "MIT (Ming-Image 0.1 Design, inclusionAI)"
     },
     {
       "name": "tetra-body",
@@ -110,8 +110,8 @@
       "alpha": "alpha",
       "tiling": false,
       "category": "sprite",
-      "placeholder": true,
-      "license": "CC0-1.0 (generated in-repo by scripts/generate-placeholders.mjs)"
+      "placeholder": false,
+      "license": "MIT (Ming-Image 0.1 Design, inclusionAI)"
     },
     {
       "name": "angel-body",
@@ -124,8 +124,8 @@
       "alpha": "alpha",
       "tiling": false,
       "category": "sprite",
-      "placeholder": true,
-      "license": "CC0-1.0 (generated in-repo by scripts/generate-placeholders.mjs)"
+      "placeholder": false,
+      "license": "MIT (Ming-Image 0.1 Design, inclusionAI)"
     },
     {
       "name": "predator-body",
@@ -138,8 +138,8 @@
       "alpha": "alpha",
       "tiling": false,
       "category": "sprite",
-      "placeholder": true,
-      "license": "CC0-1.0 (generated in-repo by scripts/generate-placeholders.mjs)"
+      "placeholder": false,
+      "license": "MIT (Ming-Image 0.1 Design, inclusionAI)"
     }
   ]
 }

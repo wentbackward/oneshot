@@ -12,8 +12,8 @@
       "alpha": "opaque",
       "tiling": false,
       "category": "background",
-      "placeholder": true,
-      "license": "CC0-1.0 (generated in-repo by scripts/generate-placeholders.mjs)"
+      "placeholder": false,
+      "license": "Apache-2.0 (Z-Image Turbo, Tongyi-MAI)"
     },
     {
       "name": "brick-skin-a",
@@ -26,8 +26,8 @@
       "alpha": "opaque",
       "tiling": false,
       "category": "texture",
-      "placeholder": true,
-      "license": "CC0-1.0 (generated in-repo by scripts/generate-placeholders.mjs)"
+      "placeholder": false,
+      "license": "Apache-2.0 (FLUX.2 [klein] 4B, Black Forest Labs; pixel LoRA, Limbicnation)"
     },
     {
       "name": "brick-skin-b",
@@ -40,8 +40,8 @@
       "alpha": "opaque",
       "tiling": false,
       "category": "texture",
-      "placeholder": true,
-      "license": "CC0-1.0 (generated in-repo by scripts/generate-placeholders.mjs)"
+      "placeholder": false,
+      "license": "Apache-2.0 (FLUX.2 [klein] 4B, Black Forest Labs; pixel LoRA, Limbicnation)"
     },
     {
       "name": "paddle",
@@ -54,8 +54,8 @@
       "alpha": "opaque",
       "tiling": false,
       "category": "texture",
-      "placeholder": true,
-      "license": "CC0-1.0 (generated in-repo by scripts/generate-placeholders.mjs)"
+      "placeholder": false,
+      "license": "Apache-2.0 (FLUX.2 [klein] 4B, Black Forest Labs; pixel LoRA, Limbicnation)"
     },
     {
       "name": "ball",
@@ -68,8 +68,8 @@
       "alpha": "alpha",
       "tiling": false,
       "category": "sprite",
-      "placeholder": true,
-      "license": "CC0-1.0 (generated in-repo by scripts/generate-placeholders.mjs)"
+      "placeholder": false,
+      "license": "Apache-2.0 (FLUX.2 [klein] 4B, Black Forest Labs; pixel LoRA, Limbicnation)"
     },
     {
       "name": "ball-trail",
@@ -82,8 +82,8 @@
       "alpha": "alpha",
       "tiling": false,
       "category": "sprite",
-      "placeholder": true,
-      "license": "CC0-1.0 (generated in-repo by scripts/generate-placeholders.mjs)"
+      "placeholder": false,
+      "license": "Apache-2.0 (FLUX.2 [klein] 4B, Black Forest Labs; pixel LoRA, Limbicnation)"
     },
     {
       "name": "debris-1",
@@ -96,8 +96,8 @@
       "alpha": "alpha",
       "tiling": false,
       "category": "sprite",
-      "placeholder": true,
-      "license": "CC0-1.0 (generated in-repo by scripts/generate-placeholders.mjs)"
+      "placeholder": false,
+      "license": "Apache-2.0 (FLUX.2 [klein] 4B, Black Forest Labs; pixel LoRA, Limbicnation)"
     },
     {
       "name": "debris-2",
@@ -110,8 +110,8 @@
       "alpha": "alpha",
       "tiling": false,
       "category": "sprite",
-      "placeholder": true,
-      "license": "CC0-1.0 (generated in-repo by scripts/generate-placeholders.mjs)"
+      "placeholder": false,
+      "license": "Apache-2.0 (FLUX.2 [klein] 4B, Black Forest Labs; pixel LoRA, Limbicnation)"
     },
     {
       "name": "powerups",
@@ -124,8 +124,8 @@
       "alpha": "alpha",
       "tiling": false,
       "category": "icon-set",
-      "placeholder": true,
-      "license": "CC0-1.0 (generated in-repo by scripts/generate-placeholders.mjs)"
+      "placeholder": false,
+      "license": "Apache-2.0 (FLUX.2 [klein] 4B, Black Forest Labs; pixel LoRA, Limbicnation)"
     }
   ]
 }
