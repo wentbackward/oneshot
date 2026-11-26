@@ -4234,3 +4234,43 @@ stays synthesized Web Audio everywhere. The contract:
   licence), and the committed contact-sheet absence is the deliberate size
   trade-off. Alternative: commit the full run dir (rejected — repo weight
   without added review value).
+
+## 2026-11-26 — Ticket #145: procedural habitat richness (seeded floor decor — tufts, anemones, marine snow)
+- **Habitat decor is realised as procedural canvas, with no new
+  image slots** (2026-11-26, ticket #145). The designer brief
+  (docs/HABITAT-BRIEF.md) directs the composition; the three chosen
+  elements (swaying grass-tuft clusters, pulsing anemone/coral
+  clusters, marine-snow motes) are painted by a new
+  src/render/habitat.ts module. Reasons: the ticket prefers
+  procedural realisation to stay inside the asset budget, no human
+  art gate is required, and the palette stays a single day-neutral
+  set consistent with the existing untinted procedural layers
+  (gravel, kelp, placed rocks). Alternatives: asset-forge sprite
+  slots (requires the sourcing runbook, budget headroom and a
+  human approval cycle — disproportionate for a visual-direction
+  ticket); reusing the kelp-strip art for the tufts (wrong shape
+  language — a broad leaf, not a fine blade fan).
+- **Marine-snow motes are analytic functions of sim time, not
+  integrated** (2026-11-26, ticket #145). Position = f(t) with
+  fall + sinusoidal lateral wobble and both-axis wrapping, the
+  same stateless recipe as the bubble column: zero per-frame
+  allocation, a paused sim freezes them, and the placement
+  determinism test reads straight from the seeded pool data.
+  Alternatives: verlet/integrated motes in the sim (a new sim
+  system, per-step allocation churn, and it would make decor a
+  sim participant — out of scope); a static snow texture tile
+  (static noise — the ticket forbids it).
+- **Habitat floor elements share the substrate's near-band
+  parallax and draw without transforms** (2026-11-26, ticket
+  #145). Tuft and anemone bases live on the seeded tile, are
+  tile-doubled at x and x - tile, and drift at
+  SUBSTRATE_NEAR_DRIFT — they sit in the same depth band as the
+  substrate's own kelp tufts, so the parallax story stays
+  coherent. No save/translate/rotate: tile doubling is computed
+  inline, which also keeps the render-order audit's translate
+  anchors (substrate 2 + caustic 5) intact. Alternatives: a
+  dedicated third parallax band with its own drift (adds a
+  translate the AC4 audits would have to re-pin); world-anchored
+  placement like placed rocks (decor would no longer belong to
+  the parallax substrate band, and it would need sim-side
+  storage — out of scope).

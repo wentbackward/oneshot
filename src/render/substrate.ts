@@ -46,8 +46,9 @@ const GRAVEL_FILLS = ["#31506b", "#3c5f7d", "#466a8c", "#2b455c"];
 const ROCK_FILL = "#22384c";
 const KELP_STROKE = "rgba(38, 104, 74, 0.85)";
 
-/** Rad/s of the kelp idle sway. */
-const KELP_SWAY_SPEED = 0.8;
+/** Rad/s of the kelp idle sway — shared with the habitat tufts
+ *  (one current driver for all floor vegetation). */
+export const KELP_SWAY_SPEED = 0.8;
 
 /** Peak lateral sway of a kelp blade's mid-section, px. */
 const KELP_SWAY_AMP = 6;

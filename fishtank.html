@@ -2157,6 +2157,173 @@ window.__FISHTANK_ASSETS__ = [{"set":"default","name":"angel-body","w":128,"h":6
     }
   };
 
+  // src/render/habitat.ts
+  var HABITAT_SEED = 4093;
+  var HABITAT_TUFT_COUNT = 8;
+  var HABITAT_TUFT_BLADES = 3;
+  var TUFT_HEIGHT_MIN = 0.04;
+  var TUFT_HEIGHT_MAX = 0.09;
+  var TUFT_SPREAD_PX = 8;
+  var HABITAT_TUFT_SWAY_SPEED = KELP_SWAY_SPEED;
+  var TUFT_SWAY_AMP = 4.5;
+  var TUFT_TIP_AMP = 1.5;
+  var HABITAT_TUFT_CURRENT_LEAN = 6;
+  var HABITAT_ANEMONE_COUNT = 3;
+  var HABITAT_ANEMONE_TENTACLES = 5;
+  var ANEMONE_BASE_MIN = 9;
+  var ANEMONE_BASE_MAX = 15;
+  var ANEMONE_TENTACLE_MIN = 14;
+  var ANEMONE_TENTACLE_MAX = 24;
+  var ANEMONE_FAN = 2;
+  var HABITAT_ANEMONE_PULSE_SPEED = 0.6;
+  var HABITAT_ANEMONE_PULSE_AMP = 0.18;
+  var ANEMONE_TENTACLE_PHASE_STEP = Math.PI * (3 - Math.sqrt(5));
+  var HABITAT_MOTE_COUNT = 48;
+  var HABITAT_MOTE_FALL_MIN = 3;
+  var HABITAT_MOTE_FALL_MAX = 6;
+  var MOTE_WOBBLE_MIN = 3;
+  var MOTE_WOBBLE_MAX = 8;
+  var MOTE_OMEGA_MIN = 0.15;
+  var MOTE_OMEGA_MAX = 0.45;
+  var MOTE_SIZE_MIN = 0.8;
+  var MOTE_SIZE_MAX = 1.8;
+  var TUFT_STROKE = "rgba(74, 149, 102, 0.75)";
+  var ANEMONE_BASE_FILL = "#5a3d4e";
+  var ANEMONE_TENTACLE_STROKE = "rgba(226, 148, 155, 0.7)";
+  var MOTE_FILL = "rgba(205, 235, 250, 0.22)";
+  var TUFT_LINE_WIDTH = 2.5;
+  var ANEMONE_TENTACLE_LINE_WIDTH = 3;
+  var COPY_OFFSETS = [0, -1];
+  var TAU6 = 2 * Math.PI;
+  var lerp = (a, b, r) => a + (b - a) * r;
+  var Habitat = class {
+    tufts;
+    anemones;
+    motes;
+    constructor(seed = HABITAT_SEED) {
+      const rng = mulberry32(seed >>> 0);
+      const tufts = [];
+      for (let i = 0; i < HABITAT_TUFT_COUNT; i++) {
+        const blades = [];
+        for (let b = 0; b < HABITAT_TUFT_BLADES; b++) {
+          blades.push({
+            du: (rng() * 2 - 1) * TUFT_SPREAD_PX,
+            dh: 0.8 + 0.35 * rng(),
+            dphase: rng() * TAU6
+          });
+        }
+        tufts.push({ u: rng(), h: lerp(TUFT_HEIGHT_MIN, TUFT_HEIGHT_MAX, rng()), phase: rng() * TAU6, blades });
+      }
+      const anemones = [];
+      for (let i = 0; i < HABITAT_ANEMONE_COUNT; i++) {
+        anemones.push({
+          u: rng(),
+          baseR: lerp(ANEMONE_BASE_MIN, ANEMONE_BASE_MAX, rng()),
+          tentLen: lerp(ANEMONE_TENTACLE_MIN, ANEMONE_TENTACLE_MAX, rng()),
+          phase: rng() * TAU6
+        });
+      }
+      const motes = [];
+      for (let i = 0; i < HABITAT_MOTE_COUNT; i++) {
+        motes.push({
+          x0: rng(),
+          y0: rng(),
+          fall: lerp(HABITAT_MOTE_FALL_MIN, HABITAT_MOTE_FALL_MAX, rng()),
+          wobble: lerp(MOTE_WOBBLE_MIN, MOTE_WOBBLE_MAX, rng()),
+          omega: lerp(MOTE_OMEGA_MIN, MOTE_OMEGA_MAX, rng()),
+          phase: rng() * TAU6,
+          size: lerp(MOTE_SIZE_MIN, MOTE_SIZE_MAX, rng())
+        });
+      }
+      this.tufts = tufts;
+      this.anemones = anemones;
+      this.motes = motes;
+    }
+    /** The seeded element data (plain values): exposed for the
+     *  placement-determinism audits, never mutated by painting. */
+    get layout() {
+      return { tufts: this.tufts, anemones: this.anemones, motes: this.motes };
+    }
+    /** Paint the habitat decor into the frame at sim time `t`.
+     *  `currentX` defaults to the world's ambient flow; pass 0 for
+     *  still water. Sub-layer order: anemones (deepest, on the
+     *  bed), then tufts, then the marine snow (front of the decor
+     *  set — still strictly behind the fish, owned by the
+     *  renderer's draw order). */
+    paint(ctx, width, height, t, currentX = AMBIENT_CURRENT_X) {
+      const tile = width;
+      const off = t * SUBSTRATE_NEAR_DRIFT % tile;
+      ctx.lineCap = "round";
+      ctx.fillStyle = ANEMONE_BASE_FILL;
+      for (const a of this.anemones) {
+        for (const copy of COPY_OFFSETS) {
+          const bx = a.u * tile + off + copy * tile;
+          ctx.beginPath();
+          ctx.ellipse(bx, height, a.baseR, a.baseR * 0.35, 0, 0, TAU6);
+          ctx.fill();
+        }
+      }
+      ctx.strokeStyle = ANEMONE_TENTACLE_STROKE;
+      ctx.lineWidth = ANEMONE_TENTACLE_LINE_WIDTH;
+      for (const a of this.anemones) {
+        for (const copy of COPY_OFFSETS) {
+          const bx = a.u * tile + off + copy * tile;
+          for (let i = 0; i < HABITAT_ANEMONE_TENTACLES; i++) {
+            const angle = -Math.PI / 2 + ANEMONE_FAN * (i / (HABITAT_ANEMONE_TENTACLES - 1) - 0.5);
+            const pulse = 1 + HABITAT_ANEMONE_PULSE_AMP * Math.sin(
+              t * HABITAT_ANEMONE_PULSE_SPEED + a.phase + i * ANEMONE_TENTACLE_PHASE_STEP
+            );
+            const len = a.tentLen * pulse;
+            const dx = Math.cos(angle);
+            const dy = Math.sin(angle);
+            const side = i % 2 === 0 ? 1 : -1;
+            const bow = len * 0.18 * side;
+            ctx.beginPath();
+            ctx.moveTo(bx, height);
+            ctx.quadraticCurveTo(
+              bx + dx * len * 0.55 + Math.cos(angle + Math.PI / 2) * bow,
+              height + dy * len * 0.55 + Math.sin(angle + Math.PI / 2) * bow,
+              bx + dx * len,
+              height + dy * len
+            );
+            ctx.stroke();
+          }
+        }
+      }
+      ctx.strokeStyle = TUFT_STROKE;
+      ctx.lineWidth = TUFT_LINE_WIDTH;
+      const lean = HABITAT_TUFT_CURRENT_LEAN * (currentX / AMBIENT_CURRENT_X);
+      for (const tf of this.tufts) {
+        for (const copy of COPY_OFFSETS) {
+          const baseX = tf.u * tile + off + copy * tile;
+          for (const b of tf.blades) {
+            const bx = baseX + b.du;
+            const sway = Math.sin(t * HABITAT_TUFT_SWAY_SPEED + tf.phase + b.dphase) * TUFT_SWAY_AMP;
+            const topY = height - tf.h * height * b.dh;
+            ctx.beginPath();
+            ctx.moveTo(bx, height);
+            ctx.quadraticCurveTo(
+              bx + sway * 0.6,
+              height - (height - topY) * 0.55,
+              bx + sway * TUFT_TIP_AMP + lean,
+              // tip: free-end bend + current lean
+              topY
+            );
+            ctx.stroke();
+          }
+        }
+      }
+      ctx.fillStyle = MOTE_FILL;
+      for (const m of this.motes) {
+        const y = ((m.y0 * height + m.fall * t) % height + height) % height;
+        const x = ((m.x0 * width + Math.sin(t * m.omega + m.phase) * m.wobble) % width + width) % width;
+        ctx.beginPath();
+        ctx.arc(x, y, m.size, 0, TAU6);
+        ctx.fill();
+      }
+    }
+  };
+
   // src/render/food.ts
   var PELLET_FILL = "#d9a441";
   var PELLET_EDGE = "rgba(90, 60, 20, 0.55)";
@@ -2259,6 +2426,10 @@ window.__FISHTANK_ASSETS__ = [{"set":"default","name":"angel-body","w":128,"h":6
     /** The two parallax substrate layers (src/render/substrate.ts):
      *  built once per Renderer, seeded, reused forever. */
     substrate = new Substrate();
+    /** The three habitat decor pools (src/render/habitat.ts):
+     *  built once per Renderer, seeded, reused forever (painted
+     *  after the placed scenery, strictly behind the fish). */
+    habitat = new Habitat();
     /** Cached ImageBitmap table (ticket #137): bindAssets() wires
      *  the boot's decode cache in ONCE; the frame loop only reads
      *  it, so per-frame texture cost is drawImage calls alone. An
@@ -2298,6 +2469,7 @@ window.__FISHTANK_ASSETS__ = [{"set":"default","name":"angel-body","w":128,"h":6
       drawSurfaceRipples(ctx, width, world.time);
       drawKelp(ctx, width, height, world.kelp, textures);
       drawRocks(ctx, width, height, world.rocks, textures);
+      this.habitat.paint(ctx, width, height, world.time);
       drawTetras(ctx, width, height, world.angels, this.angelColours, ANGEL_HUE_OFFSET, "angel-body", textures);
       drawTetras(ctx, width, height, world.agents, this.tetraColours, 0, "tetra-body", textures);
       const dt = this.lastRenderTime === null ? 0 : world.time - this.lastRenderTime;

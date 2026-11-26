@@ -14,7 +14,7 @@
 
 import type { LightPalette } from "./lighting.ts";
 
-const SURFACE_RIPPLES = 3;
+export const SURFACE_RIPPLES = 3;
 const RIPPLE_AMPLITUDE = 6; // px
 const RIPPLE_SPEED = 1.4; // rad/s
 const RIPPLE_STEP = 16; // px between path samples
