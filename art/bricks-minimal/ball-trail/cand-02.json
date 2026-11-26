@@ -1,0 +1,56 @@
+{
+  "asset": "ball-trail",
+  "file": "ball-trail-minimal.png",
+  "candidate": 2,
+  "method": "draw",
+  "tool": "asset-forge 0.1.0",
+  "tool_commit": "1f01832",
+  "style": "pixel",
+  "model": "hand-drawn",
+  "model_label": "hand-drawn pixel grid by agent (hand-drawn pixel grid, palette-snapped)",
+  "licence": "drawn for the project (project licence)",
+  "author": "agent (hand-drawn pixel grid, palette-snapped)",
+  "source": "/home/code/hacking/oneshot-art/w143/drawings-minimal/ball-trail.json",
+  "legend": {
+    "A": "#f2efe9",
+    "B": "#e9e5dd",
+    "C": "#d6d3d1",
+    "D": "#c4bfb6",
+    "E": "#a8a29e",
+    "F": "#8d877c",
+    "G": "#78716c",
+    "H": "#57534e",
+    "I": "#3d3934",
+    "J": "#14141a"
+  },
+  "frames": [
+    {
+      "grid": [
+        ".....FFFFF......",
+        "...FFEEEEEFF....",
+        "..FFEEEDEEEFF...",
+        ".FFEDDDDDDDEFF..",
+        ".FEDDDCCCDDDEF..",
+        "FEEDDCCCCCDDEEF.",
+        "FEEDCCCCCCCDEEF.",
+        "FEDDCCCCCCCDDEF.",
+        "FEEDCCCCCCCDEEF.",
+        "FEEDDCCCCCDDEEF.",
+        ".FEDDDCCCDDDEF..",
+        ".FFEDDDDDDDEFF..",
+        "..FFEEEDEEEFF...",
+        "...FFEEEEEFF....",
+        ".....FFFFF......",
+        "................"
+      ]
+    }
+  ],
+  "sha256": "20e8fb7f1b3d878b242d8da1fc85ab94714b448c2633e529bb6d409fbbed12dc",
+  "bytes": 232,
+  "size": [
+    16,
+    16
+  ],
+  "mode": "RGBA",
+  "created": "2026-11-26T02:28:36"
+}

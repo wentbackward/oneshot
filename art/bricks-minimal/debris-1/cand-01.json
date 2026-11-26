@@ -1,0 +1,52 @@
+{
+  "asset": "debris-1",
+  "file": "debris-1-minimal.png",
+  "candidate": 1,
+  "method": "draw",
+  "tool": "asset-forge 0.1.0",
+  "tool_commit": "1f01832",
+  "style": "pixel",
+  "model": "hand-drawn",
+  "model_label": "hand-drawn pixel grid by agent (hand-drawn pixel grid, palette-snapped)",
+  "licence": "drawn for the project (project licence)",
+  "author": "agent (hand-drawn pixel grid, palette-snapped)",
+  "source": "/home/code/hacking/oneshot-art/w143/drawings-minimal/debris-1.json",
+  "legend": {
+    "A": "#f2efe9",
+    "B": "#e9e5dd",
+    "C": "#d6d3d1",
+    "D": "#c4bfb6",
+    "E": "#a8a29e",
+    "F": "#8d877c",
+    "G": "#78716c",
+    "H": "#57534e",
+    "I": "#3d3934",
+    "J": "#14141a"
+  },
+  "frames": [
+    {
+      "grid": [
+        "............",
+        "............",
+        "..CC........",
+        "..CECCCCC...",
+        "...CEEEEECC.",
+        "...CEEEEEC..",
+        "...CEEEEC...",
+        "....CEEC....",
+        "....CEC.....",
+        "....CC......",
+        "............",
+        "............"
+      ]
+    }
+  ],
+  "sha256": "2d60b3fc1e25fd01575c4c6d5d01d851aa6c65263c220a683a612925f44e601c",
+  "bytes": 139,
+  "size": [
+    12,
+    12
+  ],
+  "mode": "RGBA",
+  "created": "2026-11-26T02:28:36"
+}

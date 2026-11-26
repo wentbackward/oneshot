@@ -59,11 +59,11 @@ export function loadGameAssets(game, root = ROOT, readAssetFile = readFileSync) 
   // Slot names repeat across the game's sets (every set ships its own
   // "bg", "ball", ...); the pair is the slot's identity (ticket #143).
   entries.sort((a, b) => {
-    if (a.sett === b.sett) return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
-    return a.sett < b.sett ? -1 : 1;
+    if (a.set === b.set) return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+    return a.set < b.set ? -1 : 1;
   });
   for (let i = 1; i < entries.length; i += 1) {
-    if (entries[i].se === entries[i - 1].se && entries[i].name === entries[i - 1].name) {
+    if (entries[i].set === entries[i - 1].set && entries[i].name === entries[i - 1].name) {
       throw new Error(`duplicate slot pair (set ${entries[i].set}, name ${entries[i].name})`);
     }
   }

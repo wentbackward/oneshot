@@ -1,0 +1,200 @@
+{
+  "asset": "brick-skin-b",
+  "file": "brick-skin-b-neon.png",
+  "candidate": 1,
+  "tool": "asset-forge 0.1.0",
+  "tool_commit": "1f01832",
+  "comfyui": "0.46.0",
+  "style": "pixel",
+  "model": "flux2-klein-4b-pixel",
+  "model_label": "FLUX.2 [klein] 4B + Limbicnation pixel-art sprite LoRA",
+  "licence": "Apache-2.0 (base) + Apache-2.0 (LoRA; CC0 training data)",
+  "sources": [
+    "black-forest-labs/FLUX.2-klein-4B",
+    "Limbicnation/pixel-art-lora"
+  ],
+  "params": {
+    "lora_strength": 0.8
+  },
+  "palette": [
+    "#0a0118",
+    "#1b0d33",
+    "#33205c",
+    "#5b4b8a",
+    "#7c4dff",
+    "#b388ff",
+    "#00f0ff",
+    "#7dfbff",
+    "#ffffff",
+    "#ff2d78",
+    "#ff7aa8",
+    "#ffbe0b",
+    "#ffd166"
+  ],
+  "frames": [
+    {
+      "prompt": "pixel art sprite, 16-bit pixel art, crisp hard-edged pixels, limited colour palette, game asset, a tiny 64x24 pixel sprite drawn with very large chunky square pixels, only about 64 pixels across, bold dark outline, flat colour areas, no anti-aliasing, no fine detail. a single rectangular arcade brick surface filling the whole frame edge to edge, saturated violet purple with a light lavender top-left bevel and a dark indigo bottom-right bevel, small amber rivets in the corners. One single object seen straight on, filling most of the frame, even lighting, on a solid flat pure magenta (#FF00FF) background, no shadow, no text. dark outline 1px, no anti-aliasing, front-top light, 16-bit arcade presentation",
+      "seed": 71976127745877,
+      "gen_size": [
+        1664,
+        640
+      ],
+      "raw": "raw/cand-01.png",
+      "graph": {
+        "unet": {
+          "class_type": "UNETLoader",
+          "inputs": {
+            "unet_name": "flux-2-klein-4b.safetensors",
+            "weight_dtype": "default"
+          }
+        },
+        "clip": {
+          "class_type": "CLIPLoader",
+          "inputs": {
+            "clip_name": "qwen_3_4b.safetensors",
+            "type": "flux2",
+            "device": "default"
+          }
+        },
+        "vae": {
+          "class_type": "VAELoader",
+          "inputs": {
+            "vae_name": "flux2-vae.safetensors"
+          }
+        },
+        "pos": {
+          "class_type": "CLIPTextEncode",
+          "inputs": {
+            "text": "pixel art sprite, 16-bit pixel art, crisp hard-edged pixels, limited colour palette, game asset, a tiny 64x24 pixel sprite drawn with very large chunky square pixels, only about 64 pixels across, bold dark outline, flat colour areas, no anti-aliasing, no fine detail. a single rectangular arcade brick surface filling the whole frame edge to edge, saturated violet purple with a light lavender top-left bevel and a dark indigo bottom-right bevel, small amber rivets in the corners. One single object seen straight on, filling most of the frame, even lighting, on a solid flat pure magenta (#FF00FF) background, no shadow, no text. dark outline 1px, no anti-aliasing, front-top light, 16-bit arcade presentation",
+            "clip": [
+              "clip",
+              0
+            ]
+          }
+        },
+        "neg": {
+          "class_type": "ConditioningZeroOut",
+          "inputs": {
+            "conditioning": [
+              "pos",
+              0
+            ]
+          }
+        },
+        "noise": {
+          "class_type": "RandomNoise",
+          "inputs": {
+            "noise_seed": 71976127745877
+          }
+        },
+        "sampler": {
+          "class_type": "KSamplerSelect",
+          "inputs": {
+            "sampler_name": "euler"
+          }
+        },
+        "sigmas": {
+          "class_type": "Flux2Scheduler",
+          "inputs": {
+            "steps": 4,
+            "width": 1664,
+            "height": 640
+          }
+        },
+        "latent": {
+          "class_type": "EmptyFlux2LatentImage",
+          "inputs": {
+            "width": 1664,
+            "height": 640,
+            "batch_size": 1
+          }
+        },
+        "lora": {
+          "class_type": "LoraLoaderModelOnly",
+          "inputs": {
+            "model": [
+              "unet",
+              0
+            ],
+            "lora_name": "pixel-art-lora-klein4b.safetensors",
+            "strength_model": 0.8
+          }
+        },
+        "guider": {
+          "class_type": "CFGGuider",
+          "inputs": {
+            "model": [
+              "lora",
+              0
+            ],
+            "positive": [
+              "pos",
+              0
+            ],
+            "negative": [
+              "neg",
+              0
+            ],
+            "cfg": 1.0
+          }
+        },
+        "sample": {
+          "class_type": "SamplerCustomAdvanced",
+          "inputs": {
+            "noise": [
+              "noise",
+              0
+            ],
+            "guider": [
+              "guider",
+              0
+            ],
+            "sampler": [
+              "sampler",
+              0
+            ],
+            "sigmas": [
+              "sigmas",
+              0
+            ],
+            "latent_image": [
+              "latent",
+              0
+            ]
+          }
+        },
+        "decode": {
+          "class_type": "VAEDecode",
+          "inputs": {
+            "samples": [
+              "sample",
+              0
+            ],
+            "vae": [
+              "vae",
+              0
+            ]
+          }
+        },
+        "save": {
+          "class_type": "SaveImage",
+          "inputs": {
+            "images": [
+              "decode",
+              0
+            ],
+            "filename_prefix": "forge-brick-skin-b"
+          }
+        }
+      }
+    }
+  ],
+  "sha256": "347a83852be5e68c9c5c1952b83a3f0efb91c2a5342ac570cb0d073ba09d1200",
+  "bytes": 350,
+  "size": [
+    64,
+    24
+  ],
+  "mode": "RGB",
+  "created": "2026-11-26T02:32:45"
+}
