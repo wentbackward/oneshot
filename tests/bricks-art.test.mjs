@@ -320,14 +320,15 @@ await check("AC3: the four tiers read as distinct materials — distinct base fi
     const rect = g.q(`[bricks[${i}].x, bricks[${i}].y]`);
     const fill = f.find((ev) => ev.t === "fillRect" && ev.args[0] === rect[0] && ev.args[1] === rect[1]);
     fills.push(fill?.style);
-    const skinned = f.filter((ev) => ev.t === "drawImage" && ev.args[0]?.bitmapName?.startsWith("brick-skin") && ev.args[1] === rect[0] && ev.args[2] === rect[1]);
+    const skinnedTag = g.q("selectedTheme") + ":brick-skin";
+    const skinned = f.filter((ev) => ev.t === "drawImage" && String(ev.args[0]?.bitmapName ?? "").startsWith(skinnedTag) && ev.args[1] === rect[0] && ev.args[2] === rect[1]);
     assert(skinned.length === 0, `tier ${tier} at full hp must not emit a zero-alpha skin fill`);
     if (tier < 2) {
       // First damage exposes exactly one skin bitmap for that tier.
       g.q(`bricks[${i}].hp -= 1;`);
       g.events.length = 0;
       g.q("draw();");
-      const damaged = g.events.filter((ev) => ev.t === "drawImage" && ev.args[0]?.bitmapName?.startsWith("brick-skin") && ev.args[1] === rect[0] && ev.args[2] === rect[1]);
+      const damaged = g.events.filter((ev) => ev.t === "drawImage" && String(ev.args[0]?.bitmapName ?? "").startsWith(skinnedTag) && ev.args[1] === rect[0] && ev.args[2] === rect[1]);
       assert(damaged.length === 1, `tier ${tier} must wear exactly one skin bitmap once damaged`);
     }
   }
