@@ -45,7 +45,7 @@ import { Habitat,
   HABITAT_TILE_COPIES,
 } from "../src/render/habitat.ts";
 import { SUBSTRATE_NEAR_DRIFT } from "../src/render/substrate.ts";
-import { AMBIENT_CURRENT_X } from "../sim/constants.ts";
+import { AMBIENT_CURRENT_X } from "../src/sim/constants.ts";
 
 const TAU = 2 * Math.PI;
 const EPS = 1e-9;
@@ -101,10 +101,11 @@ function makeRecordingCtx() {
 }
 
 /** The terminal point (tip) of every QCT path in one paint, in
- *  paint order — anemone tentacles first, then tuft blades. */
+ *  paint order — anemone tentacles first, then tuft blades
+ *  (quadraticCurveTo(cp1x, cp1y, x, y): the tip is the 3rd/4th arg). */
 function qctTips(calls) {
   const tips = [];
-  for (const c of calls) if (c.kind === "quadraticCurveTo") tips.push([c.args[4], c.args[5]]);
+  for (const c of calls) if (c.kind === "quadraticCurveTo") tips.push([c.args[2], c.args[3]]);
   return tips;
 }
 const ANEMONE_TIPS = HABITAT_ANEMONE_COUNT * HABITAT_TILE_COPIES * HABITAT_ANEMONE_TENTACLES;
