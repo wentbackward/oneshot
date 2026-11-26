@@ -37,14 +37,22 @@ export interface Obstacle extends Vec2 {
 
 // ---------- named tuning values ----------
 
-/** Master force limit: no per-force clamp may exceed this. */
-export const MAX_STEERING_FORCE = 120;
+// The master force cap, the boundary clamp and the boundary margin
+// are the #144 boundary-band tuning dials: they live in
+// constants.ts and are re-exported here for this module's pinned
+// contract tests (import seam unchanged).
+import {
+  BOUNDARY_MARGIN,
+  MAX_BOUNDARY_AVOIDANCE_FORCE,
+  MAX_STEERING_FORCE,
+} from "./constants.ts";
+export { BOUNDARY_MARGIN, MAX_BOUNDARY_AVOIDANCE_FORCE, MAX_STEERING_FORCE };
 
-/** Per-force clamps (tank units of acceleration, per fixed step). */
+/** Per-force clamps (tank units of acceleration, per fixed step);
+ *  the master cap and the boundary clamp are re-exported above. */
 export const MAX_SEPARATION_FORCE = 90;
 export const MAX_ALIGNMENT_FORCE = 1; // alignment is a heading average: unit scale
 export const MAX_COHESION_FORCE = 60;
-export const MAX_BOUNDARY_AVOIDANCE_FORCE = MAX_STEERING_FORCE;
 export const MAX_OBSTACLE_AVOIDANCE_FORCE = 100;
 export const MAX_SEEK_FORCE = 100;
 
@@ -55,10 +63,6 @@ export const NEIGHBOUR_RADIUS = 64;
 /** How hard a body steers toward its neighbours' centroid per unit
  *  of distance. */
 export const COHESION_GAIN = 0.35;
-
-/** How close to a wall a body must come before being pushed back;
- *  the push ramps linearly to full strength AT the wall. */
-export const BOUNDARY_MARGIN = 120;
 
 /** How far ahead of a rock a body starts curving away from it. */
 export const OBSTACLE_AVOID_DISTANCE = 150;
@@ -151,7 +155,7 @@ export function cohesion(self: MovingBody, neighbours: MovingBody[]): Vec2 {
  *  height each exceed 2 × BOUNDARY_MARGIN, so the four margin bands
  *  are disjoint and every active wall pushes strictly inward without
  *  opposing-wall cancellation. The app's domain (1600 × 1000 vs.
- *  BOUNDARY_MARGIN 120) satisfies this by a wide margin; a degenerate
+ *  BOUNDARY_MARGIN 300) satisfies this by a wide margin; a degenerate
  *  tank smaller than ~2× margin in any axis is not supported. */
 export function boundaryAvoidance(pos: Vec2, width: number, height: number): Vec2 {
   const f = zero();

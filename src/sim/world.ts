@@ -7,10 +7,15 @@
 // Species (PRD §2): schooling tetras (the first behaviour) and the
 // apex predator (the third, ticket #124). Each tetra composes the
 // Reynolds steering forces (separation, alignment, cohesion,
-// boundary avoidance — src/sim/steering.ts), is kept inside the
-// tank by an elastic wall reflection plus a hard clamp, and owns an
-// articulated tail: its phase advances every step at
-// tailFrequency(speed, torque) (src/sim/tail.ts). The predator
+// boundary avoidance — src/sim/steering.ts) plus the #144 motion
+// story: organic wander, net-negative buoyancy with thrust lift,
+// and a per-step turn-rate cap that makes every trajectory a
+// continuous curve. Walls are STEERING, not collisions: the
+// boundary band turns a fish well short of the glass, and a
+// rare contact is handled by a non-mirroring safety net (position
+// clamp + outward-normal absorption) instead of an elastic bounce.
+// Each tetra owns an articulated tail: its phase advances every
+// step at tailFrequency(speed, torque) (src/sim/tail.ts). The predator
 // (src/sim/predator.ts) patrols a named waypoint loop, stalks
 // isolated tetras once hunger crosses the threshold, and rests for
 // a fixed window after each feed; the World steps it after the
@@ -54,8 +59,15 @@ import {
   TANK_HEIGHT,
   TANK_WIDTH,
   TETRA_COUNT,
+  TETRA_GRAVITY,
   TETRA_MAX_SPEED,
   TETRA_MIN_SPEED,
+  TETRA_THRUST_LIFT,
+  TETRA_TURN_RATE_RAD_S,
+  TETRA_WALL_NORMAL_RETENTION,
+  WANDER_ACCEL,
+  WANDER_FREQ_MIN,
+  WANDER_FREQ_SPREAD,
 } from "./constants.ts";
 import { KelpStrand } from "./kelp.ts";
 import { Angel, spawnAngels } from "./angels.ts";
@@ -136,6 +148,14 @@ export interface Tetra extends Positioned {
   /** Heading (radians) at the end of the previous step: the
    *  reference for the torque measurement. */
   heading: number;
+  /** Per-tetra wander frequency (rad/s, #144): drawn on the spawn
+   *  stream; the wander force is WANDER_ACCEL · sin(wanderFreq ·
+   *  world.time + wanderPhase) applied PERPENDICULAR to the
+   *  heading. Static per fish (set at spawn) — not serialized,
+   *  the same policy as phase/torque. */
+  wanderFreq: number;
+  /** Per-tetra wander phase offset (radians, #144). */
+  wanderPhase: number;
 }
 
 /** A placed rock (PRD §3): a smooth river-rock CIRCLE — the
@@ -536,6 +556,8 @@ export class World {
         phase: rng() * TAU,
         torque: 0,
         heading,
+        wanderFreq: WANDER_FREQ_MIN + WANDER_FREQ_SPREAD * rng(),
+        wanderPhase: rng() * TAU,
       });
     }
   }
@@ -574,12 +596,17 @@ export class World {
 
   /** One deterministic step of EXACTLY dt seconds: for every tetra
    *  (fixed array order) compose the steering forces (including
-   *  obstacle avoidance around the placed rocks) against the grid
-   *  as left by the previous step, clamp the speed, integrate and
-   *  keep the body INSIDE the tank (elastic reflection, a hard
-   *  clamp) and hard-resolve it against every rock's collision
-   *  radius together with the tank walls (bounded fixed point —
-   *  see the resolution comment in the body), and advance its
+   *  obstacle avoidance around the placed rocks, the #144 organic
+   *  wander, and the vertical story: net-negative buoyancy with
+   *  thrust lift) against the grid as left by the previous step,
+   *  clamp the speed, integrate, and keep the body INSIDE the tank
+   *  — walls are STEERING, not collisions (the boundary band turns
+   *  a fish well short of the glass; a rare contact is resolved by
+   *  the bounded position resolution plus the non-mirroring safety
+   *  net below), hard-resolve it against every rock's collision
+   *  radius together with the tank walls, absorb any outward wall
+   *  normal, apply the per-step turn-rate cap so the heading never
+   *  swings more than TETRA_TURN_RATE_RAD_S · dt, and advance its
    *  articulated tail at tailFrequency(speed, torque). Finally,
    *  advance every kelp strand under the ambient current, letting
    *  the tetras drag the strands they swim through, the predator
@@ -609,6 +636,30 @@ export class World {
       const coh = cohesion(t, this.neighbours);
       const bou = boundaryAvoidance(t, TANK_WIDTH, TANK_HEIGHT);
       const obs = obstacleAvoidance(t, this.rocks);
+      // #144 vertical story: net NEGATIVE BUOYANCY — gravity is a
+      // constant downward (screen +y) pull; the thrust LIFT scales
+      // with the squared speed ratio (thrust ∝ effort²), so a
+      // low-effort fish sags slowly (gravity wins below ≈ 139
+      // u/s) while a full-speed burst climbs (lift wins) — the
+      // school's altitude is a function of its energy, not of a
+      // target depth (data: TETRA_GRAVITY / TETRA_THRUST_LIFT).
+      const spd = Math.hypot(t.vx, t.vy);
+      const sr = spd / TETRA_MAX_SPEED;
+      const buoyancy = TETRA_GRAVITY - TETRA_THRUST_LIFT * sr * sr;
+      // #144 organic wander: a gentle acceleration PERPENDICULAR
+      // to the heading, modulated by a slow per-tetra sine of world
+      // time — idle paths curve like real fish instead of running
+      // straight lines. Sized BELOW TETRA_GRAVITY so the vertical
+      // story's drift is not swamped by the sideways pull, and
+      // negligible against a full-speed heading; present at idle,
+      // where it bends the path; deterministic (no random draws).
+      let wx = 0;
+      let wy = 0;
+      if (spd > 1e-9) {
+        const wob = WANDER_ACCEL * Math.sin(t.wanderFreq * this.time + t.wanderPhase);
+        wx = (-t.vy / spd) * wob;
+        wy = (t.vx / spd) * wob;
+      }
       // Food seeking (PRD §3): the NEAREST live pellet inside
       // PELLET_SENSE_RADIUS steers the tetra on it via Reynolds
       // seek(); inside PELLET_EAT_RADIUS the pellet is consumed
@@ -642,9 +693,9 @@ export class World {
         }
       }
       const ax =
-        sep.x + ali.x * ALIGNMENT_CRUISE_SPEED + coh.x + bou.x + obs.x + foodX;
+        sep.x + ali.x * ALIGNMENT_CRUISE_SPEED + coh.x + bou.x + obs.x + foodX + wx;
       const ay =
-        sep.y + ali.y * ALIGNMENT_CRUISE_SPEED + coh.y + bou.y + obs.y + foodY;
+        sep.y + ali.y * ALIGNMENT_CRUISE_SPEED + coh.y + bou.y + obs.y + foodY + wy + buoyancy;
       let vx = t.vx + ax * dt;
       let vy = t.vy + ay * dt;
       const speed = Math.hypot(vx, vy);
@@ -659,11 +710,13 @@ export class World {
       }
       let x = t.x + vx * dt;
       let y = t.y + vy * dt;
-      // Elastic wall reflection (velocity), then the bounded
-      // position resolution below (position): a tetra can never
-      // leave the tank, whatever forced it here.
-      if (x < 0) { x = -x; vx = -vx; } else if (x > TANK_WIDTH) { x = 2 * TANK_WIDTH - x; vx = -vx; }
-      if (y < 0) { y = -y; vy = -vy; } else if (y > TANK_HEIGHT) { y = 2 * TANK_HEIGHT - y; vy = -vy; }
+      // #144: no elastic reflection here — walls are steering. The
+      // boundary band above has already turned this fish; if a fast
+      // approach STILL overshot a wall, the bounded position
+      // resolution below clamps the position and the non-mirroring
+      // safety net (after the rock resolution) handles the
+      // velocity. The old axis-mirror is exactly what produced
+      // the #144 right-angle bounces.
       // Hard rock contact: the steering force above curves a tetra
       // AROUND the rock, but a steep approach can still clip its
       // surface between steps — the resolution below guarantees
@@ -782,10 +835,63 @@ export class World {
       stripInwardVelocity(this.rocks, x, y, vx, vy, this.stripV);
       vx = this.stripV.x;
       vy = this.stripV.y;
-      const nx = Math.hypot(vx, vy);
-      // Velocity is clamped into [TETRA_MIN_SPEED, TETRA_MAX_SPEED]
-      // above, so it is never (0, 0) and the heading is simply the
-      // direction of travel.
+      // #144 wall safety net (the rare residue): the position
+      // clamp in the resolution above already put the fish INSIDE
+      // exactly on the wall; here its VELOCITY is brought in line
+      // — the OUTWARD normal component is absorbed (scaled by
+      // TETRA_WALL_NORMAL_RETENTION = 0) instead of mirrored:
+      // mirroring is the axis-flip behind the reported right-angle
+      // bounces, and it would also hand the fish back OUT through
+      // the glass next step. The tangential component is preserved
+      // in full, the boundary force does the turning, and the
+      // turn-rate cap below keeps even this residue a continuous
+      // curve. No code path in the sim flips a velocity component's
+      // sign: this net only SHRINKS a component toward zero.
+      if (x === 0 && vx < 0) vx *= TETRA_WALL_NORMAL_RETENTION;
+      else if (x === TANK_WIDTH && vx > 0) vx *= TETRA_WALL_NORMAL_RETENTION;
+      if (y === 0 && vy < 0) vy *= TETRA_WALL_NORMAL_RETENTION;
+      else if (y === TANK_HEIGHT && vy > 0) vy *= TETRA_WALL_NORMAL_RETENTION;
+      // Zero-velocity relaunch (#144): the rare case where the safety
+      // net drained the outward normal AND the tangential was already
+      // ~zero — a full-speed fish that struck the wall squarely, or a
+      // fish resting inside a rock's collision ring zeroed by
+      // stripInwardVelocity. A zero velocity has no heading (atan2(0, 0)
+      // would snap the spine to +x), so relaunch at min speed along the
+      // wall's INWARD normal when a wall is involved; in the wall-free
+      // rock case the final fallback relaunches straight down (-y) —
+      // bounded, deterministic, and the one non-wall velocity injection
+      // in the sim (it bends back under the same turn-rate cap).
+      let nx = Math.hypot(vx, vy);
+      if (nx < 1e-6) {
+        if (x === 0) vx = TETRA_MIN_SPEED;
+        else if (x === TANK_WIDTH) vx = -TETRA_MIN_SPEED;
+        else if (y === 0) vy = TETRA_MIN_SPEED;
+        else vy = -TETRA_MIN_SPEED;
+        nx = TETRA_MIN_SPEED;
+      }
+      // #144 turn-rate cap: per fixed step the heading may swing by
+      // at most TETRA_TURN_RATE_RAD_S × dt — all trajectories are
+      // continuous curves. A full-speed turn needs only ≈
+      // MAX_STEERING_FORCE / TETRA_MAX_SPEED ≈ 0.9 rad/s, so the
+      // cap binds only at LOW speed, where a force spike would
+      // otherwise whip the fish around. Applied to the FINAL
+      // velocity (post safety net, post rock strip) so the
+      // MEASURED per-step heading — including the rare contact
+      // residue — can never exceed the cap. The velocity is rebuilt
+      // at the LIMITED heading (old heading advanced toward the raw
+      // heading by at most the cap, speed preserved): clamping the
+      // DELTA and rotating the raw vector would measure the raw
+      // swing, not the capped one.
+      const rawHeading = Math.atan2(vy, vx);
+      const maxDh = TETRA_TURN_RATE_RAD_S * dt;
+      let dhh = wrapPi(rawHeading - t.heading);
+      if (dhh > maxDh) dhh = maxDh;
+      else if (dhh < -maxDh) dhh = -maxDh;
+      const limHeading = t.heading + dhh;
+      const m = Math.hypot(vx, vy);
+      vx = m * Math.cos(limHeading);
+      vy = m * Math.sin(limHeading);
+      nx = m;
       const heading = Math.atan2(vy, vx);
       const instantTorque = wrapPi(heading - t.heading) / dt;
       t.torque += TORQUE_SMOOTHING * (instantTorque - t.torque);
@@ -993,10 +1099,15 @@ export class World {
    *  receives an OUTWARD impulse of STARTLE_IMPULSE straight away
    *  from the epicentre. A tetra sitting exactly ON the epicentre
    *  (undefined radial direction) is flung along its own heading,
-   *  or +x if it has none — deterministic. Non-finite coordinates
-   *  are rejected: the event is a no-op reporting 0, touching
-   *  nothing (same well-formedness philosophy as advance()).
-   *  Returns the number of startled tetras. */
+   *  or +x if it has none — deterministic. The impulse is a
+   *  physical jolt that re-orients the velocity, so each startled
+   *  tetra's heading — a pure function of its velocity — is
+   *  refreshed in the same call: the next step's turn-rate cap
+   *  measures from the post-impulse heading and does not fight the
+   *  scatter (the tail torque smooths over the jolt). Non-finite
+   *  coordinates are rejected: the event is a no-op reporting 0,
+   *  touching nothing (same well-formedness philosophy as
+   *  advance()). Returns the number of startled tetras. */
   startleAt(x: number, y: number): number {
     if (!Number.isFinite(x) || !Number.isFinite(y)) return 0;
     let startled = 0;
@@ -1017,6 +1128,8 @@ export class World {
       }
       t.vx += ux * STARTLE_IMPULSE;
       t.vy += uy * STARTLE_IMPULSE;
+      // The velocity moved; its derived heading moves with it.
+      t.heading = Math.atan2(t.vy, t.vx);
       startled += 1;
     }
     return startled;

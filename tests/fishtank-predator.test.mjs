@@ -62,10 +62,12 @@ function assert(cond, msg) {
   if (!cond) throw new Error(msg);
 }
 
-/** A plain tetra-shaped agent (same shape World.spawn produces) so
- *  tests can seed the school by hand. */
+/** A plain tetra-shaped agent (same shape World.spawn produces, incl.
+ *  the #144 per-tetra wander state) so tests can seed the school by
+ *  hand. */
 function makeTetra(x, y, vx, vy) {
-  return { x, y, vx, vy, phase: 0, torque: 0, heading: Math.atan2(vy, vx) };
+  return { x, y, vx, vy, phase: 0, torque: 0, heading: Math.atan2(vy, vx),
+           wanderFreq: 0.5, wanderPhase: 0 };
 }
 
 /** Park the predator and a lone tetra at a controlled spacing with

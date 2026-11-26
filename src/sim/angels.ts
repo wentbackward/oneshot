@@ -21,7 +21,10 @@
 //     GRAZE_ORBIT_RADIUS, well inside the forage radius, with a
 //     proportional radial pull) — it keeps moving, never stalls.
 //   cruise: no food, no plants — a smooth horizontal wander
-//     (bounded turning, zero base-vertical acceleration).
+//     (bounded turning, zero base-vertical acceleration) — plus
+//     the #144 boundary band steering the angel away from the
+//     SIDE walls (x only), so it curves off the glass instead of
+//     grinding into it.
 //
 // The vertical bob is KINEMATIC, layered ON TOP of the steering:
 // all steering happens in the "base plane" (x, baseY); the rendered
@@ -54,10 +57,14 @@ import {
   ANGEL_CRUISE_SPEED,
   ANGEL_FORAGE_RADIUS,
   ANGEL_SEED_STRIDE,
+  BOUNDARY_MARGIN,
+  MAX_BOUNDARY_AVOIDANCE_FORCE,
   PELLET_EAT_RADIUS,
   PELLET_SENSE_RADIUS,
   TANK_HEIGHT,
   TANK_WIDTH,
+  WANDER_FREQ_MIN,
+  WANDER_FREQ_SPREAD,
 } from "./constants.ts";
 import { mulberry32 } from "./rng.ts";
 import { TAU, TORQUE_SMOOTHING, wrapPi } from "./angles.ts";
@@ -96,10 +103,9 @@ const GRAZE_ORBIT_SPEED_FRACTION = 0.5;
 const GRAZE_RADIAL_GAIN = 1.5;
 
 /** Cruise wander: bounded turning (rad/s peak) driven by a slow
- *  per-angel sine — smooth, deterministic, no per-step randomness. */
+ *  per-angel sine — smooth, deterministic, no per-step randomness.
+ *  Frequency band shared with the tetra wander (constants.ts). */
 const WANDER_RATE = 0.9;
-const WANDER_FREQ_MIN = 0.25;
-const WANDER_FREQ_SPREAD = 0.75;
 
 /** Spawn spread: angels appear in the lower half of the tank (the
  *  plant zone) across its full width. */
@@ -294,6 +300,19 @@ export class Angel {
         ay *= ANGEL_MAX_STEER / a;
       }
     }
+    // #144 boundary band: angels steer away from the SIDE walls the
+    // way tetras do (a stand-alone force with its own master clamp)
+    // so a cruising angel curves off the glass instead of grinding
+    // into it and relying on the absorption net. X only: the vertical
+    // story is the bob + the base-altitude clamp (unchanged —
+    // pushing baseY would fight the forage behaviour pinned at
+    // ANGEL_FORAGE_RADIUS). Inlined (the steering layer's
+    // boundaryAvoidance allocates) — the angel path is
+    // allocation-free, same as before #144.
+    let bx = 0;
+    if (this.x < BOUNDARY_MARGIN) bx += ((BOUNDARY_MARGIN - this.x) / BOUNDARY_MARGIN) * MAX_BOUNDARY_AVOIDANCE_FORCE;
+    else if (this.x > TANK_WIDTH - BOUNDARY_MARGIN) bx -= ((this.x - (TANK_WIDTH - BOUNDARY_MARGIN)) / BOUNDARY_MARGIN) * MAX_BOUNDARY_AVOIDANCE_FORCE;
+    ax += bx;
     this.baseVx += ax * dt;
     this.baseVy += ay * dt;
 
@@ -313,10 +332,17 @@ export class Angel {
     }
 
     // ---- 4. integrate (x, baseY), keep the tank as the final
-    //         authority ----
+    //         authority — #144: clamp + ABSORB the outward normal,
+    //         never mirror it (an axis flip is banned across the
+    //         sim; the boundary band below does the turning) ----
     let x = this.x + this.baseVx * dt;
-    if (x < 0) { x = -x; this.baseVx = -this.baseVx; }
-    else if (x > TANK_WIDTH) { x = 2 * TANK_WIDTH - x; this.baseVx = -this.baseVx; }
+    if (x < 0) {
+      x = 0;
+      if (this.baseVx < 0) this.baseVx = 0;
+    } else if (x > TANK_WIDTH) {
+      x = TANK_WIDTH;
+      if (this.baseVx > 0) this.baseVx = 0;
+    }
     let baseY = this.baseY + this.baseVy * dt;
     // The bob needs its full amplitude headroom at both walls, so
     // the BASE altitude is clamped to keep y itself in the tank.
