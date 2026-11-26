@@ -20,23 +20,28 @@
 //      is decoded, ticket #139)
 //   8  rocks (placed, PRD §3 — behind the school; pebble sprites
 //      at the collision circle's full width when decoded, #139)
-//   9  angelfish spines (PRD §2 — behind the school, the large
+//   9  habitat decor (ticket #145, docs/HABITAT-BRIEF.md — vector
+//      only: pulsing anemone/coral clusters + swaying grass-tuft
+//      clusters on the near parallax band, marine-snow motes
+//      through the column; non-colliding, pooled, strictly BEHIND
+//      the fish layers)
+//   10 angelfish spines (PRD §2 — behind the school, the large
 //      slow independents drawn by the SAME tetra spine renderer
 //      with a complementary palette, #123) + their body SPRITES
 //      riding the spines (the hybrid, #139)
-//   10 tetra spines (PRD §2) + their body sprites (#139)
-//   11 the predator (ticket #139 — its first visual): the same
+//   11 tetra spines (PRD §2) + their body sprites (#139)
+//   12 the predator (ticket #139 — its first visual): the same
 //       articulated-spine recipe upscaled to its body, its body
 //       sprite riding the spine, tail phase render-owned and
 //       scaled by the predator's current swimming speed
-//   12 dropped pellets (PRD §3 — food floats over the school)
-//   13 bubble column (pool, painted in slot order; bubble SPRITES
+//   13 dropped pellets (PRD §3 — food floats over the school)
+//   14 bubble column (pool, painted in slot order; bubble SPRITES
 //       when decoded, arcs as the fallback, #139)
-//   14 shockwave rings (PRD §3 tap-glass — on the GLASS, in front
+//   15 shockwave rings (PRD §3 tap-glass — on the GLASS, in front
 //       of everything, incl. the bubbles)
-// Layers 12/14 draw nothing while the world carries no food/rings,
-// and the texture passes 1/3/5 and the sprite halves of 7/8/9/
-// 10/11/13 no-op without their decoded assets, so a headless
+// Layers 13/15 draw nothing while the world carries no food/rings,
+// and the texture passes 1/3/5 and the sprite halves of 7/8/10/
+// 11/12/13/14 no-op without their decoded assets, so a headless
 // boot's frame is byte-identical to the pre-#137 procedural one.
 //
 // THREE-PHASE TINTING (#139): the Day/Dusk/Night cycle tints the
@@ -56,6 +61,7 @@ import { lightPhaseAt } from "./lighting.ts";
 import { drawCausticShafts, CAUSTICS_TILE_ALPHA, CAUSTICS_TILE_CELL, CAUSTICS_TILE_DRIFT } from "./caustics.ts";
 import { BubbleColumn } from "./bubbles.ts";
 import { Substrate } from "./substrate.ts";
+import { Habitat } from "./habitat.ts";
 import { drawPellets, drawShockwaves } from "./food.ts";
 import { bakeTintVariant, defaultSurfaceFactory, PHASE_TINTS, type ArtTexture } from "./tinting.ts";
 
@@ -107,6 +113,10 @@ export class Renderer {
   /** The two parallax substrate layers (src/render/substrate.ts):
    *  built once per Renderer, seeded, reused forever. */
   private readonly substrate = new Substrate();
+  /** The three habitat decor pools (src/render/habitat.ts):
+   *  built once per Renderer, seeded, reused forever (painted
+   *  after the placed scenery, strictly behind the fish). */
+  private readonly habitat = new Habitat();
   /** Cached ImageBitmap table (ticket #137): bindAssets() wires
    *  the boot's decode cache in ONCE; the frame loop only reads
    *  it, so per-frame texture cost is drawImage calls alone. An
@@ -149,6 +159,10 @@ export class Renderer {
     drawSurfaceRipples(ctx, width, world.time);
     drawKelp(ctx, width, height, world.kelp, textures);
     drawRocks(ctx, width, height, world.rocks, textures);
+    // Habitat decor (ticket #145): on top of the placed scenery,
+    // strictly behind the fish layers; sim-time driven, no
+    // transforms, no per-frame allocation.
+    this.habitat.paint(ctx, width, height, world.time);
     drawTetras(ctx, width, height, world.angels, this.angelColours, ANGEL_HUE_OFFSET, "angel-body", textures);
     drawTetras(ctx, width, height, world.agents, this.tetraColours, 0, "tetra-body", textures);
     // The predator's spine phase advances by SIM TIME (a paused
