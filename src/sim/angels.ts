@@ -300,9 +300,9 @@ export class Angel {
       }
     }
     // #144 boundary band: angels steer away from the SIDE walls the
-    // way tetras do (gain-1, the band's own master clamp) so a
-    // cruising angel curves off the glass instead of grinding into
-    // it and relying on the absorption net. X only: the vertical
+    // way tetras do (a stand-alone force with its own master clamp)
+    // so a cruising angel curves off the glass instead of grinding
+    // into it and relying on the absorption net. X only: the vertical
     // story is the bob + the base-altitude clamp (unchanged —
     // pushing baseY would fight the forage behaviour pinned at
     // ANGEL_FORAGE_RADIUS). Inlined (the steering layer's

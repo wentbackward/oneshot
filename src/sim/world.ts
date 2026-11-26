@@ -649,8 +649,9 @@ export class World {
       // #144 organic wander: a gentle acceleration PERPENDICULAR
       // to the heading, modulated by a slow per-tetra sine of world
       // time — idle paths curve like real fish instead of running
-      // straight lines. Invisible against a full-speed heading
-      // (18 u/s² vs 220 u/s ≈ a degree or two), present at idle,
+      // straight lines. Sized BELOW TETRA_GRAVITY so the vertical
+      // story's drift is not swamped by the sideways pull, and
+      // negligible against a full-speed heading; present at idle,
       // where it bends the path; deterministic (no random draws).
       let wx = 0;
       let wy = 0;
