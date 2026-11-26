@@ -141,7 +141,8 @@ export class ApexPredator {
     }
     if (drifting) {
       // Coast straight at rest speed along the fed-through heading
-      // (the walls flip it via the velocity below).
+      // (the wall safety net below slides it along the glass if the
+      // drift runs into one).
       const m = Math.hypot(this.vx, this.vy);
       dirX = m > 0 ? this.vx / m : 1;
       dirY = m > 0 ? this.vy / m : 0;
@@ -206,14 +207,17 @@ export class ApexPredator {
     this.vy = dirY * speed;
     let x = this.x + this.vx * dt;
     let y = this.y + this.vy * dt;
-    // Elastic wall reflection, then a hard clamp as belt-and-braces
-    // (same policy as the tetras): the predator cannot leave the
-    // tank. Reflections flip the stored velocity, so the rest drift
-    // bounces off walls and keeps going.
-    if (x < 0) { x = -x; this.vx = -this.vx; } else if (x > TANK_WIDTH) { x = 2 * TANK_WIDTH - x; this.vx = -this.vx; }
-    if (y < 0) { y = -y; this.vy = -this.vy; } else if (y > TANK_HEIGHT) { y = 2 * TANK_HEIGHT - y; this.vy = -this.vy; }
-    if (x < 0) x = 0; else if (x > TANK_WIDTH) x = TANK_WIDTH;
-    if (y < 0) y = 0; else if (y > TANK_HEIGHT) y = TANK_HEIGHT;
+    // Wall safety net (#144): clamp + ABSORB the outward normal —
+    // NO axis mirror (the old elastic reflection fed the mirrored
+    // velocity back into the stored state; a predator hitting the
+    // glass now slides along it until the next step's kinematics
+    // re-aims it). No code path in the sim flips a velocity
+    // component's sign: this net only shrinks a component toward
+    // zero.
+    if (x < 0) { x = 0; if (this.vx < 0) this.vx = 0; }
+    else if (x > TANK_WIDTH) { x = TANK_WIDTH; if (this.vx > 0) this.vx = 0; }
+    if (y < 0) { y = 0; if (this.vy < 0) this.vy = 0; }
+    else if (y > TANK_HEIGHT) { y = TANK_HEIGHT; if (this.vy > 0) this.vy = 0; }
     this.x = x;
     this.y = y;
   }

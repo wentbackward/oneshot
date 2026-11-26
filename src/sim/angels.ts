@@ -21,7 +21,10 @@
 //     GRAZE_ORBIT_RADIUS, well inside the forage radius, with a
 //     proportional radial pull) — it keeps moving, never stalls.
 //   cruise: no food, no plants — a smooth horizontal wander
-//     (bounded turning, zero base-vertical acceleration).
+//     (bounded turning, zero base-vertical acceleration) — plus
+//     the #144 boundary band steering the angel away from the
+//     SIDE walls (x only), so it curves off the glass instead of
+//     grinding into it.
 //
 // The vertical bob is KINEMATIC, layered ON TOP of the steering:
 // all steering happens in the "base plane" (x, baseY); the rendered
@@ -61,6 +64,7 @@ import {
 } from "./constants.ts";
 import { mulberry32 } from "./rng.ts";
 import { TAU, TORQUE_SMOOTHING, wrapPi } from "./angles.ts";
+import { boundaryAvoidance } from "./steering.ts";
 import { tailFrequency } from "./tail.ts";
 
 /** Maximum steering acceleration in the base plane, tank units/s²:
@@ -294,6 +298,15 @@ export class Angel {
         ay *= ANGEL_MAX_STEER / a;
       }
     }
+    // #144 boundary band: angels steer away from the SIDE walls the
+    // way tetras do (gain-1, the band's own master clamp) so a
+    // cruising angel curves off the glass instead of grinding into
+    // it and relying on the absorption net. X only: the vertical
+    // story is the bob + the base-altitude clamp (unchanged —
+    // pushing baseY would fight the forage behaviour pinned at
+    // ANGEL_FORAGE_RADIUS).
+    const bou = boundaryAvoidance({ x: this.x, y: this.baseY }, TANK_WIDTH, TANK_HEIGHT);
+    ax += bou.x;
     this.baseVx += ax * dt;
     this.baseVy += ay * dt;
 
@@ -313,10 +326,17 @@ export class Angel {
     }
 
     // ---- 4. integrate (x, baseY), keep the tank as the final
-    //         authority ----
+    //         authority — #144: clamp + ABSORB the outward normal,
+    //         never mirror it (an axis flip is banned across the
+    //         sim; the boundary band below does the turning) ----
     let x = this.x + this.baseVx * dt;
-    if (x < 0) { x = -x; this.baseVx = -this.baseVx; }
-    else if (x > TANK_WIDTH) { x = 2 * TANK_WIDTH - x; this.baseVx = -this.baseVx; }
+    if (x < 0) {
+      x = 0;
+      if (this.baseVx < 0) this.baseVx = 0;
+    } else if (x > TANK_WIDTH) {
+      x = TANK_WIDTH;
+      if (this.baseVx > 0) this.baseVx = 0;
+    }
     let baseY = this.baseY + this.baseVy * dt;
     // The bob needs its full amplitude headroom at both walls, so
     // the BASE altitude is clamped to keep y itself in the tank.
