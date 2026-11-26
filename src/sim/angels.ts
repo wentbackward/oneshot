@@ -57,6 +57,8 @@ import {
   ANGEL_CRUISE_SPEED,
   ANGEL_FORAGE_RADIUS,
   ANGEL_SEED_STRIDE,
+  BOUNDARY_MARGIN,
+  MAX_BOUNDARY_AVOIDANCE_FORCE,
   PELLET_EAT_RADIUS,
   PELLET_SENSE_RADIUS,
   TANK_HEIGHT,
@@ -64,7 +66,6 @@ import {
 } from "./constants.ts";
 import { mulberry32 } from "./rng.ts";
 import { TAU, TORQUE_SMOOTHING, wrapPi } from "./angles.ts";
-import { boundaryAvoidance } from "./steering.ts";
 import { tailFrequency } from "./tail.ts";
 
 /** Maximum steering acceleration in the base plane, tank units/s²:
@@ -304,9 +305,13 @@ export class Angel {
     // it and relying on the absorption net. X only: the vertical
     // story is the bob + the base-altitude clamp (unchanged —
     // pushing baseY would fight the forage behaviour pinned at
-    // ANGEL_FORAGE_RADIUS).
-    const bou = boundaryAvoidance({ x: this.x, y: this.baseY }, TANK_WIDTH, TANK_HEIGHT);
-    ax += bou.x;
+    // ANGEL_FORAGE_RADIUS). Inlined (the steering layer's
+    // boundaryAvoidance allocates) — the angel path is
+    // allocation-free, same as before #144.
+    let bx = 0;
+    if (this.x < BOUNDARY_MARGIN) bx += ((BOUNDARY_MARGIN - this.x) / BOUNDARY_MARGIN) * MAX_BOUNDARY_AVOIDANCE_FORCE;
+    else if (this.x > TANK_WIDTH - BOUNDARY_MARGIN) bx -= ((this.x - (TANK_WIDTH - BOUNDARY_MARGIN)) / BOUNDARY_MARGIN) * MAX_BOUNDARY_AVOIDANCE_FORCE;
+    ax += bx;
     this.baseVx += ax * dt;
     this.baseVy += ay * dt;
 

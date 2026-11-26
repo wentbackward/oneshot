@@ -297,101 +297,6 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
     return a;
   }
 
-  // src/sim/steering.ts
-  var MAX_SEPARATION_FORCE = 90;
-  var MAX_ALIGNMENT_FORCE = 1;
-  var MAX_COHESION_FORCE = 60;
-  var MAX_OBSTACLE_AVOIDANCE_FORCE = 100;
-  var MAX_SEEK_FORCE = 100;
-  var NEIGHBOUR_RADIUS = 64;
-  var COHESION_GAIN = 0.35;
-  var OBSTACLE_AVOID_DISTANCE = 150;
-  var FISH_MAX_SPEED = 80;
-  function zero() {
-    return { x: 0, y: 0 };
-  }
-  function clampLength(v, maxLength) {
-    const len = Math.hypot(v.x, v.y);
-    if (len === 0) return v;
-    if (len <= maxLength) return v;
-    const s = maxLength / len;
-    return { x: v.x * s, y: v.y * s };
-  }
-  function unit(x, y) {
-    const len = Math.hypot(x, y);
-    return len === 0 ? zero() : { x: x / len, y: y / len };
-  }
-  function separation(self, neighbours) {
-    const sum = zero();
-    const r2 = NEIGHBOUR_RADIUS * NEIGHBOUR_RADIUS;
-    for (const n of neighbours) {
-      const dx = self.x - n.x;
-      const dy = self.y - n.y;
-      const d2 = dx * dx + dy * dy;
-      if (d2 === 0 || d2 > r2) continue;
-      sum.x += dx / d2;
-      sum.y += dy / d2;
-    }
-    return clampLength(sum, MAX_SEPARATION_FORCE);
-  }
-  function alignment(neighbours) {
-    const sum = zero();
-    let votes = 0;
-    for (const n of neighbours) {
-      const h = unit(n.vx, n.vy);
-      if (h.x === 0 && h.y === 0) continue;
-      sum.x += h.x;
-      sum.y += h.y;
-      votes += 1;
-    }
-    if (votes === 0) return zero();
-    return clampLength({ x: sum.x / votes, y: sum.y / votes }, MAX_ALIGNMENT_FORCE);
-  }
-  function cohesion(self, neighbours) {
-    if (neighbours.length === 0) return zero();
-    let cx = 0;
-    let cy = 0;
-    for (const n of neighbours) {
-      cx += n.x;
-      cy += n.y;
-    }
-    const toCentroid = { x: cx / neighbours.length - self.x, y: cy / neighbours.length - self.y };
-    return clampLength(
-      { x: toCentroid.x * COHESION_GAIN, y: toCentroid.y * COHESION_GAIN },
-      MAX_COHESION_FORCE
-    );
-  }
-  function boundaryAvoidance(pos, width, height) {
-    const f = zero();
-    if (pos.x < BOUNDARY_MARGIN) f.x += (BOUNDARY_MARGIN - pos.x) / BOUNDARY_MARGIN * MAX_BOUNDARY_AVOIDANCE_FORCE;
-    if (pos.x > width - BOUNDARY_MARGIN) f.x -= (pos.x - (width - BOUNDARY_MARGIN)) / BOUNDARY_MARGIN * MAX_BOUNDARY_AVOIDANCE_FORCE;
-    if (pos.y < BOUNDARY_MARGIN) f.y += (BOUNDARY_MARGIN - pos.y) / BOUNDARY_MARGIN * MAX_BOUNDARY_AVOIDANCE_FORCE;
-    if (pos.y > height - BOUNDARY_MARGIN) f.y -= (pos.y - (height - BOUNDARY_MARGIN)) / BOUNDARY_MARGIN * MAX_BOUNDARY_AVOIDANCE_FORCE;
-    return clampLength(f, MAX_BOUNDARY_AVOIDANCE_FORCE);
-  }
-  function obstacleAvoidance(self, obstacles) {
-    const sum = zero();
-    for (const o of obstacles) {
-      const dx = self.x - o.x;
-      const dy = self.y - o.y;
-      const d = Math.hypot(dx, dy);
-      const w = 1 - (d - o.r) / OBSTACLE_AVOID_DISTANCE;
-      if (w <= 0) continue;
-      const dir = d === 0 ? { x: 1, y: 0 } : { x: dx / d, y: dy / d };
-      sum.x += dir.x * w;
-      sum.y += dir.y * w;
-    }
-    return clampLength(sum, MAX_OBSTACLE_AVOIDANCE_FORCE);
-  }
-  function seek(self, target) {
-    const dx = target.x - self.x;
-    const dy = target.y - self.y;
-    const d = Math.hypot(dx, dy);
-    if (d === 0) return zero();
-    const desired = { x: dx / d * FISH_MAX_SPEED, y: dy / d * FISH_MAX_SPEED };
-    return clampLength({ x: desired.x - self.vx, y: desired.y - self.vy }, MAX_SEEK_FORCE);
-  }
-
   // src/sim/tail.ts
   var TAIL_FREQ_SPEED_GAIN = 0.04;
   var TAIL_FREQ_TORQUE_GAIN = 0.25;
@@ -554,8 +459,10 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
           ay *= ANGEL_MAX_STEER / a;
         }
       }
-      const bou = boundaryAvoidance({ x: this.x, y: this.baseY }, TANK_WIDTH, TANK_HEIGHT);
-      ax += bou.x;
+      let bx = 0;
+      if (this.x < BOUNDARY_MARGIN) bx += (BOUNDARY_MARGIN - this.x) / BOUNDARY_MARGIN * MAX_BOUNDARY_AVOIDANCE_FORCE;
+      else if (this.x > TANK_WIDTH - BOUNDARY_MARGIN) bx -= (this.x - (TANK_WIDTH - BOUNDARY_MARGIN)) / BOUNDARY_MARGIN * MAX_BOUNDARY_AVOIDANCE_FORCE;
+      ax += bx;
       this.baseVx += ax * dt;
       this.baseVy += ay * dt;
       let vx = this.baseVx;
@@ -630,6 +537,101 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
     p.vx += (currentX - PELLET_DRAG * p.vx) * dt;
     p.x += p.vx * dt;
     p.y += p.vy * dt;
+  }
+
+  // src/sim/steering.ts
+  var MAX_SEPARATION_FORCE = 90;
+  var MAX_ALIGNMENT_FORCE = 1;
+  var MAX_COHESION_FORCE = 60;
+  var MAX_OBSTACLE_AVOIDANCE_FORCE = 100;
+  var MAX_SEEK_FORCE = 100;
+  var NEIGHBOUR_RADIUS = 64;
+  var COHESION_GAIN = 0.35;
+  var OBSTACLE_AVOID_DISTANCE = 150;
+  var FISH_MAX_SPEED = 80;
+  function zero() {
+    return { x: 0, y: 0 };
+  }
+  function clampLength(v, maxLength) {
+    const len = Math.hypot(v.x, v.y);
+    if (len === 0) return v;
+    if (len <= maxLength) return v;
+    const s = maxLength / len;
+    return { x: v.x * s, y: v.y * s };
+  }
+  function unit(x, y) {
+    const len = Math.hypot(x, y);
+    return len === 0 ? zero() : { x: x / len, y: y / len };
+  }
+  function separation(self, neighbours) {
+    const sum = zero();
+    const r2 = NEIGHBOUR_RADIUS * NEIGHBOUR_RADIUS;
+    for (const n of neighbours) {
+      const dx = self.x - n.x;
+      const dy = self.y - n.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 === 0 || d2 > r2) continue;
+      sum.x += dx / d2;
+      sum.y += dy / d2;
+    }
+    return clampLength(sum, MAX_SEPARATION_FORCE);
+  }
+  function alignment(neighbours) {
+    const sum = zero();
+    let votes = 0;
+    for (const n of neighbours) {
+      const h = unit(n.vx, n.vy);
+      if (h.x === 0 && h.y === 0) continue;
+      sum.x += h.x;
+      sum.y += h.y;
+      votes += 1;
+    }
+    if (votes === 0) return zero();
+    return clampLength({ x: sum.x / votes, y: sum.y / votes }, MAX_ALIGNMENT_FORCE);
+  }
+  function cohesion(self, neighbours) {
+    if (neighbours.length === 0) return zero();
+    let cx = 0;
+    let cy = 0;
+    for (const n of neighbours) {
+      cx += n.x;
+      cy += n.y;
+    }
+    const toCentroid = { x: cx / neighbours.length - self.x, y: cy / neighbours.length - self.y };
+    return clampLength(
+      { x: toCentroid.x * COHESION_GAIN, y: toCentroid.y * COHESION_GAIN },
+      MAX_COHESION_FORCE
+    );
+  }
+  function boundaryAvoidance(pos, width, height) {
+    const f = zero();
+    if (pos.x < BOUNDARY_MARGIN) f.x += (BOUNDARY_MARGIN - pos.x) / BOUNDARY_MARGIN * MAX_BOUNDARY_AVOIDANCE_FORCE;
+    if (pos.x > width - BOUNDARY_MARGIN) f.x -= (pos.x - (width - BOUNDARY_MARGIN)) / BOUNDARY_MARGIN * MAX_BOUNDARY_AVOIDANCE_FORCE;
+    if (pos.y < BOUNDARY_MARGIN) f.y += (BOUNDARY_MARGIN - pos.y) / BOUNDARY_MARGIN * MAX_BOUNDARY_AVOIDANCE_FORCE;
+    if (pos.y > height - BOUNDARY_MARGIN) f.y -= (pos.y - (height - BOUNDARY_MARGIN)) / BOUNDARY_MARGIN * MAX_BOUNDARY_AVOIDANCE_FORCE;
+    return clampLength(f, MAX_BOUNDARY_AVOIDANCE_FORCE);
+  }
+  function obstacleAvoidance(self, obstacles) {
+    const sum = zero();
+    for (const o of obstacles) {
+      const dx = self.x - o.x;
+      const dy = self.y - o.y;
+      const d = Math.hypot(dx, dy);
+      const w = 1 - (d - o.r) / OBSTACLE_AVOID_DISTANCE;
+      if (w <= 0) continue;
+      const dir = d === 0 ? { x: 1, y: 0 } : { x: dx / d, y: dy / d };
+      sum.x += dir.x * w;
+      sum.y += dir.y * w;
+    }
+    return clampLength(sum, MAX_OBSTACLE_AVOIDANCE_FORCE);
+  }
+  function seek(self, target) {
+    const dx = target.x - self.x;
+    const dy = target.y - self.y;
+    const d = Math.hypot(dx, dy);
+    if (d === 0) return zero();
+    const desired = { x: dx / d * FISH_MAX_SPEED, y: dy / d * FISH_MAX_SPEED };
+    return clampLength({ x: desired.x - self.vx, y: desired.y - self.vy }, MAX_SEEK_FORCE);
   }
 
   // src/sim/spatialGrid.ts
