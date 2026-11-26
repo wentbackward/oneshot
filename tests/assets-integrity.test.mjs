@@ -84,7 +84,9 @@ for (const game of GAMES) {
     const assets = loadGameAssets(game);
     const images = new Map();
     for (const entry of assets.entries) {
-      images.set(entry.name, decodePng(readFileSync(path.join(assets.dir, entry.file))));
+      // Composite key: slot names repeat ACROSS sets of one game
+      // (every set ships its own "bg", "ball", ...).
+      images.set(`${entry.set}:${entry.name}`, decodePng(readFileSync(path.join(assets.dir, entry.file))));
     }
     loaded.set(game, { assets, images });
   } catch (err) {
@@ -95,29 +97,30 @@ for (const game of GAMES) {
 for (const game of GAMES) {
   const L = loaded.get(game);
 
-  check(`manifest: ${game} entries are sorted by name, unique, and carry the full slot contract`, () => {
+  check(`manifest: ${game} entries are sorted by (set, name), unique per slot pair, and carry the full slot contract`, () => {
     assert(L && !L.error, `loading assets/${game} failed: ${L ? L.error : "missing"}`);
     const { entries } = L.assets;
     assert(entries.length > 0, `assets/${game}/manifest.json must declare at least one entry`);
-    const names = entries.map((e) => e.name);
-    assert(JSON.stringify(names) === JSON.stringify([...names].sort()),
-      `manifest entries must be pre-sorted by name, got ${names.join(", ")}`);
-    assert(new Set(names).size === names.length, "duplicate asset names are not allowed");
+    const keys = entries.map((e) => `${e.set}:${e.name}`);
+    assert(JSON.stringify(keys) === JSON.stringify([...keys].sort()),
+      `manifest entries must be pre-sorted by (set, name), got ${keys.join(", ")}`);
+    assert(new Set(keys).size === keys.length, "duplicate (set, name) slot pairs are not allowed");
     for (const e of entries) {
-      assert(e.file.endsWith(".png"), `${e.name}: file must be a .png, got ${e.file}`);
-      assert(typeof e.category === "string" && e.category.length > 0, `${e.name}: category is required`);
-      assert(typeof e.license === "string" && e.license.length > 0, `${e.name}: a license/attribution line is required per asset`);
-      assert(typeof e.placeholder === "boolean", `${e.name}: placeholder must be a boolean flag`);
+      assert(typeof e.set === "string" && e.set.length > 0, `${e.name}: every entry must declare which set it belongs to`);
+      assert(e.file.endsWith(".png"), `${e.set}/${e.name}: file must be a .png, got ${e.file}`);
+      assert(typeof e.category === "string" && e.category.length > 0, `${e.set}/${e.name}: category is required`);
+      assert(typeof e.license === "string" && e.license.length > 0, `${e.set}/${e.name}: a license/attribution line is required per asset`);
+      assert(typeof e.placeholder === "boolean", `${e.set}/${e.name}: placeholder must be a boolean flag`);
     }
   });
 
   check(`integrity: every ${game} asset decodes as a valid PNG at its manifest dimensions`, () => {
     assert(L && !L.error, `loading assets/${game} failed: ${L ? L.error : "missing"}`);
     for (const e of L.assets.entries) {
-      const img = L.images.get(e.name);
-      assert(img, `${e.name}: file ${e.file} failed to decode as a PNG`);
+      const img = L.images.get(`${e.set}:${e.name}`);
+      assert(img, `${e.set}/${e.name}: file ${e.file} failed to decode as a PNG`);
       assert(img.width === e.width && img.height === e.height,
-        `${e.name}: decoded ${img.width}×${img.height}, manifest declares ${e.width}×${e.height}`);
+        `${e.set}/${e.name}: decoded ${img.width}×${img.height}, manifest declares ${e.width}×${e.height}`);
     }
   });
 
@@ -125,16 +128,16 @@ for (const game of GAMES) {
     assert(L && !L.error, `loading assets/${game} failed: ${L ? L.error : "missing"}`);
     for (const e of L.assets.entries) {
       assert(e.width === e.frameWidth * e.frames,
-        `${e.name}: width ${e.width} ≠ frameWidth ${e.frameWidth} × frames ${e.frames}`);
+        `${e.set}/${e.name}: width ${e.width} ≠ frameWidth ${e.frameWidth} × frames ${e.frames}`);
       assert(e.height === e.frameHeight,
-        `${e.name}: height ${e.height} ≠ frameHeight ${e.frameHeight}`);
+        `${e.set}/${e.name}: height ${e.height} ≠ frameHeight ${e.frameHeight}`);
     }
   });
 
   check(`integrity: ${game} opacity expectations hold (opaque ⇒ fully alpha-255; alpha ⇒ a shaped bitmap with transparent regions and painted regions)`, () => {
     assert(L && !L.error, `loading assets/${game} failed: ${L ? L.error : "missing"}`);
     for (const e of L.assets.entries) {
-      const img = L.images.get(e.name);
+      const img = L.images.get(`${e.set}:${e.name}`);
       let fullyOpaque = 0;
       let fullyTransparent = 0;
       let painted = 0;
@@ -145,10 +148,10 @@ for (const game of GAMES) {
       }
       if (e.alpha === "opaque") {
         assert(fullyOpaque === img.width * img.height,
-          `${e.name}: declared opaque but ${img.width * img.height - fullyOpaque} pixels are not alpha-255`);
+          `${e.set}/${e.name}: declared opaque but ${img.width * img.height - fullyOpaque} pixels are not alpha-255`);
       } else {
         assert(fullyTransparent > 0 && painted > 0,
-          `${e.name}: declared alpha but the bitmap has no ${fullyTransparent === 0 ? "transparent" : "painted"} regions — it is not a shaped sprite`);
+          `${e.set}/${e.name}: declared alpha but the bitmap has no ${fullyTransparent === 0 ? "transparent" : "painted"} regions — it is not a shaped sprite`);
       }
     }
   });
@@ -162,18 +165,19 @@ for (const game of GAMES) {
       assert(tiles.length > 0, `assets/fishtank must declare at least one tiling entry (the ticket requires a tile slot)`);
     }
     for (const e of tiles) {
-      const img = L.images.get(e.name);
+      const img = L.images.get(`${e.set}:${e.name}`);
       const seam = seamGap(img);
       const grain = maxInteriorGap(img);
       assert(seam <= grain,
-        `${e.name}: wrap edge discontinuity ${seam} exceeds the largest interior step ${grain} — the tile is not seamless`);
+        `${e.set}/${e.name}: wrap edge discontinuity ${seam} exceeds the largest interior step ${grain} — the tile is not seamless`);
     }
   });
 
-  check(`budget: assets/${game} raw bytes are within the named ${MAX_RAW_ASSET_BYTES_PER_GAME}-byte per-game ceiling`, () => {
+  check(`budget: assets/${game} raw bytes across ALL sets are within the named ${MAX_RAW_ASSET_BYTES_PER_GAME}-byte per-game ceiling`, () => {
     assert(L && !L.error, `loading assets/${game} failed: ${L ? L.error : "missing"}`);
+    const sets = [...new Set(L.assets.entries.map((e) => e.set))];
     assert(L.assets.rawBytes <= MAX_RAW_ASSET_BYTES_PER_GAME,
-      `raw asset bytes ${L.assets.rawBytes} exceed MAX_RAW_ASSET_BYTES_PER_GAME (${MAX_RAW_ASSET_BYTES_PER_GAME})`);
+      `raw asset bytes across all ${sets.length} set(s) (${sets.join(", ")}) - ${L.assets.rawBytes} - exceed MAX_RAW_ASSET_BYTES_PER_GAME (${MAX_RAW_ASSET_BYTES_PER_GAME})`);
   });
 
   check(`attribution: assets/${game}/LICENSE.txt exists and is non-empty (the companion license/attribution file)`, () => {

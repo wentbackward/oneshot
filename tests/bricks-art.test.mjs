@@ -23,8 +23,10 @@
 //   AC1 game over:      the game-over frame still paints bg + board
 //   AC1 ball trail:     a launched ball wears 3 ghosts behind its
 //                       velocity; a parked serve wears none
-//   AC2 theme gate:     neon drops every slot to the procedural paint,
-//                       classic restores the bitmaps (no stale pointers)
+//   AC2 theme gate:     each theme draws ONLY its own set's bitmaps;
+//                       switching themes swaps the active table (no
+//                       stale pointers, no cross-set leaks)
+//   AC2 lazy decode:    a set decodes on first use, never again
 //   AC1/AC2 debris:     a kill bursts pooled shard sprites that expire,
 //                       the pool never grows, and every board spawn
 //                       drains it
@@ -67,11 +69,14 @@ const PAYLOAD = (() => {
   const line = BRICKS_HTML.slice(begin, end).split("\n").find((l) => l.startsWith(`${globalName} = `));
   if (!line) throw new Error("payload block not found");
   const entries = JSON.parse(line.slice(globalName.length + 3, -1));
+  // Keyed by "set:name": ticket #143 ships one art set per theme,
+  // and slot names repeat across sets (every set carries a "bg").
   const map = new Map();
-  for (const e of entries) map.set(e.name, Buffer.from(e.d, "base64"));
+  for (const e of entries) map.set(`${e.set}:${e.name}`, Buffer.from(e.d, "base64"));
   return map;
 })();
-const PAYLOAD_NAMES = PAYLOAD.size;
+const countPayloadSet = (set) =>
+  [...PAYLOAD.keys()].filter((k) => k.startsWith(set + ":")).length;
 
 // ----------------------------------------------------------------
 // Recording harness
@@ -153,8 +158,8 @@ function bootArt() {
   const decodes = [];
   const decoder = (buf) => {
     const u8 = Buffer.from(buf);
-    for (const [name, bytes] of PAYLOAD) {
-      if (bytes.equals(u8)) { decodes.push(name); return Promise.resolve({ bitmapName: name }); }
+    for (const [tag, bytes] of PAYLOAD) {
+      if (bytes.equals(u8)) { decodes.push(tag); return Promise.resolve({ bitmapName: tag }); }
     }
     return Promise.reject(new Error(`stub decoder: unknown payload (${u8.length} bytes)`));
   };
@@ -182,9 +187,17 @@ function bootArt() {
   };
 }
 
-/** Events per slot: filter by decoded bitmap name. */
-const withBitmap = (frame, name) =>
-  frame.filter((ev) => ev.t === "drawImage" && ev.args[0]?.bitmapName === name);
+/** Events per slot: filter by decoded bitmap tag. A bare slot name
+ *  (e.g. "bg") resolves against the game's ACTIVE set — the
+ *  classic-flow tests stay readable; the theme tests pass explicit
+ *  "set:slot" tags to pin cross-set isolation. */
+const withBitmap = (frame, ref, g) => {
+  const tag = ref.includes(":") ? ref : `${g.q("selectedTheme")}:${ref}`;
+  return frame.filter((ev) => ev.t === "drawImage" && ev.args[0]?.bitmapName === tag);
+};
+/** Every bitmap drawImage in a frame. */
+const allBitmaps = (frame) =>
+  frame.filter((ev) => ev.t === "drawImage");
 
 // ================================================================
 // AC1 — attract screen
@@ -193,8 +206,8 @@ await check("AC1: the start-screen (attract) frame paints the cached arena backg
   const g = bootArt();
   await g.ready();
   g.tick(); // first frame, gameState "start"
-  assert(withBitmap(g.events, "bg").length === 1, "the attract frame must drawImage the bg bitmap exactly once");
-  assert(withBitmap(g.events, "brick-skin-a").length === 0, "no brick skin may leak into the attract frame");
+  assert(withBitmap(g.events, "bg", g).length === 1, "the attract frame must drawImage the bg bitmap exactly once");
+  assert(withBitmap(g.events, "brick-skin-a", g).length === 0, "no brick skin may leak into the attract frame");
 });
 
 // ================================================================
@@ -203,26 +216,28 @@ await check("AC1: the start-screen (attract) frame paints the cached arena backg
 await check("AC1/AC2: live classic play draws the brick-skin, paddle and ball slots, and 60 frames add ZERO re-decodes", async () => {
   const g = bootArt();
   await g.ready();
-  assert(g.decodes.length === PAYLOAD_NAMES, `boot must decode every slot exactly once (${g.decodes.length}/${PAYLOAD_NAMES})`);
+  const bootSet = g.q("selectedTheme");
+  assert(g.decodes.length === countPayloadSet(bootSet), `boot must decode the active (${bootSet}) set's entries exactly once (${g.decodes.length}/${countPayloadSet(bootSet)})`);
+  assert(g.decodes.every((t) => t.startsWith(bootSet + ":")), "no bitmap from any OTHER set may decode at boot");
   g.q("startGame()");
   // A pristine board: the skin's opacity is zero at full hp, so no
   // invisible per-frame fill may spend GPU time on undamaged bricks.
   const pristine = g.frame();
-  assert(withBitmap(pristine, "brick-skin-a").length === 0, "full-hp bricks must not emit a zero-alpha skin fill");
-  assert(withBitmap(pristine, "brick-skin-b").length === 0, "full-hp bricks must not emit a zero-alpha skin fill");
+  assert(withBitmap(pristine, "brick-skin-a", g).length === 0, "full-hp bricks must not emit a zero-alpha skin fill");
+  assert(withBitmap(pristine, "brick-skin-b", g).length === 0, "full-hp bricks must not emit a zero-alpha skin fill");
   // First damage exposes the material skin on each multi-hit tier.
   const ai = g.q("bricks.findIndex((b) => b.active && b.tier === 0)");
   g.q(`bricks[${ai}].hp -= 1;`);
   let f = g.frame();
-  assert(withBitmap(f, "brick-skin-a").length > 0, "a damaged tier-A brick must wear its material skin");
+  assert(withBitmap(f, "brick-skin-a", g).length > 0, "a damaged tier-A brick must wear its material skin");
   const bi = g.q("bricks.findIndex((b) => b.active && b.tier === 1)");
   g.q(`bricks[${bi}].hp -= 1;`);
   f = g.frame();
-  assert(withBitmap(f, "brick-skin-b").length > 0, "a damaged tier-B brick must wear its material skin");
-  assert(withBitmap(f, "paddle").length === 1, "the paddle must draw its cached skin exactly once per frame");
-  assert(withBitmap(f, "ball").length >= 1, "the parked serve ball must draw its cached sprite");
+  assert(withBitmap(f, "brick-skin-b", g).length > 0, "a damaged tier-B brick must wear its material skin");
+  assert(withBitmap(f, "paddle", g).length === 1, "the paddle must draw its cached skin exactly once per frame");
+  assert(withBitmap(f, "ball", g).length >= 1, "the parked serve ball must draw its cached sprite");
   for (let i = 0; i < 60; i += 1) g.tick();
-  assert(g.decodes.length === PAYLOAD_NAMES, "sixty live frames must not decode anything — the bitmap table is boot-cached");
+  assert(g.decodes.length === countPayloadSet(bootSet), "sixty live frames must not decode anything — each set's bitmap table decodes on first use only");
 });
 
 // ================================================================
@@ -236,9 +251,9 @@ await check("AC1: an EXCITING run (second mode) renders the same art slots live"
   const ai = g.q("bricks.findIndex((b) => b.active && b.tier === 0)");
   g.q(`bricks[${ai}].hp -= 1;`); // the skin is visible from the first damage on
   const f = g.frame();
-  assert(withBitmap(f, "brick-skin-a").length > 0, "exciting play must draw the brick skin on damage");
-  assert(withBitmap(f, "paddle").length === 1, "exciting play must draw the paddle skin");
-  assert(withBitmap(f, "ball").length >= 1, "exciting play must draw the ball sprite");
+  assert(withBitmap(f, "brick-skin-a", g).length > 0, "exciting play must draw the brick skin on damage");
+  assert(withBitmap(f, "paddle", g).length === 1, "exciting play must draw the paddle skin");
+  assert(withBitmap(f, "ball", g).length >= 1, "exciting play must draw the ball sprite");
 });
 
 // ================================================================
@@ -268,7 +283,7 @@ await check("AC1/AC3: a 3-hp brick renders THREE distinct damage states (fill st
     g.events.length = 0;
     g.q(`bricks[${idx}].hp = ${3 - d}; draw();`);
     const frame = g.events;
-    const skin = withBitmap(frame, "brick-skin-a").filter((ev) => ev.args[1] === box[0] && ev.args[2] === box[1]);
+    const skin = withBitmap(frame, "brick-skin-a", g).filter((ev) => ev.args[1] === box[0] && ev.args[2] === box[1]);
     const fill = frame.find((ev) => ev.t === "fillRect" && ev.args[0] === box[0] && ev.args[1] === box[1]);
     const cracks = frame.filter((ev) => ev.t === "stroke" && ev.lw === crackW && ev.stroke === crackInk && withinBrick(ev)).length;
     samples.push({ d, skins: skin.map((s) => s.alpha), fillStyle: fill?.style, cracks });
@@ -331,7 +346,7 @@ await check("AC1/AC3: each icon-bearing kind overlays a DISTINCT power-ups sheet
     g.events.length = 0;
     g.q(`capsules[0].active = true; capsules[0].kind = ${kind}; capsules[0].x = 480; capsules[0].y = 300; draw();`);
     const frame = g.events;
-    const icons = withBitmap(frame, "powerups");
+    const icons = withBitmap(frame, "powerups", g);
     const base = frame.find((ev) => ev.t === "fillRect" && ev.args[0] === 468 && ev.args[1] === 300 && ev.args[2] === 24 && ev.args[3] === 14);
     assert(base, `kind ${kind}: the themed capsule fill must still render under the icon`);
     if (kind === 3 || kind === 6) {
@@ -356,7 +371,7 @@ await check("AC1: the game-over frame still paints the background and the frozen
   g.q("loseLife()"); g.q("loseLife()"); g.q("loseLife()");
   assert(g.q("gameState") === "gameover", "three lost lives must end the run");
   const f = g.frame();
-  assert(withBitmap(f, "bg").length === 1, "the game-over frame must paint the arena background");
+  assert(withBitmap(f, "bg", g).length === 1, "the game-over frame must paint the arena background");
   assert(f.some((ev) => ev.t === "fillRect"), "the frozen board must still paint brick fills");
 });
 
@@ -367,10 +382,10 @@ await check("AC1: a launched ball wears three trail ghosts behind its velocity; 
   const g = bootArt();
   await g.ready();
   g.q("startGame()");
-  assert(withBitmap(g.frame(), "ball-trail").length === 0, "an attached (parked) serve must not wear a trail");
+  assert(withBitmap(g.frame(), "ball-trail", g).length === 0, "an attached (parked) serve must not wear a trail");
   g.q("launchAttachedBalls()");
   g.tick();
-  const trails = withBitmap(g.events, "ball-trail");
+  const trails = withBitmap(g.events, "ball-trail", g);
   assert(trails.length === 3, `the live ball must wear exactly three ghosts, got ${trails.length}`);
   const center = g.q("[balls[0].x, balls[0].y]");
   const dists = trails.map((ev) => {
@@ -383,20 +398,55 @@ await check("AC1: a launched ball wears three trail ghosts behind its velocity; 
 });
 
 // ================================================================
-// AC2 — theme gate (no stale pointers)
+// AC2 — per-theme art sets (ticket #143): each theme draws ONLY
+// its own set's bitmaps; a set decodes lazily on first use
 // ================================================================
-await check("AC2: switching to neon drops EVERY slot to the procedural paint, and classic restores the bitmaps", async () => {
+await check("AC2: each theme draws only its OWN art set — switching themes swaps the active table, no stale pointers", async () => {
   const g = bootArt();
   await g.ready();
   g.q("startGame()");
-  assert(withBitmap(g.frame(), "bg").length === 1, "classic must paint the bitmap background first");
-  g.q('selectTheme("neon")');
-  const neon = g.frame();
-  assert(neon.filter((ev) => ev.t === "drawImage").length === 0,
-    "neon is flat-palette: no placeholder bitmap may draw under it");
-  assert(neon.some((ev) => ev.t === "fillRect"), "the neon fallback must paint the procedural fills");
+  assert(withBitmap(g.frame(), "bg", g).length === 1, "classic must paint its set's background bitmap first");
+  for (const theme of ["neon", "minimal"]) {
+    g.q(`selectTheme("${theme}")`);
+    await g.ready();
+    const f = g.frame();
+    const bitmaps = allBitmaps(f);
+    const own = bitmaps.filter((ev) => String(ev.args[0]?.bitmapName ?? "").startsWith(theme + ":"));
+    const foreign = bitmaps.filter((ev) => !String(ev.args[0]?.bitmapName ?? "").startsWith(theme + ":"));
+    assert(foreign.length === 0,
+      `${theme}: no bitmap from any OTHER set may draw under it, got ${[...new Set(foreign.map((e) => e.args[0]?.bitmapName))].join(", ")}`);
+    assert(f.some((ev) => ev.t === "fillRect"), `${theme}: the procedural fills must still paint`);
+    if (countPayloadSet(theme) > 0) {
+      assert(own.some((ev) => ev.args[0]?.bitmapName === `${theme}:bg`),
+        `${theme}: its own set's background must paint once the set has decoded`);
+    } else {
+      assert(own.length === 0, `${theme}: the set carries no payload entries yet — fully procedural`);
+    }
+  }
   g.q('selectTheme("classic")');
-  assert(withBitmap(g.frame(), "bg").length === 1, "returning to classic must restore the cached bitmaps");
+  await g.ready();
+  assert(withBitmap(g.frame(), "bg", g).length === 1, "returning to classic must restore its cached bitmaps");
+});
+
+await check("AC2: a set decodes lazily on first selection and never again — boot-only per set", async () => {
+  const g = bootArt();
+  await g.ready();
+  const bootSet = g.q("selectedTheme");
+  assert(g.decodes.length === countPayloadSet(bootSet),
+    `boot must decode exactly the active (${bootSet}) set, got ${g.decodes.length}/${countPayloadSet(bootSet)}`);
+  let baseline = g.decodes.length;
+  for (const t of ["neon", "minimal"]) {
+    g.q(`selectTheme("${t}")`);
+    await g.ready();
+    assert(g.decodes.length === baseline + countPayloadSet(t),
+      `selecting ${t} must decode its set exactly once (${g.decodes.length - baseline} extra decodes)`);
+    baseline = g.decodes.length;
+  }
+  g.q('selectTheme("neon")');
+  await g.ready();
+  g.q('selectTheme("classic")');
+  await g.ready();
+  assert(g.decodes.length === baseline, "toggling between already-decoded sets must not decode anything");
 });
 
 // ================================================================
@@ -409,20 +459,20 @@ await check("AC1/AC2: a destroyed brick bursts pooled debris sprites that expire
   const i = g.q("bricks.findIndex((b) => b.active && !b.unbreakable)");
   g.q(`destroyBrick(${i})`);
   let f = g.frame();
-  const shards1 = withBitmap(f, "debris-1").length + withBitmap(f, "debris-2").length;
+  const shards1 = withBitmap(f, "debris-1", g).length + withBitmap(f, "debris-2", g).length;
   assert(shards1 >= 1 && shards1 <= 4, `one kill must burst a handful of pooled shards, got ${shards1}`);
 
   // Flood: 20 instant kills (80 spawn attempts) must saturate, never exceed, the pool.
   g.q(`for (let j = 0; j < 20; j += 1) { const k = bricks.findIndex((b) => b.active && !b.unbreakable); if (k >= 0) destroyBrick(k); }`);
   f = g.frame();
   const active = g.q("debris.filter((d) => d.active).length");
-  const drawn = withBitmap(f, "debris-1").length + withBitmap(f, "debris-2").length;
+  const drawn = withBitmap(f, "debris-1", g).length + withBitmap(f, "debris-2", g).length;
   assert(active <= 32, `the debris pool must never hold more than its fixed 32 shards, got ${active}`);
   assert(drawn === active, "every live shard must render from the cache exactly once");
 
   g.q("update(0.6)"); // past the shards' lifetime
   f = g.frame();
-  assert(withBitmap(f, "debris-1").length + withBitmap(f, "debris-2").length === 0, "expired shards must stop rendering");
+  assert(withBitmap(f, "debris-1", g).length + withBitmap(f, "debris-2", g).length === 0, "expired shards must stop rendering");
 
   g.q("beginRun()");
   assert(g.q("debris.filter((d) => d.active).length") === 0, "a fresh run must drain the debris pool");
