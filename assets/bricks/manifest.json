@@ -13,7 +13,7 @@
       "tiling": false,
       "category": "sprite",
       "placeholder": false,
-      "license": "drawn for the project (project licence) (asset-forge, hand-drawn pixel grid by agent (hand-drawn pixel grid, palette-snapped))",
+      "license": "Apache-2.0 (FLUX.2 [klein] 4B, Black Forest Labs; pixel LoRA, Limbicnation)",
       "set": "classic"
     },
     {
@@ -28,7 +28,7 @@
       "tiling": false,
       "category": "sprite",
       "placeholder": false,
-      "license": "drawn for the project (project licence) (asset-forge, hand-drawn pixel grid by agent (hand-drawn pixel grid, palette-snapped))",
+      "license": "Apache-2.0 (FLUX.2 [klein] 4B, Black Forest Labs; pixel LoRA, Limbicnation)",
       "set": "classic"
     },
     {
@@ -43,7 +43,7 @@
       "tiling": false,
       "category": "background",
       "placeholder": false,
-      "license": "Apache-2.0 (base) + Apache-2.0 (LoRA; CC0 training data) (asset-forge, FLUX.2 [klein] 4B + Limbicnation pixel-art sprite LoRA)",
+      "license": "Apache-2.0 (Z-Image Turbo, Tongyi-MAI)",
       "set": "classic"
     },
     {
@@ -58,7 +58,7 @@
       "tiling": false,
       "category": "texture",
       "placeholder": false,
-      "license": "Apache-2.0 (base) + Apache-2.0 (LoRA; CC0 training data) (asset-forge, FLUX.2 [klein] 4B + Limbicnation pixel-art sprite LoRA)",
+      "license": "Apache-2.0 (FLUX.2 [klein] 4B, Black Forest Labs; pixel LoRA, Limbicnation)",
       "set": "classic"
     },
     {
@@ -73,7 +73,7 @@
       "tiling": false,
       "category": "texture",
       "placeholder": false,
-      "license": "Apache-2.0 (base) + Apache-2.0 (LoRA; CC0 training data) (asset-forge, FLUX.2 [klein] 4B + Limbicnation pixel-art sprite LoRA)",
+      "license": "Apache-2.0 (FLUX.2 [klein] 4B, Black Forest Labs; pixel LoRA, Limbicnation)",
       "set": "classic"
     },
     {
@@ -88,7 +88,7 @@
       "tiling": false,
       "category": "sprite",
       "placeholder": false,
-      "license": "drawn for the project (project licence) (asset-forge, hand-drawn pixel grid by agent (hand-drawn pixel grid, palette-snapped))",
+      "license": "Apache-2.0 (FLUX.2 [klein] 4B, Black Forest Labs; pixel LoRA, Limbicnation)",
       "set": "classic"
     },
     {
@@ -103,7 +103,7 @@
       "tiling": false,
       "category": "sprite",
       "placeholder": false,
-      "license": "drawn for the project (project licence) (asset-forge, hand-drawn pixel grid by agent (hand-drawn pixel grid, palette-snapped))",
+      "license": "Apache-2.0 (FLUX.2 [klein] 4B, Black Forest Labs; pixel LoRA, Limbicnation)",
       "set": "classic"
     },
     {
@@ -118,7 +118,7 @@
       "tiling": false,
       "category": "texture",
       "placeholder": false,
-      "license": "Apache-2.0 (base) + Apache-2.0 (LoRA; CC0 training data) (asset-forge, FLUX.2 [klein] 4B + Limbicnation pixel-art sprite LoRA)",
+      "license": "Apache-2.0 (FLUX.2 [klein] 4B, Black Forest Labs; pixel LoRA, Limbicnation)",
       "set": "classic"
     },
     {
@@ -133,7 +133,7 @@
       "tiling": false,
       "category": "icon-set",
       "placeholder": false,
-      "license": "drawn for the project (project licence) (asset-forge, hand-drawn pixel grid by agent (hand-drawn pixel grid, palette-snapped))",
+      "license": "Apache-2.0 (FLUX.2 [klein] 4B, Black Forest Labs; pixel LoRA, Limbicnation)",
       "set": "classic"
     },
     {

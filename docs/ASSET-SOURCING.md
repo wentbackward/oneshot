@@ -53,7 +53,7 @@ How placeholder art is replaced with final, human-approved art for
 4. **Tiles must be seamless.** A `tiling: true` slot fails
    `tests/assets-integrity.test.mjs` if the wrap edge is sharper than
    the texture's own finest interior step.
-5. **Budgets still bind.** Per-game raw total ≤ `MAX_RAW_ASset_BYTES_
+5. **Budgets still bind.** Per-game raw total ≤ `MAX_RAW_ASSET_BYTES_
    PER_GAME` (1 MiB) and each shipped file ≤ `MAX_SHIPPED_HTML_BYTES`
    (1.5 MiB) — named constants in `scripts/lib/assets.mjs`, asserted by
    the integrity suite.
