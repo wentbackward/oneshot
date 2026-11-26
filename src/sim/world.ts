@@ -851,14 +851,16 @@ export class World {
       else if (x === TANK_WIDTH && vx > 0) vx *= TETRA_WALL_NORMAL_RETENTION;
       if (y === 0 && vy < 0) vy *= TETRA_WALL_NORMAL_RETENTION;
       else if (y === TANK_HEIGHT && vy > 0) vy *= TETRA_WALL_NORMAL_RETENTION;
-      // Pure-normal contact recovery (#144): the rare case where
-      // absorption drained the normal AND the tangential was
-      // already ~zero — a full-speed fish struck the wall squarely
-      // and the net left it motionless on the glass. A zero
-      // velocity has no heading (atan2(0, 0) would snap the spine
-      // to +x), so relaunch at min speed along the wall's INWARD
-      // normal: the fish peels off the glass with the smooth
-      // curve the turn-rate cap enforces, never a mirror.
+      // Zero-velocity relaunch (#144): the rare case where the safety
+      // net drained the outward normal AND the tangential was already
+      // ~zero — a full-speed fish that struck the wall squarely, or a
+      // fish resting inside a rock's collision ring zeroed by
+      // stripInwardVelocity. A zero velocity has no heading (atan2(0, 0)
+      // would snap the spine to +x), so relaunch at min speed along the
+      // wall's INWARD normal when a wall is involved; in the wall-free
+      // rock case the final fallback relaunches straight down (-y) —
+      // bounded, deterministic, and the one non-wall velocity injection
+      // in the sim (it bends back under the same turn-rate cap).
       let nx = Math.hypot(vx, vy);
       if (nx < 1e-6) {
         if (x === 0) vx = TETRA_MIN_SPEED;

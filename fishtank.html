@@ -312,8 +312,6 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
   var GRAZE_ORBIT_SPEED_FRACTION = 0.5;
   var GRAZE_RADIAL_GAIN = 1.5;
   var WANDER_RATE = 0.9;
-  var WANDER_FREQ_MIN2 = 0.25;
-  var WANDER_FREQ_SPREAD2 = 0.75;
   var SPAWN_X_MARGIN = 80;
   var SPAWN_BASEY_LOW = 0.45;
   var SPAWN_BASEY_HIGH = 0.8;
@@ -514,7 +512,7 @@ window.__FISHTANK_ASSETS__ = [{"name":"angel-body","w":128,"h":64,"frames":1,"ph
       const cruiseHeading = rng() * Math.PI;
       const cruiseSpeed = ANGEL_CRUISE_SPEED * (SPAWN_SPEED_MIN_FRACTION + (1 - SPAWN_SPEED_MIN_FRACTION) * rng());
       const bobPhase = rng() * TAU;
-      const wanderFreq = WANDER_FREQ_MIN2 + WANDER_FREQ_SPREAD2 * rng();
+      const wanderFreq = WANDER_FREQ_MIN + WANDER_FREQ_SPREAD * rng();
       const wanderPhase = rng() * TAU;
       const orbitDir = rng() < 0.5 ? -1 : 1;
       angels.push(new Angel(

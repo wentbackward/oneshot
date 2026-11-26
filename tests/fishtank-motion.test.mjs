@@ -104,6 +104,7 @@ const WALL_BAND = 8;
 check("1000 steps, default population: no velocity component axis-mirrors across a wall contact", () => {
   const world = new World(); // TETRA_COUNT tetras + angels + predator
   const prev = new Map();
+  const prevAngels = new Map();
   let contacts = 0;
   for (let i = 0; i < 1000; i++) {
     // Two tap-glass startles: flinging the school toward the walls
@@ -113,7 +114,21 @@ check("1000 steps, default population: no velocity component axis-mirrors across
     if (i === 250) world.tapGlass(120, TANK_HEIGHT / 2);
     if (i === 700) world.tapGlass(TANK_WIDTH - 120, TANK_HEIGHT / 2);
     for (const t of world.agents) prev.set(t, { x: t.x, y: t.y, vx: t.vx, vy: t.vy });
+    for (const a of world.angels) prevAngels.set(a, { x: a.x, baseVx: a.baseVx });
     world.step(FIXED_DT);
+    for (const a of world.angels) {
+      // The same ban on the angels' cruise-plane heading component:
+      // a side-wall mirror would flip baseVx with its magnitude
+      // intact (clamping to 0 at the wall is absorption, not a
+      // mirror — the flip test excludes zero).
+      const p = prevAngels.get(a);
+      if ((a.x <= WALL_BAND || a.x >= TANK_WIDTH - WALL_BAND)
+          && Math.sign(p.baseVx) !== 0 && Math.sign(a.baseVx) === -Math.sign(p.baseVx)
+          && Math.abs(a.baseVx) >= MIRROR_RATIO * Math.abs(p.baseVx)) {
+        throw new Error(`step ${i}: angel baseVx axis-mirrored at a side wall ` +
+          `(${p.baseVx.toFixed(1)} -> ${a.baseVx.toFixed(1)}) at x=${a.x.toFixed(1)}`);
+      }
+    }
     for (const t of world.agents) {
       const p = prev.get(t);
       const atSideWall = t.x <= WALL_BAND || t.x >= TANK_WIDTH - WALL_BAND;
@@ -142,6 +157,10 @@ check("1000 steps, default population: no velocity component axis-mirrors across
     assert(t.x >= 0 && t.x <= TANK_WIDTH && t.y >= 0 && t.y <= TANK_HEIGHT,
       `tetra escaped the tank: (${t.x}, ${t.y})`);
   }
+  for (const a of world.angels) {
+    assert(a.x >= 0 && a.x <= TANK_WIDTH && a.y >= 0 && a.y <= TANK_HEIGHT,
+      `angel escaped the tank: (${a.x}, ${a.y})`);
+  }
   console.log(`     (wall-band contacts observed in soak: ${contacts}, mirrors: 0)`);
 });
 
@@ -166,7 +185,7 @@ check("constructed wall contact: outward normal is absorbed, not mirrored", () =
   // Bottom wall, full outward speed.
   const wb = new World({ seed: 6, population: 1, predator: false, angels: 0 });
   const tb = pokeLone(wb, 800, TANK_HEIGHT - 1, 20, TETRA_MAX_SPEED);
-  for (let i = 0; i < 1; i++) wb.step(FIXED_DT);
+  wb.step(FIXED_DT);
   assert(tb.y === TANK_HEIGHT,
     `the safety net must clamp the fish exactly on the bottom wall, got y=${tb.y}`);
   assert(tb.vy >= 0,

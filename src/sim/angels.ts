@@ -63,6 +63,8 @@ import {
   PELLET_SENSE_RADIUS,
   TANK_HEIGHT,
   TANK_WIDTH,
+  WANDER_FREQ_MIN,
+  WANDER_FREQ_SPREAD,
 } from "./constants.ts";
 import { mulberry32 } from "./rng.ts";
 import { TAU, TORQUE_SMOOTHING, wrapPi } from "./angles.ts";
@@ -101,10 +103,9 @@ const GRAZE_ORBIT_SPEED_FRACTION = 0.5;
 const GRAZE_RADIAL_GAIN = 1.5;
 
 /** Cruise wander: bounded turning (rad/s peak) driven by a slow
- *  per-angel sine — smooth, deterministic, no per-step randomness. */
+ *  per-angel sine — smooth, deterministic, no per-step randomness.
+ *  Frequency band shared with the tetra wander (constants.ts). */
 const WANDER_RATE = 0.9;
-const WANDER_FREQ_MIN = 0.25;
-const WANDER_FREQ_SPREAD = 0.75;
 
 /** Spawn spread: angels appear in the lower half of the tank (the
  *  plant zone) across its full width. */
