@@ -4199,3 +4199,38 @@ stays synthesized Web Audio everywhere. The contract:
   riding the glass post-startle rocks its heading a couple of degrees around
   perpendicular and its ~1 u/s sideways wobble (≈ 2 % of a 50 u/s slide) crossing
   zero is organic sliding, not a billiard bounce.
+## 2026-11-26 — Ticket #143: per-theme art set (NEON + MINIMAL)
+
+- **Multi-sets asset contract: one manifest per game, a required `set`
+  field per entry; slot names repeat across sets and the (set, name) pair is the
+  slot's identity.** The manifest stays pre-sorted, now by (set, name); uniqueness
+  holds per (set, name) pair and the per-file ownership rule forbids one file backing
+  two slots (it would double-count the raw budget and blur identity).
+  Alternatives: per-set subdirectories (rejected — more filesystem churn, no
+  test benefit), or a second manifest per set (rejected — splits the single
+  validated contract; the budget/attribution story lives in one place).
+- **Set naming: the canonical set ships its slot's bare name (`bg.png`), the new
+  sets suffix theirs (`bg-neon.png`).** Keeps the classic sets at its established file
+  names (no provenance drift) and makes the new sets' ownership greppable in the
+  tree. The embedded payload carries the set name per entry in the stable
+  (set, name) order, `set` leading the fixed key order, so a consumer can group
+  the table by sets without re-reading the manifest.
+- **Per-set lazy decode, replacing the boot-decode-all + `ART_ON` gate.**
+  Boot decodes the ACTIVE theme's set only; selecting a theme aliases its
+  per-set table as `ASSETS` and starts its decode if not already attempted
+  (per-entry settle, once per set — repeats toggle pointers, never decodes).
+  While a set is undecoded its frames stay on the procedural paint the classic
+  fallback always used, so a failed/pending set never blanks a frame.
+  `THEMES.<name>.art` and the `ART_ON` flag are dropped — every theme now
+  carries a set, so the gate would be a constant-true branch (the 60 fps
+  rule: no dead branches). A set with no payload entries yet (the
+  classic-only interim state) behaves exactly like the old flat theme:
+  synchronous settle, empty table, procedural frame.
+- **Provenance scheme: the cand metadata, the set spec and the run record
+  commit under `art/<game>-<theme>/`; the raw candidate images and contact
+  sheets stay in the shared art workspace (referenced from the PR notes).**
+  A 960×600 background's candidate sheet is ~MB-scale per set; the cand-*.json
+  records carry everything the review needs (model, seed, parameters,
+  licence), and the committed contact-sheet absence is the deliberate size
+  trade-off. Alternative: commit the full run dir (rejected — repo weight
+  without added review value).

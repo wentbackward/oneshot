@@ -53,7 +53,7 @@ How placeholder art is replaced with final, human-approved art for
 4. **Tiles must be seamless.** A `tiling: true` slot fails
    `tests/assets-integrity.test.mjs` if the wrap edge is sharper than
    the texture's own finest interior step.
-5. **Budgets still bind.** Per-game raw total ≤ `MAX_RAW_ASSET_BYTES_
+5. **Budgets still bind.** Per-game raw total ≤ `MAX_RAW_ASset_BYTES_
    PER_GAME` (1 MiB) and each shipped file ≤ `MAX_SHIPPED_HTML_BYTES`
    (1.5 MiB) — named constants in `scripts/lib/assets.mjs`, asserted by
    the integrity suite.
@@ -73,6 +73,16 @@ How placeholder art is replaced with final, human-approved art for
      done`) with the pass counts.
 8. **Merge is the human step.** The loop stages and proves; the human
    approves art + license and merges.
+
+## Multi-set asset sets (ticket #143)
+
+Bricks ships one art set per theme (classic / neon / minimal). The manifest stays single:
+every entry carries the `set` field, slot names are unique per (set, name) pair, and the
+entries are pre-sorted by (set, name). File naming: the canonical set keeps the slot's
+bare name (`bg.png`), the others suffix theirs (`bg-neon.png`). Provenance for a set
+commits under `art/<game>-<theme>/` (spec, run record, per-candidate metadata); the raw
+candidates and contact sheets stay in the shared art workspace (path referenced from the
+PR notes).
 
 ## Placeholder → final swap, per slot (summary)
 

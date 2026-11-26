@@ -23,6 +23,10 @@ import path from "node:path";
 import { ROOT } from "./lib/assets.mjs";
 import { encodePng } from "./lib/png.mjs";
 
+function genSetFor(game) {
+  return game === "bricks" ? "classic" : "default"; // canonical per-game set (bricks: the classic skins; fishtank: default)
+}
+
 // ---------- deterministic rng (fixed seed per file) ----------
 function mulberry32(seed) {
   let a = seed >>> 0;
@@ -490,6 +494,7 @@ function emitGame(outRoot, game, slots) {
     writeFileSync(path.join(dir, slot.file), encodePng({ width: slot.w, height: slot.h, rgba: cv.buf }));
     entries.push({
       name: slot.name,
+      set: genSetFor(game),
       file: slot.file,
       width: slot.w,
       height: slot.h,

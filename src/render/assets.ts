@@ -21,6 +21,9 @@
 /** One manifest entry as shipped inside the page-shell payload
  *  (fixed key order from scripts/lib/assets.mjs). */
 export interface EmbeddedAssetEntry {
+  /** Set the slot belongs to (manifest `set`): slot names repeat across
+   *  a game's sets, so the (set, name) pair is the slot's identity. */
+  set: string;
   /** Slot name (manifest `name`), e.g. "bg", "gravel-tile". */
   name: string;
   /** Intrinsic width in px. */

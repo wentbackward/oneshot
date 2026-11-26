@@ -2,62 +2,6 @@
   "game": "bricks",
   "entries": [
     {
-      "name": "bg",
-      "file": "bg.png",
-      "width": 960,
-      "height": 600,
-      "frames": 1,
-      "frameWidth": 960,
-      "frameHeight": 600,
-      "alpha": "opaque",
-      "tiling": false,
-      "category": "background",
-      "placeholder": false,
-      "license": "Apache-2.0 (Z-Image Turbo, Tongyi-MAI)"
-    },
-    {
-      "name": "brick-skin-a",
-      "file": "brick-skin-a.png",
-      "width": 64,
-      "height": 24,
-      "frames": 1,
-      "frameWidth": 64,
-      "frameHeight": 24,
-      "alpha": "opaque",
-      "tiling": false,
-      "category": "texture",
-      "placeholder": false,
-      "license": "Apache-2.0 (FLUX.2 [klein] 4B, Black Forest Labs; pixel LoRA, Limbicnation)"
-    },
-    {
-      "name": "brick-skin-b",
-      "file": "brick-skin-b.png",
-      "width": 64,
-      "height": 24,
-      "frames": 1,
-      "frameWidth": 64,
-      "frameHeight": 24,
-      "alpha": "opaque",
-      "tiling": false,
-      "category": "texture",
-      "placeholder": false,
-      "license": "Apache-2.0 (FLUX.2 [klein] 4B, Black Forest Labs; pixel LoRA, Limbicnation)"
-    },
-    {
-      "name": "paddle",
-      "file": "paddle.png",
-      "width": 120,
-      "height": 14,
-      "frames": 1,
-      "frameWidth": 120,
-      "frameHeight": 14,
-      "alpha": "opaque",
-      "tiling": false,
-      "category": "texture",
-      "placeholder": false,
-      "license": "Apache-2.0 (FLUX.2 [klein] 4B, Black Forest Labs; pixel LoRA, Limbicnation)"
-    },
-    {
       "name": "ball",
       "file": "ball.png",
       "width": 16,
@@ -69,7 +13,8 @@
       "tiling": false,
       "category": "sprite",
       "placeholder": false,
-      "license": "Apache-2.0 (FLUX.2 [klein] 4B, Black Forest Labs; pixel LoRA, Limbicnation)"
+      "license": "Apache-2.0 (FLUX.2 [klein] 4B, Black Forest Labs; pixel LoRA, Limbicnation)",
+      "set": "classic"
     },
     {
       "name": "ball-trail",
@@ -83,7 +28,53 @@
       "tiling": false,
       "category": "sprite",
       "placeholder": false,
-      "license": "Apache-2.0 (FLUX.2 [klein] 4B, Black Forest Labs; pixel LoRA, Limbicnation)"
+      "license": "Apache-2.0 (FLUX.2 [klein] 4B, Black Forest Labs; pixel LoRA, Limbicnation)",
+      "set": "classic"
+    },
+    {
+      "name": "bg",
+      "file": "bg.png",
+      "width": 960,
+      "height": 600,
+      "frames": 1,
+      "frameWidth": 960,
+      "frameHeight": 600,
+      "alpha": "opaque",
+      "tiling": false,
+      "category": "background",
+      "placeholder": false,
+      "license": "Apache-2.0 (Z-Image Turbo, Tongyi-MAI)",
+      "set": "classic"
+    },
+    {
+      "name": "brick-skin-a",
+      "file": "brick-skin-a.png",
+      "width": 64,
+      "height": 24,
+      "frames": 1,
+      "frameWidth": 64,
+      "frameHeight": 24,
+      "alpha": "opaque",
+      "tiling": false,
+      "category": "texture",
+      "placeholder": false,
+      "license": "Apache-2.0 (FLUX.2 [klein] 4B, Black Forest Labs; pixel LoRA, Limbicnation)",
+      "set": "classic"
+    },
+    {
+      "name": "brick-skin-b",
+      "file": "brick-skin-b.png",
+      "width": 64,
+      "height": 24,
+      "frames": 1,
+      "frameWidth": 64,
+      "frameHeight": 24,
+      "alpha": "opaque",
+      "tiling": false,
+      "category": "texture",
+      "placeholder": false,
+      "license": "Apache-2.0 (FLUX.2 [klein] 4B, Black Forest Labs; pixel LoRA, Limbicnation)",
+      "set": "classic"
     },
     {
       "name": "debris-1",
@@ -97,7 +88,8 @@
       "tiling": false,
       "category": "sprite",
       "placeholder": false,
-      "license": "Apache-2.0 (FLUX.2 [klein] 4B, Black Forest Labs; pixel LoRA, Limbicnation)"
+      "license": "Apache-2.0 (FLUX.2 [klein] 4B, Black Forest Labs; pixel LoRA, Limbicnation)",
+      "set": "classic"
     },
     {
       "name": "debris-2",
@@ -111,7 +103,23 @@
       "tiling": false,
       "category": "sprite",
       "placeholder": false,
-      "license": "Apache-2.0 (FLUX.2 [klein] 4B, Black Forest Labs; pixel LoRA, Limbicnation)"
+      "license": "Apache-2.0 (FLUX.2 [klein] 4B, Black Forest Labs; pixel LoRA, Limbicnation)",
+      "set": "classic"
+    },
+    {
+      "name": "paddle",
+      "file": "paddle.png",
+      "width": 120,
+      "height": 14,
+      "frames": 1,
+      "frameWidth": 120,
+      "frameHeight": 14,
+      "alpha": "opaque",
+      "tiling": false,
+      "category": "texture",
+      "placeholder": false,
+      "license": "Apache-2.0 (FLUX.2 [klein] 4B, Black Forest Labs; pixel LoRA, Limbicnation)",
+      "set": "classic"
     },
     {
       "name": "powerups",
@@ -125,7 +133,8 @@
       "tiling": false,
       "category": "icon-set",
       "placeholder": false,
-      "license": "Apache-2.0 (FLUX.2 [klein] 4B, Black Forest Labs; pixel LoRA, Limbicnation)"
+      "license": "Apache-2.0 (FLUX.2 [klein] 4B, Black Forest Labs; pixel LoRA, Limbicnation)",
+      "set": "classic"
     }
   ]
 }
